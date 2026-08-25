@@ -10,6 +10,10 @@ import '../state/editor_state.dart';
 import 'editor/editor_toolbar.dart';
 import 'editor/live_preview.dart';
 
+/// App version stamped into the copy-diagnostics report so user-submitted
+/// diagnostics always identify which build they came from.
+const String kAppVersion = 'v1.4.6';
+
 /// Localized display label for a [PostStatus] (dashboard chips + editor).
 String statusLabel(AppLocalizations l10n, PostStatus status) =>
     switch (status) {
@@ -32,11 +36,17 @@ class PostEditorPage extends StatefulWidget {
   State<PostEditorPage> createState() => _PostEditorPageState();
 }
 
-class _PostEditorPageState extends State<PostEditorPage> {
+class _PostEditorPageState extends State<PostEditorPage>
+    with SingleTickerProviderStateMixin {
   late final EditorState _editor;
   late final TextEditingController _titleController;
   late final TextEditingController _contentController;
   late final TextEditingController _tagController;
+  // The narrow-screen tab bar NEEDS an explicit controller: without one the
+  // TabBar build fails (assertion in debug, null-controller crash subtree in
+  // release) and the whole editor pane goes blank on phones.
+  late final TabController _tabController =
+      TabController(length: 2, vsync: this);
   int _tabIndex = 0; // 0: write, 1: preview (narrow screens)
 
   /// Full-content fetch state when opening an existing post.
@@ -146,6 +156,7 @@ class _PostEditorPageState extends State<PostEditorPage> {
     final svc = app.service;
     final buf = StringBuffer()
       ..writeln('== Open Live Writer 诊断 ==')
+      ..writeln('版本: $kAppVersion')
       ..writeln('当前页面: ${widget.existingPost == null ? "新建文章" : "文章 id=${widget.existingPost!.id}"}')
       ..writeln('协议: ${account?.protocol.name ?? "?"}'
           '${account?.protocol == BlogProtocol.rest ? " (${account?.restAuth.name})" : " (${account?.flavor.name})"}')
@@ -171,6 +182,7 @@ class _PostEditorPageState extends State<PostEditorPage> {
 
   @override
   void dispose() {
+    _tabController.dispose();
     _titleController.dispose();
     _contentController.dispose();
     _tagController.dispose();
@@ -277,9 +289,12 @@ class _PostEditorPageState extends State<PostEditorPage> {
                 ),
               )
             else ...[
-              TextButton(
+              // Icon + tooltip instead of a text label: four text-labeled
+              // actions overflow the AppBar on phone widths.
+              IconButton(
+                tooltip: l10n.saveDraft,
+                icon: const Icon(Icons.save_outlined),
                 onPressed: () => _save(publish: false),
-                child: Text(l10n.saveDraft),
               ),
               FilledButton(
                 onPressed: () => _save(publish: true),
@@ -400,6 +415,7 @@ class _PostEditorPageState extends State<PostEditorPage> {
     return Column(
       children: [
         TabBar(
+          controller: _tabController,
           onTap: (i) => setState(() => _tabIndex = i),
           tabs: [
             Tab(icon: const Icon(Icons.edit), text: l10n.write),
