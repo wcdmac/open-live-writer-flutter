@@ -469,15 +469,14 @@ class _PostEditorPageState extends State<PostEditorPage> {
               expands: true,
               textAlignVertical: TextAlignVertical.top,
               keyboardType: TextInputType.multiline,
-              // iOS has no font family named 'monospace' (Android does);
-              // a failed family match can render every glyph blank. Use a
-              // cross-platform chain instead.
-              style: const TextStyle(
-                fontFamily: 'Courier New',
-                fontFamilyFallback: ['Menlo', 'Consolas', 'monospace'],
-                fontSize: 14,
-                height: 1.6,
-              ),
+              // Custom font families ('monospace', 'Courier New') failed to
+              // resolve on iOS and rendered every glyph blank. Derive the
+              // style from the theme (same resolution path as the title
+              // field, which is proven to render).
+              style: Theme.of(context)
+                  .textTheme
+                  .bodyLarge
+                  ?.copyWith(fontSize: 14, height: 1.6),
               decoration: InputDecoration(
                 border: InputBorder.none,
                 hintText: l10n.writePostHint,
