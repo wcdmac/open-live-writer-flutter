@@ -716,6 +716,18 @@ abstract class AppLocalizations {
   /// **'Alt text (optional)'**
   String get altText;
 
+  /// No description provided for @copyDiagnostics.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy diagnostics'**
+  String get copyDiagnostics;
+
+  /// No description provided for @diagnosticsCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Diagnostics copied to clipboard'**
+  String get diagnosticsCopied;
+
   /// No description provided for @cancel.
   ///
   /// In en, this message translates to:

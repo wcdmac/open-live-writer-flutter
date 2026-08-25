@@ -345,6 +345,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get altText => 'Alt text (optional)';
 
   @override
+  String get copyDiagnostics => 'Copy diagnostics';
+
+  @override
+  String get diagnosticsCopied => 'Diagnostics copied to clipboard';
+
+  @override
   String get cancel => 'Cancel';
 
   @override

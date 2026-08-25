@@ -22,6 +22,10 @@ class XmlRpcClient {
 
   static const _defaultTimeout = Duration(seconds: 30);
 
+  /// Raw body of the most recent response (truncated) — used by the
+  /// in-app diagnostics when a post opens with empty content.
+  String? lastResponseBody;
+
   /// Credentials used by most calls. `[Password, true]` in the original
   /// XmlRpcString marks an encode-required (HTML-escaped) string.
   List<dynamic> get cred => [username, password];
@@ -48,6 +52,10 @@ class XmlRpcClient {
     } catch (e) {
       throw XmlRpcFault(-32300, 'Transport error calling $methodName: $e');
     }
+
+    lastResponseBody = response.body.length > 4000
+        ? '${response.body.substring(0, 4000)}…'
+        : response.body;
 
     if (response.statusCode != 200) {
       final snippet = response.body.length > 400

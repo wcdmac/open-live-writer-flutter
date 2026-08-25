@@ -138,6 +138,13 @@ class BlogService {
 
   Future<BlogTheme> detectTheme() => ThemeDetector().detect(account.homepageUrl);
 
+  /// Raw body of the most recent HTTP response from the active client —
+  /// surfaced by the in-app "copy diagnostics" action when a post opens
+  /// with empty content, so the actual server payload can be inspected.
+  String? get lastResponseBody => account.protocol == BlogProtocol.rest
+      ? _rest?.lastResponseBody
+      : _xmlrpc?.lastResponseBody;
+
   void dispose() {
     _xmlrpc = null;
     _rest = null;

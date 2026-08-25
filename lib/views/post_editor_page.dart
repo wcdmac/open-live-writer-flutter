@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../l10n/app_localizations.dart';
+import '../models/blog.dart';
 import '../models/blog_post.dart';
 import '../state/app_state.dart';
 import '../state/editor_state.dart';
@@ -44,6 +46,11 @@ class _PostEditorPageState extends State<PostEditorPage> {
   String? _loadError;
   bool _emptyContent = false;
 
+  /// Diagnostics captured while loading, surfaced by the "copy
+  /// diagnostics" action when content comes back empty.
+  String _diagListInfo = '';
+  String _diagFetchInfo = '';
+
   @override
   void initState() {
     super.initState();
@@ -58,11 +65,20 @@ class _PostEditorPageState extends State<PostEditorPage> {
         TextEditingController(text: widget.existingPost?.content ?? '');
     _tagController =
         TextEditingController(text: widget.existingPost?.tags.join(', ') ?? '');
-    _emptyContent = (widget.existingPost?.content ?? '').trim().isEmpty;
+    // The empty-content notice is only meaningful for EXISTING posts whose
+    // content failed to load — never for a brand-new blank post.
+    _emptyContent = widget.existingPost != null &&
+        widget.existingPost!.content.trim().isEmpty;
+    final existing = widget.existingPost;
+    if (existing != null) {
+      _diagListInfo =
+          '列表项: id=${existing.id ?? "?"}, 标题=${existing.title.length}字, '
+          '正文=${existing.content.length}字, 摘要=${existing.excerpt.length}字, '
+          '状态=${existing.status.wpValue}';
+    }
 
     // Post lists often ship without full content — fetch the complete
     // post in the background. The editor stays interactive the whole time.
-    final existing = widget.existingPost;
     if (existing != null && !existing.isNew && app.service != null) {
       _fetchingFull = true;
       WidgetsBinding.instance.addPostFrameCallback((_) => _loadFullPost());
@@ -85,6 +101,9 @@ class _PostEditorPageState extends State<PostEditorPage> {
           .getPost(existing.id!, isPage: existing.isPage)
           .timeout(const Duration(seconds: 20));
       if (!mounted) return;
+      _diagFetchInfo =
+          '全文接口: 成功, 标题=${fresh.title.length}字, 正文=${fresh.content.length}字, '
+          '摘要=${fresh.excerpt.length}字, 标签=${fresh.tags.length}个';
       setState(() {
         _fetchingFull = false;
         _loadError = null;
@@ -110,11 +129,37 @@ class _PostEditorPageState extends State<PostEditorPage> {
       });
     } catch (e) {
       if (!mounted) return;
+      _diagFetchInfo = '全文接口: 失败 ($e)';
       // Degrade gracefully: keep whatever the post list gave us.
       setState(() {
         _fetchingFull = false;
         _loadError = '$e';
       });
+    }
+  }
+
+  /// Copies a diagnostic report (protocol, account, field lengths and the
+  /// raw server payload) so empty-content issues can be pinpointed from
+  /// the user's device without a debugger.
+  Future<void> _copyDiagnostics(AppState app) async {
+    final account = app.currentAccount;
+    final svc = app.service;
+    final buf = StringBuffer()
+      ..writeln('== Open Live Writer 诊断 ==')
+      ..writeln('协议: ${account?.protocol.name ?? "?"}'
+          '${account?.protocol == BlogProtocol.rest ? " (${account?.restAuth.name})" : " (${account?.flavor.name})"}')
+      ..writeln('站点: ${account?.homepageUrl ?? "?"}')
+      ..writeln('接口: ${account?.apiUrl ?? "?"}')
+      ..writeln('用户: ${account?.username ?? "?"}')
+      ..writeln(_diagListInfo)
+      ..writeln(_diagFetchInfo)
+      ..writeln('-- 原始响应 --')
+      ..writeln(svc?.lastResponseBody ?? '(无)');
+    await Clipboard.setData(ClipboardData(text: buf.toString()));
+    if (mounted) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(AppLocalizations.of(context)!.diagnosticsCopied)));
     }
   }
 
@@ -262,6 +307,10 @@ class _PostEditorPageState extends State<PostEditorPage> {
                 ),
                 actions: [
                   TextButton(
+                    onPressed: () => _copyDiagnostics(app),
+                    child: Text(l10n.copyDiagnostics),
+                  ),
+                  TextButton(
                     onPressed: () => setState(() => _emptyContent = false),
                     child: Text(l10n.cancel),
                   ),
@@ -288,6 +337,10 @@ class _PostEditorPageState extends State<PostEditorPage> {
                       _loadFullPost();
                     },
                     child: Text(AppLocalizations.of(context)!.retry),
+                  ),
+                  TextButton(
+                    onPressed: () => _copyDiagnostics(app),
+                    child: Text(l10n.copyDiagnostics),
                   ),
                   TextButton(
                     onPressed: () =>

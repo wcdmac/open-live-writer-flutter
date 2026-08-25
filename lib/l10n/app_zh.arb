@@ -1,4 +1,4 @@
-{
+﻿{
   "@@locale": "zh",
   "appTitle": "Open Live Writer",
   "welcome": "欢迎使用 Open Live Writer",
@@ -128,6 +128,8 @@
   "linkUrl": "链接地址",
   "imageUrl": "图片地址",
   "altText": "替代文本（可选）",
+  "copyDiagnostics": "复制诊断",
+  "diagnosticsCopied": "诊断信息已复制",
   "cancel": "取消",
   "ok": "确定",
   "postStatusDraft": "草稿",
@@ -145,3 +147,4 @@
   "authAppPassword": "应用程序密码",
   "authJwt": "JWT Bearer"
 }
+

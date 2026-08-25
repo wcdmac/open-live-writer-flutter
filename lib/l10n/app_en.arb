@@ -1,4 +1,4 @@
-{
+﻿{
   "@@locale": "en",
   "appTitle": "Open Live Writer",
   "welcome": "Welcome to Open Live Writer",
@@ -184,6 +184,8 @@
   "linkUrl": "Link URL",
   "imageUrl": "Image URL",
   "altText": "Alt text (optional)",
+  "copyDiagnostics": "Copy diagnostics",
+  "diagnosticsCopied": "Diagnostics copied to clipboard",
   "cancel": "Cancel",
   "ok": "OK",
   "postStatusDraft": "Draft",
@@ -201,3 +203,4 @@
   "authAppPassword": "Application Password",
   "authJwt": "JWT Bearer"
 }
+

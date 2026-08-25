@@ -342,6 +342,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get altText => '替代文本（可选）';
 
   @override
+  String get copyDiagnostics => '复制诊断';
+
+  @override
+  String get diagnosticsCopied => '诊断信息已复制';
+
+  @override
   String get cancel => '取消';
 
   @override
