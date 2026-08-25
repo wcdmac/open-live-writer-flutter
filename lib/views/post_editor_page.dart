@@ -153,6 +153,10 @@ class _PostEditorPageState extends State<PostEditorPage> {
       ..writeln('用户: ${account?.username ?? "?"}')
       ..writeln(_diagListInfo)
       ..writeln(_diagFetchInfo)
+      ..writeln('编辑器实际文本: 标题=${_titleController.text.length}字, '
+          '正文=${_contentController.text.length}字')
+      ..writeln('UI 状态: fetching=$_fetchingFull, empty=$_emptyContent, '
+          'error=${_loadError == null ? "无" : "有"}')
       ..writeln('-- 原始响应 --')
       ..writeln(svc?.lastResponseBody ?? '(无)');
     await Clipboard.setData(ClipboardData(text: buf.toString()));
@@ -284,6 +288,19 @@ class _PostEditorPageState extends State<PostEditorPage> {
               tooltip: l10n.postSettings,
               icon: const Icon(Icons.tune),
               onPressed: () => _openSettingsSheet(context, app),
+            ),
+            PopupMenuButton<String>(
+              tooltip: l10n.copyDiagnostics,
+              icon: const Icon(Icons.bug_report_outlined),
+              onSelected: (value) {
+                if (value == 'diag') _copyDiagnostics(app);
+              },
+              itemBuilder: (_) => [
+                PopupMenuItem(
+                  value: 'diag',
+                  child: Text(l10n.copyDiagnostics),
+                ),
+              ],
             ),
           ],
         ),
@@ -450,8 +467,12 @@ class _PostEditorPageState extends State<PostEditorPage> {
               expands: true,
               textAlignVertical: TextAlignVertical.top,
               keyboardType: TextInputType.multiline,
+              // iOS has no font family named 'monospace' (Android does);
+              // a failed family match can render every glyph blank. Use a
+              // cross-platform chain instead.
               style: const TextStyle(
-                fontFamily: 'monospace',
+                fontFamily: 'Courier New',
+                fontFamilyFallback: ['Menlo', 'Consolas', 'monospace'],
                 fontSize: 14,
                 height: 1.6,
               ),
