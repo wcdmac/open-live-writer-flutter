@@ -28,15 +28,12 @@ jobs:
 
       - name: Install dependencies
         run: flutter pub get
-        working-directory: open_live_writer
 
       - name: Analyze
         run: flutter analyze --no-fatal-infos
-        working-directory: open_live_writer
 
       - name: Test
         run: flutter test
-        working-directory: open_live_writer
 
   # ---------------------------------------------------------------------------
   # Android (APK + AAB)
@@ -60,15 +57,13 @@ jobs:
 
       - name: Build APK
         run: flutter build apk --release --split-per-abi
-        working-directory: open_live_writer
 
       - name: Build App Bundle
         run: flutter build appbundle --release
-        working-directory: open_live_writer
 
       - name: Rename artifacts
         run: |
-          cd open_live_writer/build/app/outputs
+          cd build/app/outputs
           mkdir -p "${GITHUB_WORKSPACE}/dist"
           cp flutter-apk/app-*-release.apk "${GITHUB_WORKSPACE}/dist/"
           cp bundle/release/*.aab "${GITHUB_WORKSPACE}/dist/"
@@ -96,11 +91,10 @@ jobs:
 
       - name: Build iOS (no codesign)
         run: flutter build ipa --release --no-codesign
-        working-directory: open_live_writer
 
       - name: Package unsigned IPA
         run: |
-          cd open_live_writer/build/ios/ipa
+          cd build/ios/ipa
           # --no-codesign produces a .xcarchive; wrap Payload into an IPA.
           mkdir -p Payload
           if [ -d *.xcarchive/Products/Applications/*.app ]; then
@@ -132,13 +126,12 @@ jobs:
 
       - name: Build Windows
         run: flutter build windows --release
-        working-directory: open_live_writer
 
       - name: Package ZIP
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path dist | Out-Null
-          Compress-Archive -Path "open_live_writer/build/windows/x64/runner/Release/*" `
+          Compress-Archive -Path "build/windows/x64/runner/Release/*" `
             -DestinationPath "dist/open-live-writer-windows-x64.zip"
           Get-ChildItem dist
 
@@ -170,13 +163,12 @@ jobs:
 
       - name: Build Linux
         run: flutter build linux --release
-        working-directory: open_live_writer
 
       - name: Package tar.gz
         run: |
           mkdir -p dist
           tar -czf dist/open-live-writer-linux-x64.tar.gz \
-            -C open_live_writer/build/linux/x64/release/bundle .
+            -C build/linux/x64/release/bundle .
           ls -la dist
 
       - uses: actions/upload-artifact@v4
@@ -201,13 +193,12 @@ jobs:
 
       - name: Build macOS
         run: flutter build macos --release
-        working-directory: open_live_writer
 
       - name: Package ZIP
         run: |
           mkdir -p dist
           ditto -c -k --sequesterRsrc --keepParent \
-            "open_live_writer/build/macos/Build/Products/Release/open_live_writer.app" \
+            "build/macos/Build/Products/Release/open_live_writer.app" \
             "dist/open-live-writer-macos.zip"
           ls -la dist
 
