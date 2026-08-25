@@ -4,7 +4,6 @@ import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart
 import 'package:image_picker/image_picker.dart' as imgpick;
 
 import '../l10n/app_localizations.dart';
-import '../models/blog_post.dart';
 import '../views/editor/editor_toolbar.dart' show MediaUploader;
 import 'block_document.dart';
 
