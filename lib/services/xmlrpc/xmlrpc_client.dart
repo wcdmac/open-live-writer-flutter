@@ -42,7 +42,7 @@ class XmlRpcClient {
     try {
       final request = http.Request('POST', endpoint)
         ..headers['Content-Type'] = 'text/xml; charset=utf-8'
-        ..headers['User-Agent'] = 'OpenLiveWriter-Flutter/1.0'
+        ..headers['User-Agent'] = 'StarmasterWriter/1.5'
         ..body = body;
       response = await http.Response.fromStream(
         await _http.send(request).timeout(timeout),

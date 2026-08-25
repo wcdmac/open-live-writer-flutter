@@ -101,13 +101,13 @@ abstract class AppLocalizations {
   /// No description provided for @appTitle.
   ///
   /// In en, this message translates to:
-  /// **'Open Live Writer'**
+  /// **'Starmaster Writer'**
   String get appTitle;
 
   /// No description provided for @welcome.
   ///
   /// In en, this message translates to:
-  /// **'Welcome to Open Live Writer'**
+  /// **'Welcome to Starmaster Writer'**
   String get welcome;
 
   /// No description provided for @welcomeSubtitle.
@@ -245,7 +245,7 @@ abstract class AppLocalizations {
   /// No description provided for @xmlrpcClassic.
   ///
   /// In en, this message translates to:
-  /// **'XML-RPC (classic Open Live Writer)'**
+  /// **'XML-RPC (classic protocol)'**
   String get xmlrpcClassic;
 
   /// No description provided for @flavor.
@@ -823,6 +823,126 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'JWT Bearer'**
   String get authJwt;
+
+  /// No description provided for @visualMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Visual'**
+  String get visualMode;
+
+  /// No description provided for @sourceMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Source'**
+  String get sourceMode;
+
+  /// No description provided for @addBlock.
+  ///
+  /// In en, this message translates to:
+  /// **'Insert block'**
+  String get addBlock;
+
+  /// No description provided for @paragraphBlock.
+  ///
+  /// In en, this message translates to:
+  /// **'Paragraph'**
+  String get paragraphBlock;
+
+  /// No description provided for @headingBlock.
+  ///
+  /// In en, this message translates to:
+  /// **'Heading'**
+  String get headingBlock;
+
+  /// No description provided for @imageBlock.
+  ///
+  /// In en, this message translates to:
+  /// **'Image'**
+  String get imageBlock;
+
+  /// No description provided for @tableBlock.
+  ///
+  /// In en, this message translates to:
+  /// **'Table'**
+  String get tableBlock;
+
+  /// No description provided for @videoBlock.
+  ///
+  /// In en, this message translates to:
+  /// **'Video'**
+  String get videoBlock;
+
+  /// No description provided for @videoUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Video URL'**
+  String get videoUrl;
+
+  /// No description provided for @videoUrlHint.
+  ///
+  /// In en, this message translates to:
+  /// **'YouTube link, direct .mp4, or embeddable page'**
+  String get videoUrlHint;
+
+  /// No description provided for @tableHeaderRow.
+  ///
+  /// In en, this message translates to:
+  /// **'First row is header'**
+  String get tableHeaderRow;
+
+  /// No description provided for @addRow.
+  ///
+  /// In en, this message translates to:
+  /// **'Add row'**
+  String get addRow;
+
+  /// No description provided for @addColumn.
+  ///
+  /// In en, this message translates to:
+  /// **'Add column'**
+  String get addColumn;
+
+  /// No description provided for @removeRow.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove row'**
+  String get removeRow;
+
+  /// No description provided for @removeColumn.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove column'**
+  String get removeColumn;
+
+  /// No description provided for @deleteBlock.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete block'**
+  String get deleteBlock;
+
+  /// No description provided for @moveUp.
+  ///
+  /// In en, this message translates to:
+  /// **'Move up'**
+  String get moveUp;
+
+  /// No description provided for @moveDown.
+  ///
+  /// In en, this message translates to:
+  /// **'Move down'**
+  String get moveDown;
+
+  /// No description provided for @captionLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Caption (optional)'**
+  String get captionLabel;
+
+  /// No description provided for @emptyBlockHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Type here…'**
+  String get emptyBlockHint;
 }
 
 class _AppLocalizationsDelegate

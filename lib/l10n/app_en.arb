@@ -1,7 +1,7 @@
-﻿{
+{
   "@@locale": "en",
-  "appTitle": "Open Live Writer",
-  "welcome": "Welcome to Open Live Writer",
+  "appTitle": "Starmaster Writer",
+  "welcome": "Welcome to Starmaster Writer",
   "welcomeSubtitle": "Connect to your WordPress blog to start writing.",
   "blogCredentials": "Blog & credentials",
   "connectionSettings": "Connection settings",
@@ -24,7 +24,7 @@
   "notDetected": "Not detected",
   "unknown": "Unknown",
   "connectionProtocol": "Connection protocol",
-  "xmlrpcClassic": "XML-RPC (classic Open Live Writer)",
+  "xmlrpcClassic": "XML-RPC (classic protocol)",
   "flavor": "Flavor",
   "restV2": "WordPress REST API v2",
   "endpoint": "Endpoint",
@@ -201,6 +201,26 @@
   "flavorMovabletype": "MovableType",
   "flavorBlogger": "Blogger",
   "authAppPassword": "Application Password",
-  "authJwt": "JWT Bearer"
+  "authJwt": "JWT Bearer",
+  "visualMode": "Visual",
+  "sourceMode": "Source",
+  "addBlock": "Insert block",
+  "paragraphBlock": "Paragraph",
+  "headingBlock": "Heading",
+  "imageBlock": "Image",
+  "tableBlock": "Table",
+  "videoBlock": "Video",
+  "videoUrl": "Video URL",
+  "videoUrlHint": "YouTube link, direct .mp4, or embeddable page",
+  "tableHeaderRow": "First row is header",
+  "addRow": "Add row",
+  "addColumn": "Add column",
+  "removeRow": "Remove row",
+  "removeColumn": "Remove column",
+  "deleteBlock": "Delete block",
+  "moveUp": "Move up",
+  "moveDown": "Move down",
+  "captionLabel": "Caption (optional)",
+  "emptyBlockHint": "Type here…"
 }
 

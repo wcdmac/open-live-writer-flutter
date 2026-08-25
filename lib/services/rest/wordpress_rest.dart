@@ -98,7 +98,7 @@ class WordPressRestClient {
   Future<Map<String, String>> _headers(
       {Map<String, String> extra = const {}}) async {
     final h = <String, String>{
-      'User-Agent': 'OpenLiveWriter-Flutter/1.0',
+      'User-Agent': 'StarmasterWriter/1.5',
       'Accept': 'application/json',
       ...extra,
     };

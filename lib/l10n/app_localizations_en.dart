@@ -9,10 +9,10 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
-  String get appTitle => 'Open Live Writer';
+  String get appTitle => 'Starmaster Writer';
 
   @override
-  String get welcome => 'Welcome to Open Live Writer';
+  String get welcome => 'Welcome to Starmaster Writer';
 
   @override
   String get welcomeSubtitle =>
@@ -83,7 +83,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get connectionProtocol => 'Connection protocol';
 
   @override
-  String get xmlrpcClassic => 'XML-RPC (classic Open Live Writer)';
+  String get xmlrpcClassic => 'XML-RPC (classic protocol)';
 
   @override
   String get flavor => 'Flavor';
@@ -397,4 +397,64 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get authJwt => 'JWT Bearer';
+
+  @override
+  String get visualMode => 'Visual';
+
+  @override
+  String get sourceMode => 'Source';
+
+  @override
+  String get addBlock => 'Insert block';
+
+  @override
+  String get paragraphBlock => 'Paragraph';
+
+  @override
+  String get headingBlock => 'Heading';
+
+  @override
+  String get imageBlock => 'Image';
+
+  @override
+  String get tableBlock => 'Table';
+
+  @override
+  String get videoBlock => 'Video';
+
+  @override
+  String get videoUrl => 'Video URL';
+
+  @override
+  String get videoUrlHint => 'YouTube link, direct .mp4, or embeddable page';
+
+  @override
+  String get tableHeaderRow => 'First row is header';
+
+  @override
+  String get addRow => 'Add row';
+
+  @override
+  String get addColumn => 'Add column';
+
+  @override
+  String get removeRow => 'Remove row';
+
+  @override
+  String get removeColumn => 'Remove column';
+
+  @override
+  String get deleteBlock => 'Delete block';
+
+  @override
+  String get moveUp => 'Move up';
+
+  @override
+  String get moveDown => 'Move down';
+
+  @override
+  String get captionLabel => 'Caption (optional)';
+
+  @override
+  String get emptyBlockHint => 'Type here…';
 }

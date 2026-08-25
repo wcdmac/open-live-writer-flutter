@@ -9,10 +9,10 @@ class AppLocalizationsZh extends AppLocalizations {
   AppLocalizationsZh([String locale = 'zh']) : super(locale);
 
   @override
-  String get appTitle => 'Open Live Writer';
+  String get appTitle => 'Starmaster Writer';
 
   @override
-  String get welcome => '欢迎使用 Open Live Writer';
+  String get welcome => '欢迎使用 Starmaster Writer';
 
   @override
   String get welcomeSubtitle => '连接到你的 WordPress 博客开始写作。';
@@ -82,7 +82,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get connectionProtocol => '连接协议';
 
   @override
-  String get xmlrpcClassic => 'XML-RPC（经典 Open Live Writer）';
+  String get xmlrpcClassic => 'XML-RPC（经典协议）';
 
   @override
   String get flavor => '类型';
@@ -394,4 +394,64 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get authJwt => 'JWT Bearer';
+
+  @override
+  String get visualMode => '可视化';
+
+  @override
+  String get sourceMode => '源代码';
+
+  @override
+  String get addBlock => '插入块';
+
+  @override
+  String get paragraphBlock => '段落';
+
+  @override
+  String get headingBlock => '标题';
+
+  @override
+  String get imageBlock => '图片';
+
+  @override
+  String get tableBlock => '表格';
+
+  @override
+  String get videoBlock => '视频';
+
+  @override
+  String get videoUrl => '视频地址';
+
+  @override
+  String get videoUrlHint => 'YouTube 链接、MP4 直链或可嵌入页面';
+
+  @override
+  String get tableHeaderRow => '首行为表头';
+
+  @override
+  String get addRow => '加一行';
+
+  @override
+  String get addColumn => '加一列';
+
+  @override
+  String get removeRow => '删一行';
+
+  @override
+  String get removeColumn => '删一列';
+
+  @override
+  String get deleteBlock => '删除此块';
+
+  @override
+  String get moveUp => '上移';
+
+  @override
+  String get moveDown => '下移';
+
+  @override
+  String get captionLabel => '图片说明（可选）';
+
+  @override
+  String get emptyBlockHint => '在此输入…';
 }
