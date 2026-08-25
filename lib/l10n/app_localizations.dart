@@ -284,6 +284,18 @@ abstract class AppLocalizations {
   /// **'Authentication'**
   String get authentication;
 
+  /// No description provided for @restAuth401.
+  ///
+  /// In en, this message translates to:
+  /// **'Authentication failed (401). An Application Password is NOT your login password — create one in WP Admin → Users → Profile → Application Passwords (WordPress 5.6+, HTTPS site required). Some hosts strip the Authorization header; if it keeps failing, connect with XML-RPC instead. Details: {error}'**
+  String restAuth401(String error);
+
+  /// No description provided for @restJwt404.
+  ///
+  /// In en, this message translates to:
+  /// **'JWT endpoint not found (404). JWT authentication requires the \'JWT Authentication for WP REST API\' plugin to be installed and activated on your site. Use an Application Password instead, or connect with XML-RPC. Details: {error}'**
+  String restJwt404(String error);
+
   /// No description provided for @detectionFailed.
   ///
   /// In en, this message translates to:

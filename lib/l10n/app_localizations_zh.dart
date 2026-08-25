@@ -103,6 +103,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get authentication => '认证方式';
 
   @override
+  String restAuth401(String error) {
+    return '认证失败（401）。应用程序密码不是登录密码——请在 WP 后台 → 用户 → 个人资料 → 应用程序密码 中创建（需 WordPress 5.6+ 且网站为 HTTPS）。部分主机会丢弃 Authorization 请求头导致认证失败，如持续失败请改用 XML-RPC 连接。详情：$error';
+  }
+
+  @override
+  String restJwt404(String error) {
+    return '未找到 JWT 端点（404）。JWT 认证需要在站点安装并启用「JWT Authentication for WP REST API」插件。请改用应用程序密码认证，或使用 XML-RPC 连接。详情：$error';
+  }
+
+  @override
   String detectionFailed(Object error) {
     return '检测失败：$error';
   }

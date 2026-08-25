@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
 import '../models/blog.dart';
 import '../services/blog_service.dart';
+import '../services/rest/wordpress_rest.dart';
 import '../services/rsd_detector.dart';
 import '../state/app_state.dart';
 
@@ -141,6 +142,15 @@ class _AddAccountPageState extends State<AddAccountPage> {
         _pickedBlog = blogs.length == 1 ? blogs.first : null;
         _step = 2;
       });
+    } on WordPressRestException catch (e) {
+      // Give actionable guidance for the two most common REST failures.
+      if (!mounted) return;
+      final msg = e.statusCode == 401
+          ? l10n.restAuth401('$e')
+          : e.statusCode == 404 && _restAuth == RestAuthMethod.jwt
+              ? l10n.restJwt404('$e')
+              : l10n.connectionFailed(e);
+      setState(() => _error = msg);
     } catch (e) {
       setState(() => _error = l10n.connectionFailed(e));
     } finally {

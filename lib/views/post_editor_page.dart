@@ -120,6 +120,10 @@ class _PostEditorPageState extends State<PostEditorPage> {
               : l10n.draftSaved)
           : (_editor.saveError ?? l10n.saveFailed),
     );
+    // Reload the home post list so the saved post shows up immediately.
+    if (ok) {
+      context.read<AppState>().refresh();
+    }
   }
 
   Future<bool> _confirmDiscard() async {

@@ -40,8 +40,14 @@ class AppState extends ChangeNotifier {
         orElse: () => accounts.first,
       );
       await _connectCurrent();
+      notifyListeners();
+      // Auto-load the post list on startup. HomePage's post-frame callback
+      // alone races with this async load and can miss the refresh entirely,
+      // leaving the list permanently empty.
+      await refresh();
+    } else {
+      notifyListeners();
     }
-    notifyListeners();
   }
 
   Future<void> selectAccount(BlogAccount account) async {

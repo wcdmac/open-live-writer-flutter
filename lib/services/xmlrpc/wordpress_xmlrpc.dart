@@ -101,7 +101,10 @@ class WordPressXmlRpcClient {
           'number': count,
           'offset': offset,
           if (pages) 'post_type': 'page',
-          if (status != null) 'post_status': status.wpValue,
+          // WP_Query defaults to 'publish' only — request every
+          // editable status so drafts show up in the list.
+          'post_status': status?.wpValue ??
+              ['publish', 'draft', 'future', 'pending', 'private'],
         };
         final result = await _client.callMethod('wp.getPosts',
             [_blogId, _client.username, _client.password, filter]);

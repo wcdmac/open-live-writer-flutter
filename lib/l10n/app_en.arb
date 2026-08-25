@@ -31,6 +31,22 @@
   "notAvailable": "not available",
   "xmlrpcFlavor": "XML-RPC API flavor",
   "authentication": "Authentication",
+  "restAuth401": "Authentication failed (401). An Application Password is NOT your login password — create one in WP Admin → Users → Profile → Application Passwords (WordPress 5.6+, HTTPS site required). Some hosts strip the Authorization header; if it keeps failing, connect with XML-RPC instead. Details: {error}",
+  "@restAuth401": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "restJwt404": "JWT endpoint not found (404). JWT authentication requires the 'JWT Authentication for WP REST API' plugin to be installed and activated on your site. Use an Application Password instead, or connect with XML-RPC. Details: {error}",
+  "@restJwt404": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "detectionFailed": "Detection failed: {error}",
   "@detectionFailed": {
     "placeholders": {

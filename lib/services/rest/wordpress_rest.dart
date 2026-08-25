@@ -200,7 +200,10 @@ class WordPressRestClient {
           'context': 'edit',
           'per_page': '$perPage',
           'page': '$page',
-          if (status != null) 'status': status.wpValue,
+          // Without an explicit status the REST API only returns 'publish',
+          // hiding drafts — request every editable status instead.
+          'status': status?.wpValue ??
+              'publish,draft,future,pending,private',
           if (search.isNotEmpty) 'search': search,
         });
     if (data is! List) return const [];
