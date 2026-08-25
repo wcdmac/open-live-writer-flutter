@@ -47,6 +47,22 @@
       }
     }
   },
+  "emptyContentNotice": "The server returned an empty body for this post (content length 0). If the post has content on the web, the account may lack permission to read it, or the connection protocol doesn't provide the content field.",
+  "@emptyContentNotice": {},
+  "pickFromDevice": "Pick from device & upload",
+  "@pickFromDevice": {},
+  "enterImageUrl": "Enter image URL",
+  "@enterImageUrl": {},
+  "uploadingImage": "Uploading image…",
+  "@uploadingImage": {},
+  "uploadFailed": "Upload failed: {error}",
+  "@uploadFailed": {
+    "placeholders": {
+      "error": {
+        "type": "Object"
+      }
+    }
+  },
   "detectionFailed": "Detection failed: {error}",
   "@detectionFailed": {
     "placeholders": {

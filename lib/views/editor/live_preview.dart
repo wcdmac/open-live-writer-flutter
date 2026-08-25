@@ -52,6 +52,13 @@ class _LivePreviewState extends State<LivePreview> {
     if (oldWidget.title != widget.title) {
       _title = widget.title;
     }
+    // CRITICAL: keep content in sync with the widget parameter. Relying
+    // solely on the debounced stream races when content is set
+    // programmatically (e.g. full post loaded after opening), leaving
+    // the preview permanently blank.
+    if (oldWidget.content != widget.content && widget.content != _content) {
+      _content = widget.content;
+    }
   }
 
   @override

@@ -145,11 +145,13 @@ class WordPressRestClient {
         ...extraHeaders,
       },
     );
-    final res = await _http
-        .send(http.Request(method, uri)
-          ..headers.addAll(headers)
-          ..body = body == null ? '' : jsonEncode(body))
-        .timeout(_timeout);
+    // Never attach a body to GET/DELETE requests — some WAFs (Cloudflare,
+    // BT panel…) reject non-empty or zero-length bodies on GET with 403.
+    final request = http.Request(method, uri)..headers.addAll(headers);
+    if (body != null && method.toUpperCase() != 'GET') {
+      request.body = jsonEncode(body);
+    }
+    final res = await _http.send(request).timeout(_timeout);
     final response = await http.Response.fromStream(res);
 
     if (response.statusCode >= 400) {

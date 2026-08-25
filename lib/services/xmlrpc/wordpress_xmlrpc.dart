@@ -138,7 +138,11 @@ class WordPressXmlRpcClient {
     }
     final result = await _client.callMethod(
         'metaWeblog.getPost', [postId, _client.username, _client.password]);
-    return _postFromMetaweblogStruct(result as Map);
+    if (result is! Map) {
+      throw XmlRpcFault(-32700,
+          'metaWeblog.getPost returned unexpected data for post $postId');
+    }
+    return _postFromMetaweblogStruct(result);
   }
 
   /// wp.newPost / metaWeblog.newPost. Returns the new post id.

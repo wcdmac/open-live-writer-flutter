@@ -113,6 +113,24 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get emptyContentNotice =>
+      '服务器返回了空的文章正文（内容长度为 0）。如果该文章在网页上有内容，可能是当前账号缺少阅读权限，或所选连接协议未提供正文字段。';
+
+  @override
+  String get pickFromDevice => '从设备选择并上传';
+
+  @override
+  String get enterImageUrl => '输入图片 URL';
+
+  @override
+  String get uploadingImage => '正在上传图片…';
+
+  @override
+  String uploadFailed(Object error) {
+    return '上传失败：$error';
+  }
+
+  @override
   String detectionFailed(Object error) {
     return '检测失败：$error';
   }

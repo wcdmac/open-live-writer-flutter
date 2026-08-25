@@ -40,6 +40,7 @@ class _PostEditorPageState extends State<PostEditorPage> {
   /// Full-content fetch state when opening an existing post.
   bool _loadingFull = false;
   String? _loadError;
+  bool _emptyContent = false;
 
   @override
   void initState() {
@@ -81,7 +82,11 @@ class _PostEditorPageState extends State<PostEditorPage> {
           _titleController.text = fresh.title;
         }
         if (fresh.content.trim().isNotEmpty) {
+          _emptyContent = false;
           _contentController.text = fresh.content;
+        } else {
+          // Distinguish "failed to load" from "server returned empty body".
+          _emptyContent = _contentController.text.trim().isEmpty;
         }
         if (fresh.tags.isNotEmpty) {
           _tagController.text = fresh.tags.join(', ');
@@ -155,7 +160,11 @@ class _PostEditorPageState extends State<PostEditorPage> {
     final l10n = AppLocalizations.of(context)!;
     final isWide = MediaQuery.of(context).size.width >= 1000;
 
-    return PopScope(
+    // Listen to the editor state so applyPost()/saving changes rebuild the
+    // page — without this, loaded content and the save spinner never show.
+    return ListenableBuilder(
+      listenable: _editor,
+      builder: (context, _) => PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
@@ -204,6 +213,25 @@ class _PostEditorPageState extends State<PostEditorPage> {
             ? const Center(child: CircularProgressIndicator())
             : Column(
                 children: [
+                  if (_emptyContent)
+                    MaterialBanner(
+                      backgroundColor:
+                          Theme.of(context).colorScheme.secondaryContainer,
+                      content: Text(
+                        l10n.emptyContentNotice,
+                        style: TextStyle(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onSecondaryContainer,
+                        ),
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => setState(() => _emptyContent = false),
+                          child: Text(l10n.cancel),
+                        ),
+                      ],
+                    ),
                   if (_loadError != null)
                     MaterialBanner(
                       backgroundColor:
@@ -238,6 +266,7 @@ class _PostEditorPageState extends State<PostEditorPage> {
                 ],
               ),
       ),
+    ),
     );
   }
 
@@ -313,6 +342,13 @@ class _PostEditorPageState extends State<PostEditorPage> {
           child: EditorToolbar(
             controller: _contentController,
             onContentChanged: _editor.updateContent,
+            uploadMedia: (filename, bytes, mime) {
+              final svc = context.read<AppState>().service;
+              if (svc == null) {
+                throw StateError('No blog connection');
+              }
+              return svc.uploadMedia(filename, bytes, mime);
+            },
           ),
         ),
         const Divider(height: 1),

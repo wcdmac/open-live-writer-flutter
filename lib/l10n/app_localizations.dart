@@ -296,6 +296,36 @@ abstract class AppLocalizations {
   /// **'JWT endpoint not found (404). JWT authentication requires the \'JWT Authentication for WP REST API\' plugin to be installed and activated on your site. Use an Application Password instead, or connect with XML-RPC. Details: {error}'**
   String restJwt404(String error);
 
+  /// No description provided for @emptyContentNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'The server returned an empty body for this post (content length 0). If the post has content on the web, the account may lack permission to read it, or the connection protocol doesn\'t provide the content field.'**
+  String get emptyContentNotice;
+
+  /// No description provided for @pickFromDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'Pick from device & upload'**
+  String get pickFromDevice;
+
+  /// No description provided for @enterImageUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter image URL'**
+  String get enterImageUrl;
+
+  /// No description provided for @uploadingImage.
+  ///
+  /// In en, this message translates to:
+  /// **'Uploading image…'**
+  String get uploadingImage;
+
+  /// No description provided for @uploadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Upload failed: {error}'**
+  String uploadFailed(Object error);
+
   /// No description provided for @detectionFailed.
   ///
   /// In en, this message translates to:

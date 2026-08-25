@@ -114,6 +114,24 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get emptyContentNotice =>
+      'The server returned an empty body for this post (content length 0). If the post has content on the web, the account may lack permission to read it, or the connection protocol doesn\'t provide the content field.';
+
+  @override
+  String get pickFromDevice => 'Pick from device & upload';
+
+  @override
+  String get enterImageUrl => 'Enter image URL';
+
+  @override
+  String get uploadingImage => 'Uploading image…';
+
+  @override
+  String uploadFailed(Object error) {
+    return 'Upload failed: $error';
+  }
+
+  @override
   String detectionFailed(Object error) {
     return 'Detection failed: $error';
   }

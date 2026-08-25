@@ -1,7 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../l10n/app_localizations.dart';
+import '../../models/blog_post.dart';
+
+/// Signature for the media upload callback provided by the editor page.
+typedef MediaUploader = Future<MediaUploadResult> Function(
+    String filename, List<int> bytes, String mimeType);
 
 /// Formatting toolbar that wraps the selection in HTML tags — the same
 /// content model as the original OLW editor (posts are HTML).
@@ -10,10 +16,15 @@ class EditorToolbar extends StatelessWidget {
     super.key,
     required this.controller,
     required this.onContentChanged,
+    this.uploadMedia,
   });
 
   final TextEditingController controller;
   final ValueChanged<String> onContentChanged;
+
+  /// Optional uploader (device pick → blog media library). When null,
+  /// only manual image URLs are offered.
+  final MediaUploader? uploadMedia;
 
   void _wrapSelection(String open, String close) {
     final selection = controller.selection;
@@ -63,10 +74,85 @@ class EditorToolbar extends StatelessWidget {
 
   Future<void> _insertImage(BuildContext context) async {
     final l10n = AppLocalizations.of(context)!;
+
+    // Device pick & upload when an uploader is wired in.
+    final uploader = uploadMedia;
+    if (uploader != null) {
+      final fromDevice = await showModalBottomSheet<bool>(
+        context: context,
+        showDragHandle: true,
+        builder: (sheetContext) => SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.photo_library),
+                title: Text(l10n.pickFromDevice),
+                onTap: () => Navigator.of(sheetContext).pop(true),
+              ),
+              ListTile(
+                leading: const Icon(Icons.link),
+                title: Text(l10n.enterImageUrl),
+                onTap: () => Navigator.of(sheetContext).pop(false),
+              ),
+            ],
+          ),
+        ),
+      );
+      if (fromDevice == null) return;
+      if (!context.mounted) return;
+      if (fromDevice) {
+        await _pickAndUpload(context, uploader);
+        return;
+      }
+    }
+
+    // Manual URL path.
+    if (!context.mounted) return;
     final url = await _prompt(context, l10n.imageUrl, 'https://');
     if (url == null || url.isEmpty || !context.mounted) return;
     final alt = await _prompt(context, l10n.altText, '');
     _insertAtCursor('<img src="$url" alt="${alt ?? ''}" />');
+  }
+
+  Future<void> _pickAndUpload(
+      BuildContext context, MediaUploader uploader) async {
+    final l10n = AppLocalizations.of(context)!;
+    final picker = ImagePicker();
+    final xfile = await picker.pickImage(
+        imageQuality: 90, maxWidth: 2560, source: ImageSource.gallery);
+    if (xfile == null) return;
+
+    // Show a non-dismissible uploading indicator.
+    if (!context.mounted) return;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        content: Row(
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(width: 20),
+            Text(l10n.uploadingImage),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      final Uint8List bytes = await xfile.readAsBytes();
+      final result = await uploader(xfile.name, bytes,
+          xfile.mimeType ?? 'image/jpeg');
+      if (!context.mounted) return;
+      Navigator.of(context).pop(); // close indicator
+      _insertAtCursor(result.html);
+    } catch (e) {
+      if (!context.mounted) return;
+      Navigator.of(context).pop(); // close indicator
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.uploadFailed(e))),
+      );
+    }
   }
 
   Future<String?> _prompt(BuildContext context, String title, String hint) {

@@ -47,6 +47,22 @@
       }
     }
   },
+  "emptyContentNotice": "服务器返回了空的文章正文（内容长度为 0）。如果该文章在网页上有内容，可能是当前账号缺少阅读权限，或所选连接协议未提供正文字段。",
+  "@emptyContentNotice": {},
+  "pickFromDevice": "从设备选择并上传",
+  "@pickFromDevice": {},
+  "enterImageUrl": "输入图片 URL",
+  "@enterImageUrl": {},
+  "uploadingImage": "正在上传图片…",
+  "@uploadingImage": {},
+  "uploadFailed": "上传失败：{error}",
+  "@uploadFailed": {
+    "placeholders": {
+      "error": {
+        "type": "Object"
+      }
+    }
+  },
   "detectionFailed": "检测失败：{error}",
   "connectionFailed": "连接失败：{error}",
   "connectedNoBlogs": "已连接，但这些凭据没有返回任何博客。",
