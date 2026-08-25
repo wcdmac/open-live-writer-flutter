@@ -98,22 +98,40 @@ class AppState extends ChangeNotifier {
   }
 
   /// Reloads taxonomies, theme and post list for the current account.
+  ///
+  /// The three network calls are deliberately independent: a failing
+  /// tags/categories endpoint (plugin conflicts, role permissions, WAF)
+  /// must never prevent the post list from loading — bundling them with
+  /// Future.wait made the whole dashboard appear permanently empty.
   Future<void> refresh() async {
     final svc = _service;
     if (svc == null) return;
     loading = true;
     error = null;
     notifyListeners();
-    try {
-      final results = await Future.wait([
-        svc.getCategories(),
-        svc.getTags(),
-        svc.getPosts(count: 50),
-      ]);
-      categories = results[0] as List<PostCategory>;
-      tags = results[1] as List<PostTag>;
-      posts = results[2] as List<BlogPost>;
 
+    // Taxonomies are best-effort; failures degrade silently.
+    final catsFuture = svc.getCategories().catchError((Object e) {
+      if (kDebugMode) print('getCategories failed: $e');
+      return <PostCategory>[];
+    });
+    final tagsFuture = svc.getTags().catchError((Object e) {
+      if (kDebugMode) print('getTags failed: $e');
+      return <PostTag>[];
+    });
+
+    // The post list is the critical payload.
+    try {
+      posts = await svc.getPosts(count: 50);
+    } catch (e) {
+      error = 'Sync failed: $e';
+      if (kDebugMode) print('AppState.refresh getPosts error: $e');
+    }
+
+    categories = await catsFuture;
+    tags = await tagsFuture;
+
+    try {
       // Detect theme once, then cache it.
       final account = currentAccount!;
       if (theme == null || theme!.name == null || theme!.name == 'Default') {
@@ -123,10 +141,7 @@ class AppState extends ChangeNotifier {
             account.copyWith(themeName: theme!.name));
       }
     } catch (e) {
-      error = 'Sync failed: $e';
-      if (kDebugMode) {
-        print('AppState.refresh error: $e');
-      }
+      if (kDebugMode) print('theme detection failed (non-fatal): $e');
     } finally {
       loading = false;
       notifyListeners();

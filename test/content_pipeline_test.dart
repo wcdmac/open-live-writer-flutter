@@ -96,6 +96,80 @@ void main() {
       expect(seen!.query, contains('status'));
     });
 
+    test('getPosts degrades to publish when multi-status is forbidden',
+        () async {
+      final requestedStatuses = <String>[];
+      final mock = MockClient((req) async {
+        final statuses = req.url.queryParameters['status'] ?? '';
+        requestedStatuses.add(statuses);
+        if (statuses.contains('private') || statuses.contains('future')) {
+          // Role without permission for private/future: whole request fails.
+          return http.Response(
+            jsonEncode({
+              'code': 'rest_forbidden_status',
+              'message': 'Status is forbidden.',
+              'data': {'status': 401},
+            }),
+            401,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response(
+          jsonEncode([
+            {
+              'id': 2,
+              'status': 'publish',
+              'title': {'raw': 'Public'},
+              'content': {'raw': '<p>body</p>', 'rendered': '<p>body</p>'},
+            }
+          ]),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      });
+      final posts = await clientFor(mock).getPosts(perPage: 10);
+      expect(posts, hasLength(1));
+      expect(posts.first.title, 'Public');
+      // Degradation chain: full set rejected, reduced set succeeded.
+      expect(requestedStatuses.length, 2);
+      expect(requestedStatuses.first, contains('private'));
+      expect(requestedStatuses.last, 'publish,draft,pending');
+    });
+
+    test('getPost falls back to context=view on 401 (rendered content)',
+        () async {
+      final contexts = <String>[];
+      final mock = MockClient((req) async {
+        final ctx = req.url.queryParameters['context'] ?? '';
+        contexts.add(ctx);
+        if (ctx == 'edit') {
+          return http.Response(
+            jsonEncode({
+              'code': 'rest_forbidden_context',
+              'message': 'Sorry, you are not allowed to edit this post.',
+              'data': {'status': 401},
+            }),
+            401,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response(
+          jsonEncode({
+            'id': 12,
+            'status': 'publish',
+            'title': {'rendered': 'View only'},
+            'content': {'rendered': '<p>Rendered body</p>'},
+          }),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      });
+      final post = await clientFor(mock).getPost('12');
+      expect(contexts, ['edit', 'view']);
+      expect(post.title, 'View only');
+      expect(post.content, '<p>Rendered body</p>');
+    });
+
     test('JSON REST error payload is surfaced with status code', () async {
       final mock = MockClient((req) async => http.Response(
             jsonEncode({

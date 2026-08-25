@@ -97,22 +97,35 @@ class WordPressXmlRpcClient {
   }) async {
     if (flavor == XmlRpcFlavor.wordpress || flavor == XmlRpcFlavor.movabletype) {
       try {
-        final filter = <String, dynamic>{
-          'number': count,
-          'offset': offset,
-          if (pages) 'post_type': 'page',
-          // WP_Query defaults to 'publish' only — request every
-          // editable status so drafts show up in the list.
-          'post_status': status?.wpValue ??
-              ['publish', 'draft', 'future', 'pending', 'private'],
-        };
-        final result = await _client.callMethod('wp.getPosts',
-            [_blogId, _client.username, _client.password, filter]);
-        final rows = result is List ? result : [result];
-        return rows
-            .whereType<Map>()
-            .map((m) => _postFromWpStruct(m, isPage: pages))
-            .toList();
+        Future<List<BlogPost>> wpGetPosts(dynamic postStatus) async {
+          final filter = <String, dynamic>{
+            'number': count,
+            'offset': offset,
+            if (pages) 'post_type': 'page',
+            // WP_Query defaults to 'publish' only — pass every editable
+            // status so drafts show up, but degrade on servers that
+            // reject the multi-status filter.
+            'post_status': postStatus,
+          };
+          final result = await _client.callMethod('wp.getPosts',
+              [_blogId, _client.username, _client.password, filter]);
+          final rows = result is List ? result : [result];
+          return rows
+              .whereType<Map>()
+              .map((m) => _postFromWpStruct(m, isPage: pages))
+              .toList();
+        }
+
+        if (status != null) {
+          return wpGetPosts(status.wpValue);
+        }
+        try {
+          return await wpGetPosts(
+              ['publish', 'draft', 'future', 'pending', 'private']);
+        } on XmlRpcFault {
+          // Degrade: some servers / roles reject the status array.
+          return wpGetPosts('publish,draft,future,pending,private');
+        }
       } on XmlRpcFault catch (e) {
         if (!_isMethodMissing(e)) rethrow;
       }

@@ -197,26 +197,65 @@ class WordPressRestClient {
     PostStatus? status,
     String search = '',
   }) async {
-    final data = await _request('GET', '/wp/v2/${pages ? 'pages' : 'posts'}',
-        query: {
-          'context': 'edit',
-          'per_page': '$perPage',
-          'page': '$page',
-          // Without an explicit status the REST API only returns 'publish',
-          // hiding drafts — request every editable status instead.
-          'status': status?.wpValue ??
-              'publish,draft,future,pending,private',
-          if (search.isNotEmpty) 'search': search,
-        });
-    if (data is! List) return const [];
-    return data.map((raw) => _postFromJson(raw as Map, isPage: pages)).toList();
+    Future<List<BlogPost>> fetch(String statuses) async {
+      final data = await _request('GET', '/wp/v2/${pages ? 'pages' : 'posts'}',
+          query: {
+            'context': 'edit',
+            'per_page': '$perPage',
+            'page': '$page',
+            'status': statuses,
+            if (search.isNotEmpty) 'search': search,
+          });
+      if (data is! List) return const [];
+      return data
+          .map((raw) => _postFromJson(raw as Map, isPage: pages))
+          .toList();
+    }
+
+    // Without an explicit status the REST API only returns 'publish'.
+    // Request every editable status first so drafts show up, but degrade
+    // gracefully: roles without permission for private/future statuses get
+    // the WHOLE request rejected (rest_invalid_status / rest_forbidden),
+    // which used to leave the dashboard permanently empty.
+    final explicit = status?.wpValue;
+    if (explicit != null) return fetch(explicit);
+    try {
+      return await fetch('publish,draft,future,pending,private');
+    } on WordPressRestException catch (e) {
+      if (e.statusCode != 400 && e.statusCode != 401 && e.statusCode != 403) {
+        rethrow;
+      }
+    }
+    try {
+      return await fetch('publish,draft,pending');
+    } on WordPressRestException catch (e) {
+      if (e.statusCode != 400 && e.statusCode != 401 && e.statusCode != 403) {
+        rethrow;
+      }
+    }
+    return fetch('publish');
   }
 
   Future<BlogPost> getPost(String id, {bool isPage = false}) async {
-    final data = await _request(
-        'GET', '/wp/v2/${isPage ? 'pages' : 'posts'}/$id',
-        query: {'context': 'edit'});
-    return _postFromJson(data as Map, isPage: isPage);
+    Future<BlogPost> fetch(String context) async {
+      final data = await _request(
+          'GET', '/wp/v2/${isPage ? 'pages' : 'posts'}/$id',
+          query: {'context': context});
+      return _postFromJson(data as Map, isPage: isPage);
+    }
+
+    try {
+      return await fetch('edit');
+    } on WordPressRestException catch (e) {
+      // Roles that may list posts but lack edit permission on this one
+      // (e.g. a contributor opening someone else's post) get 401/403 for
+      // context=edit — fall back to the rendered (view) content instead
+      // of failing with an empty editor.
+      if (e.statusCode == 401 || e.statusCode == 403) {
+        return fetch('view');
+      }
+      rethrow;
+    }
   }
 
   Future<BlogPost> newPost(BlogPost post, {required bool publish}) async {
