@@ -51,6 +51,24 @@ class EditorState extends ChangeNotifier {
     });
   }
 
+  /// Replaces the post with a freshly fetched copy (e.g. full content
+  /// loaded via getPost after opening from the post list). Empty fields
+  /// in [fresh] keep the existing values.
+  void applyPost(BlogPost fresh) {
+    if (fresh.title.trim().isNotEmpty) post.title = fresh.title;
+    if (fresh.content.trim().isNotEmpty) post.content = fresh.content;
+    if (fresh.excerpt.trim().isNotEmpty) post.excerpt = fresh.excerpt;
+    post.slug = fresh.slug ?? post.slug;
+    post.status = fresh.status;
+    post.categories = fresh.categories;
+    post.tags = fresh.tags;
+    post.datePublished = fresh.datePublished ?? post.datePublished;
+    post.commentsEnabled = fresh.commentsEnabled;
+    post.pingsEnabled = fresh.pingsEnabled;
+    _dirty = false;
+    notifyListeners();
+  }
+
   void updateExcerpt(String excerpt) {
     post.excerpt = excerpt;
     _dirty = true;

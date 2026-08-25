@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../l10n/app_localizations.dart';
 import '../models/blog.dart';
 import '../models/blog_post.dart';
 import '../state/app_state.dart';
@@ -34,6 +35,7 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     final app = context.watch<AppState>();
+    final l10n = AppLocalizations.of(context)!;
 
     if (!app.hasAccount) {
       return const AddAccountPage(embedded: true);
@@ -44,7 +46,7 @@ class _HomePageState extends State<HomePage> {
         title: _BlogSwitcher(app: app),
         actions: [
           IconButton(
-            tooltip: 'Refresh',
+            tooltip: l10n.refresh,
             icon: app.loading
                 ? const SizedBox(
                     width: 18,
@@ -55,7 +57,7 @@ class _HomePageState extends State<HomePage> {
             onPressed: app.loading ? null : () => app.refresh(),
           ),
           IconButton(
-            tooltip: 'Manage accounts',
+            tooltip: l10n.manageAccounts,
             icon: const Icon(Icons.settings),
             onPressed: () => _openAccountSettings(context, app),
           ),
@@ -64,7 +66,7 @@ class _HomePageState extends State<HomePage> {
       body: _buildBody(context, app),
       floatingActionButton: FloatingActionButton.extended(
         icon: const Icon(Icons.edit),
-        label: const Text('New post'),
+        label: Text(l10n.newPost),
         onPressed: () => Navigator.of(context).push(
           MaterialPageRoute(builder: (_) => const PostEditorPage()),
         ),
@@ -73,6 +75,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildBody(BuildContext context, AppState app) {
+    final l10n = AppLocalizations.of(context)!;
     if (app.error != null && app.posts.isEmpty) {
       return Center(
         child: Column(
@@ -91,7 +94,7 @@ class _HomePageState extends State<HomePage> {
             const SizedBox(height: 12),
             FilledButton(
               onPressed: () => app.refresh(),
-              child: const Text('Retry'),
+              child: Text(l10n.retry),
             ),
           ],
         ),
@@ -110,10 +113,10 @@ class _HomePageState extends State<HomePage> {
             Icon(Icons.article_outlined,
                 size: 56, color: Theme.of(context).disabledColor),
             const SizedBox(height: 8),
-            Text('No posts yet',
+            Text(l10n.noPostsYet,
                 style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 4),
-            const Text('Create your first post with the button below.'),
+            Text(l10n.createFirstPost),
           ],
         ),
       );
@@ -133,6 +136,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _openAccountSettings(BuildContext context, AppState app) async {
+    final l10n = AppLocalizations.of(context)!;
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -140,10 +144,10 @@ class _HomePageState extends State<HomePage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Padding(
-              padding: EdgeInsets.all(16),
-              child: Text('Accounts & settings',
-                  style: TextStyle(fontWeight: FontWeight.bold)),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(l10n.accountsSettings,
+                  style: const TextStyle(fontWeight: FontWeight.bold)),
             ),
             ...app.accounts.map((account) => ListTile(
                   leading: CircleAvatar(
@@ -153,8 +157,8 @@ class _HomePageState extends State<HomePage> {
                   ),
                   title: Text(account.name),
                   subtitle: Text(
-                    '${account.username} • ${account.protocol.label}'
-                    '${account.protocol == BlogProtocol.xmlrpc ? ' (${account.flavor.label})' : ''}',
+                    '${account.username} • ${protocolLabel(l10n, account.protocol)}'
+                    '${account.protocol == BlogProtocol.xmlrpc ? ' (${flavorLabel(l10n, account.flavor)})' : ''}',
                   ),
                   trailing: account.id == app.currentAccount?.id
                       ? const Icon(Icons.check_circle)
@@ -167,7 +171,7 @@ class _HomePageState extends State<HomePage> {
             const Divider(),
             ListTile(
               leading: const Icon(Icons.add),
-              title: const Text('Add blog account'),
+              title: Text(l10n.addBlogAccount),
               onTap: () {
                 Navigator.of(context).pop();
                 Navigator.of(context).push(
@@ -178,8 +182,8 @@ class _HomePageState extends State<HomePage> {
             ),
             ListTile(
               leading: const Icon(Icons.delete_outline),
-              title: Text(
-                  'Remove "${app.currentAccount?.name ?? ''}"'),
+              title: Text(l10n
+                  .removeAccount(app.currentAccount?.name ?? '')),
               onTap: () {
                 final id = app.currentAccount?.id;
                 Navigator.of(context).pop();
@@ -201,6 +205,7 @@ class _BlogSwitcher extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final account = app.currentAccount!;
+    final l10n = AppLocalizations.of(context)!;
     return InkWell(
       borderRadius: BorderRadius.circular(8),
       onTap: () {
@@ -228,7 +233,7 @@ class _BlogSwitcher extends StatelessWidget {
                     )),
                 ListTile(
                   leading: const Icon(Icons.add),
-                  title: const Text('Add another blog'),
+                  title: Text(l10n.addAnotherBlog),
                   onTap: () {
                     Navigator.of(context).pop();
                     Navigator.of(context).push(MaterialPageRoute(
@@ -258,7 +263,7 @@ class _BlogSwitcher extends StatelessWidget {
                       ?.copyWith(fontWeight: FontWeight.w600),
                 ),
                 Text(
-                  account.protocol.label,
+                  protocolLabel(l10n, account.protocol),
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],
@@ -279,6 +284,7 @@ class _PostTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final dateFmt = DateFormat.yMMMd().add_jm();
     final categoryNames =
         post.categories.map(app.categoryName).take(3).join(', ');
@@ -290,7 +296,7 @@ class _PostTile extends StatelessWidget {
         children: [
           Expanded(
             child: Text(
-              post.title.isEmpty ? '(untitled)' : post.title,
+              post.title.isEmpty ? l10n.untitled : post.title,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontWeight: FontWeight.w600),
@@ -316,7 +322,7 @@ class _PostTile extends StatelessWidget {
                 if (post.datePublished != null)
                   dateFmt.format(post.datePublished!.toLocal()),
                 if (categoryNames.isNotEmpty) categoryNames,
-                if (post.isPage) 'Page',
+                if (post.isPage) l10n.page,
               ].join(' • '),
               style: Theme.of(context).textTheme.bodySmall,
             ),
@@ -340,14 +346,16 @@ class _StatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (color, label) = switch (status) {
-      PostStatus.publish => (Colors.green, PostStatus.publish.label),
-      PostStatus.draft => (Colors.orange, PostStatus.draft.label),
-      PostStatus.pending => (Colors.amber, PostStatus.pending.label),
-      PostStatus.private => (Colors.purple, PostStatus.private.label),
-      PostStatus.scheduled => (Colors.blue, PostStatus.scheduled.label),
-      PostStatus.trash => (Colors.grey, PostStatus.trash.label),
+    final l10n = AppLocalizations.of(context)!;
+    final color = switch (status) {
+      PostStatus.publish => Colors.green,
+      PostStatus.draft => Colors.orange,
+      PostStatus.pending => Colors.amber,
+      PostStatus.private => Colors.purple,
+      PostStatus.scheduled => Colors.blue,
+      PostStatus.trash => Colors.grey,
     };
+    final label = statusLabel(l10n, status);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(

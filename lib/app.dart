@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
+import 'l10n/app_localizations.dart';
 import 'views/home_page.dart';
 
 /// Material app shell with an adaptive light/dark theme.
@@ -19,7 +21,15 @@ class AppShell extends StatelessWidget {
 
     return MaterialApp(
       title: 'Open Live Writer',
+      onGenerateTitle: (context) => AppLocalizations.of(context)!.appTitle,
       debugShowCheckedModeBanner: false,
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: AppLocalizations.supportedLocales,
       theme: ThemeData(
         colorScheme: scheme,
         useMaterial3: true,

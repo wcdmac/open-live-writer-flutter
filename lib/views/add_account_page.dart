@@ -1,10 +1,34 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../l10n/app_localizations.dart';
 import '../models/blog.dart';
 import '../services/blog_service.dart';
 import '../services/rsd_detector.dart';
 import '../state/app_state.dart';
+
+/// Localized display label for a [BlogProtocol].
+String protocolLabel(AppLocalizations l10n, BlogProtocol protocol) =>
+    switch (protocol) {
+      BlogProtocol.xmlrpc => l10n.protocolXmlrpc,
+      BlogProtocol.rest => l10n.protocolRest,
+    };
+
+/// Localized display label for an [XmlRpcFlavor].
+String flavorLabel(AppLocalizations l10n, XmlRpcFlavor flavor) =>
+    switch (flavor) {
+      XmlRpcFlavor.wordpress => l10n.flavorWordpress,
+      XmlRpcFlavor.metaweblog => l10n.flavorMetaweblog,
+      XmlRpcFlavor.movabletype => l10n.flavorMovabletype,
+      XmlRpcFlavor.blogger => l10n.flavorBlogger,
+    };
+
+/// Localized display label for a [RestAuthMethod].
+String restAuthLabel(AppLocalizations l10n, RestAuthMethod method) =>
+    switch (method) {
+      RestAuthMethod.applicationPassword => l10n.authAppPassword,
+      RestAuthMethod.jwt => l10n.authJwt,
+    };
 
 /// Add-blog-account wizard. Port of OLW's WeblogConfiguration wizard:
 /// URL + credentials -> RSD detection -> protocol choice -> blog pick.
@@ -45,6 +69,7 @@ class _AddAccountPageState extends State<AddAccountPage> {
   }
 
   Future<void> _detect() async {
+    final l10n = AppLocalizations.of(context)!;
     if (!_formKey.currentState!.validate()) return;
     setState(() {
       _detecting = true;
@@ -69,13 +94,14 @@ class _AddAccountPageState extends State<AddAccountPage> {
         _step = 1;
       });
     } catch (e) {
-      setState(() => _error = 'Detection failed: $e');
+      setState(() => _error = l10n.detectionFailed(e));
     } finally {
       setState(() => _detecting = false);
     }
   }
 
   Future<void> _connect() async {
+    final l10n = AppLocalizations.of(context)!;
     setState(() {
       _connecting = true;
       _error = null;
@@ -106,8 +132,7 @@ class _AddAccountPageState extends State<AddAccountPage> {
 
       if (!mounted) return;
       if (blogs.isEmpty) {
-        setState(() => _error =
-            'Connected, but no blogs were returned for these credentials.');
+        setState(() => _error = l10n.connectedNoBlogs);
         return;
       }
 
@@ -117,7 +142,7 @@ class _AddAccountPageState extends State<AddAccountPage> {
         _step = 2;
       });
     } catch (e) {
-      setState(() => _error = 'Connection failed: $e');
+      setState(() => _error = l10n.connectionFailed(e));
     } finally {
       setState(() => _connecting = false);
     }
@@ -126,6 +151,7 @@ class _AddAccountPageState extends State<AddAccountPage> {
   Future<void> _finish() async {
     final picked = _pickedBlog;
     if (picked == null) return;
+    final l10n = AppLocalizations.of(context)!;
 
     setState(() => _connecting = true);
     try {
@@ -152,7 +178,7 @@ class _AddAccountPageState extends State<AddAccountPage> {
       if (!mounted) return;
       if (!widget.embedded) Navigator.of(context).pop();
     } catch (e) {
-      setState(() => _error = 'Failed to save account: $e');
+      setState(() => _error = l10n.saveAccountFailed(e));
     } finally {
       if (mounted) setState(() => _connecting = false);
     }
@@ -161,14 +187,15 @@ class _AddAccountPageState extends State<AddAccountPage> {
   @override
   Widget build(BuildContext context) {
     final isWide = MediaQuery.of(context).size.width > 640;
+    final l10n = AppLocalizations.of(context)!;
 
     return Scaffold(
       appBar: widget.embedded
           ? AppBar(
-              title: const Text('Open Live Writer'),
+              title: Text(l10n.appTitle),
               automaticallyImplyLeading: false,
             )
-          : AppBar(title: const Text('Add blog account')),
+          : AppBar(title: Text(l10n.addBlogAccount)),
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
@@ -185,13 +212,13 @@ class _AddAccountPageState extends State<AddAccountPage> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Welcome to Open Live Writer',
+                    l10n.welcome,
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.headlineSmall,
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Connect to your WordPress blog to start writing.',
+                    l10n.welcomeSubtitle,
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
@@ -207,19 +234,19 @@ class _AddAccountPageState extends State<AddAccountPage> {
                   },
                   steps: [
                     Step(
-                      title: const Text('Blog & credentials'),
+                      title: Text(l10n.blogCredentials),
                       isActive: _step >= 0,
                       state: _step > 0 ? StepState.complete : StepState.indexed,
                       content: _credentialsForm(),
                     ),
                     Step(
-                      title: const Text('Connection settings'),
+                      title: Text(l10n.connectionSettings),
                       isActive: _step >= 1,
                       state: _step > 1 ? StepState.complete : StepState.indexed,
                       content: _step == 1 ? _settingsForm() : const SizedBox(),
                     ),
                     Step(
-                      title: const Text('Choose blog'),
+                      title: Text(l10n.chooseBlog),
                       isActive: _step >= 2,
                       state: _step > 2 ? StepState.complete : StepState.indexed,
                       content: _step == 2 ? _blogPicker() : const SizedBox(),
@@ -246,45 +273,45 @@ class _AddAccountPageState extends State<AddAccountPage> {
   }
 
   Widget _credentialsForm() {
+    final l10n = AppLocalizations.of(context)!;
     return Form(
       key: _formKey,
       child: Column(
         children: [
           TextFormField(
             controller: _urlController,
-            decoration: const InputDecoration(
-              labelText: 'Blog homepage URL',
-              hintText: 'https://example.com',
-              prefixIcon: Icon(Icons.language),
+            decoration: InputDecoration(
+              labelText: l10n.blogUrl,
+              hintText: l10n.blogUrlHint,
+              prefixIcon: const Icon(Icons.language),
             ),
             keyboardType: TextInputType.url,
             autocorrect: false,
             validator: (v) =>
-                (v == null || v.trim().isEmpty) ? 'Enter your blog URL' : null,
+                (v == null || v.trim().isEmpty) ? l10n.enterBlogUrl : null,
           ),
           const SizedBox(height: 12),
           TextFormField(
             controller: _userController,
-            decoration: const InputDecoration(
-              labelText: 'Username',
-              prefixIcon: Icon(Icons.person),
+            decoration: InputDecoration(
+              labelText: l10n.username,
+              prefixIcon: const Icon(Icons.person),
             ),
             autocorrect: false,
             validator: (v) =>
-                (v == null || v.trim().isEmpty) ? 'Enter your username' : null,
+                (v == null || v.trim().isEmpty) ? l10n.enterUsername : null,
           ),
           const SizedBox(height: 12),
           TextFormField(
             controller: _passController,
-            decoration: const InputDecoration(
-              labelText: 'Password / Application Password',
-              prefixIcon: Icon(Icons.password),
-              helperText: 'For REST API use an Application Password '
-                  '(WP Admin → Users → Profile → Application Passwords).',
+            decoration: InputDecoration(
+              labelText: l10n.password,
+              prefixIcon: const Icon(Icons.password),
+              helperText: l10n.passwordHelper,
             ),
             obscureText: true,
             validator: (v) =>
-                (v == null || v.isEmpty) ? 'Enter your password' : null,
+                (v == null || v.isEmpty) ? l10n.enterPassword : null,
           ),
         ],
       ),
@@ -293,20 +320,21 @@ class _AddAccountPageState extends State<AddAccountPage> {
 
   Widget _settingsForm() {
     final d = _detection!;
+    final l10n = AppLocalizations.of(context)!;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _detectionRow('Blog engine', d.engineName ?? 'Unknown'),
-        _detectionRow('XML-RPC endpoint', d.xmlrpcUrl ?? 'Not detected'),
-        _detectionRow('REST API', d.restRoot ?? 'Not detected'),
+        _detectionRow(l10n.blogEngine, d.engineName ?? l10n.unknown),
+        _detectionRow(l10n.xmlrpcEndpoint, d.xmlrpcUrl ?? l10n.notDetected),
+        _detectionRow(l10n.restApi, d.restRoot ?? l10n.notDetected),
         const SizedBox(height: 16),
-        Text('Connection protocol',
+        Text(l10n.connectionProtocol,
             style: Theme.of(context).textTheme.titleSmall),
         RadioListTile<BlogProtocol>(
           value: BlogProtocol.xmlrpc,
           groupValue: _protocol,
-          title: const Text('XML-RPC (classic Open Live Writer)'),
-          subtitle: Text('Flavor: ${_flavor.label}'),
+          title: Text(l10n.xmlrpcClassic),
+          subtitle: Text('${l10n.flavor}: ${flavorLabel(l10n, _flavor)}'),
           onChanged: d.xmlrpcUrl == null
               ? null
               : (v) => setState(() => _protocol = v!),
@@ -314,8 +342,9 @@ class _AddAccountPageState extends State<AddAccountPage> {
         RadioListTile<BlogProtocol>(
           value: BlogProtocol.rest,
           groupValue: _protocol,
-          title: const Text('WordPress REST API v2'),
-          subtitle: Text('Endpoint: ${d.restRoot ?? 'not available'}'),
+          title: Text(l10n.restV2),
+          subtitle:
+              Text('${l10n.endpoint}: ${d.restRoot ?? l10n.notAvailable}'),
           onChanged: d.restRoot == null
               ? null
               : (v) => setState(() => _protocol = v!),
@@ -323,9 +352,10 @@ class _AddAccountPageState extends State<AddAccountPage> {
         if (_protocol == BlogProtocol.xmlrpc) ...[
           DropdownButtonFormField<XmlRpcFlavor>(
             value: _flavor,
-            decoration: const InputDecoration(labelText: 'XML-RPC API flavor'),
+            decoration: InputDecoration(labelText: l10n.xmlrpcFlavor),
             items: XmlRpcFlavor.values
-                .map((f) => DropdownMenuItem(value: f, child: Text(f.label)))
+                .map((f) => DropdownMenuItem(
+                    value: f, child: Text(flavorLabel(l10n, f))))
                 .toList(),
             onChanged: (v) => setState(() => _flavor = v!),
           ),
@@ -333,9 +363,10 @@ class _AddAccountPageState extends State<AddAccountPage> {
         if (_protocol == BlogProtocol.rest) ...[
           DropdownButtonFormField<RestAuthMethod>(
             value: _restAuth,
-            decoration: const InputDecoration(labelText: 'Authentication'),
+            decoration: InputDecoration(labelText: l10n.authentication),
             items: RestAuthMethod.values
-                .map((m) => DropdownMenuItem(value: m, child: Text(m.label)))
+                .map((m) => DropdownMenuItem(
+                    value: m, child: Text(restAuthLabel(l10n, m))))
                 .toList(),
             onChanged: (v) => setState(() => _restAuth = v!),
           ),
@@ -377,6 +408,7 @@ class _AddAccountPageState extends State<AddAccountPage> {
   }
 
   Widget _actionButtons(bool isWide) {
+    final l10n = AppLocalizations.of(context)!;
     final busy = _detecting || _connecting;
     late final Widget primary;
 
@@ -391,7 +423,7 @@ class _AddAccountPageState extends State<AddAccountPage> {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : const Icon(Icons.travel_explore),
-          label: const Text('Detect blog settings'),
+          label: Text(l10n.detectSettings),
         );
       case 1:
         primary = FilledButton.icon(
@@ -403,7 +435,7 @@ class _AddAccountPageState extends State<AddAccountPage> {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : const Icon(Icons.link),
-          label: const Text('Connect'),
+          label: Text(l10n.connect),
         );
       default:
         primary = FilledButton.icon(
@@ -415,7 +447,7 @@ class _AddAccountPageState extends State<AddAccountPage> {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : const Icon(Icons.check),
-          label: const Text('Finish'),
+          label: Text(l10n.finish),
         );
     }
 
@@ -425,7 +457,7 @@ class _AddAccountPageState extends State<AddAccountPage> {
         if (_step > 0)
           TextButton(
             onPressed: busy ? null : () => setState(() => _step--),
-            child: const Text('Back'),
+            child: Text(l10n.back),
           ),
         const SizedBox(width: 8),
         primary,

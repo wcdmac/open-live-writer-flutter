@@ -1,0 +1,171 @@
+{
+  "@@locale": "en",
+  "appTitle": "Open Live Writer",
+  "welcome": "Welcome to Open Live Writer",
+  "welcomeSubtitle": "Connect to your WordPress blog to start writing.",
+  "blogCredentials": "Blog & credentials",
+  "connectionSettings": "Connection settings",
+  "chooseBlog": "Choose blog",
+  "blogUrl": "Blog homepage URL",
+  "blogUrlHint": "https://example.com",
+  "username": "Username",
+  "password": "Password / Application Password",
+  "passwordHelper": "For REST API use an Application Password (WP Admin → Users → Profile → Application Passwords).",
+  "enterBlogUrl": "Enter your blog URL",
+  "enterUsername": "Enter your username",
+  "enterPassword": "Enter your password",
+  "detectSettings": "Detect blog settings",
+  "connect": "Connect",
+  "finish": "Finish",
+  "back": "Back",
+  "blogEngine": "Blog engine",
+  "xmlrpcEndpoint": "XML-RPC endpoint",
+  "restApi": "REST API",
+  "notDetected": "Not detected",
+  "unknown": "Unknown",
+  "connectionProtocol": "Connection protocol",
+  "xmlrpcClassic": "XML-RPC (classic Open Live Writer)",
+  "flavor": "Flavor",
+  "restV2": "WordPress REST API v2",
+  "endpoint": "Endpoint",
+  "notAvailable": "not available",
+  "xmlrpcFlavor": "XML-RPC API flavor",
+  "authentication": "Authentication",
+  "detectionFailed": "Detection failed: {error}",
+  "@detectionFailed": {
+    "placeholders": {
+      "error": {
+        "type": "Object"
+      }
+    }
+  },
+  "connectionFailed": "Connection failed: {error}",
+  "@connectionFailed": {
+    "placeholders": {
+      "error": {
+        "type": "Object"
+      }
+    }
+  },
+  "connectedNoBlogs": "Connected, but no blogs were returned for these credentials.",
+  "saveAccountFailed": "Failed to save account: {error}",
+  "@saveAccountFailed": {
+    "placeholders": {
+      "error": {
+        "type": "Object"
+      }
+    }
+  },
+  "newPost": "New post",
+  "refresh": "Refresh",
+  "manageAccounts": "Manage accounts",
+  "accountsSettings": "Accounts & settings",
+  "addBlogAccount": "Add blog account",
+  "addAnotherBlog": "Add another blog",
+  "removeAccount": "Remove \"{name}\"",
+  "@removeAccount": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "noPostsYet": "No posts yet",
+  "createFirstPost": "Create your first post with the button below.",
+  "retry": "Retry",
+  "untitled": "(untitled)",
+  "page": "Page",
+  "newPostTitle": "New post",
+  "newPageTitle": "New page",
+  "editTitle": "Edit: {title}",
+  "@editTitle": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "saveDraft": "Save draft",
+  "publish": "Publish",
+  "postSettings": "Post settings",
+  "postTitle": "Post title",
+  "writePostHint": "Write your post… (HTML)",
+  "write": "Write",
+  "preview": "Preview",
+  "previewTheme": "Preview • {name}",
+  "@previewTheme": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "startWritingHint": "Start writing to see the live preview…",
+  "statusApplied": "Status (applied on next publish)",
+  "publishDate": "Publish date",
+  "immediately": "Immediately",
+  "categories": "Categories",
+  "tagsLabel": "Tags (comma separated)",
+  "applyTags": "Apply tags",
+  "excerpt": "Excerpt",
+  "urlSlug": "URL slug",
+  "allowComments": "Allow comments",
+  "allowPingbacks": "Allow pingbacks / trackbacks",
+  "treatAsPage": "Treat as page (not post)",
+  "discardChanges": "Discard changes?",
+  "discardConfirm": "You have unsaved changes. Leave the editor anyway?",
+  "stay": "Stay",
+  "discard": "Discard",
+  "postPublished": "Post published{id}.",
+  "@postPublished": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "draftSaved": "Draft saved.",
+  "saveFailed": "Save failed.",
+  "loadingPost": "Loading post…",
+  "loadPostFailed": "Failed to load post: {error}",
+  "@loadPostFailed": {
+    "placeholders": {
+      "error": {
+        "type": "Object"
+      }
+    }
+  },
+  "bold": "Bold",
+  "italic": "Italic",
+  "underline": "Underline",
+  "strikethrough": "Strikethrough",
+  "h2": "Heading 2",
+  "h3": "Heading 3",
+  "blockquote": "Blockquote",
+  "bulletList": "Bullet list",
+  "numberedList": "Numbered list",
+  "insertLink": "Insert link",
+  "insertImage": "Insert image",
+  "codeBlock": "Code block",
+  "moreTag": "More tag (excerpt break)",
+  "copyHtml": "Copy HTML",
+  "linkUrl": "Link URL",
+  "imageUrl": "Image URL",
+  "altText": "Alt text (optional)",
+  "cancel": "Cancel",
+  "ok": "OK",
+  "postStatusDraft": "Draft",
+  "postStatusPending": "Pending review",
+  "postStatusPrivate": "Private",
+  "postStatusPublish": "Published",
+  "postStatusScheduled": "Scheduled",
+  "postStatusTrash": "Trash",
+  "protocolXmlrpc": "XML-RPC",
+  "protocolRest": "REST API v2",
+  "flavorWordpress": "WordPress",
+  "flavorMetaweblog": "MetaWeblog",
+  "flavorMovabletype": "MovableType",
+  "flavorBlogger": "Blogger",
+  "authAppPassword": "Application Password",
+  "authJwt": "JWT Bearer"
+}

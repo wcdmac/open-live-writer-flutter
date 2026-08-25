@@ -1,0 +1,363 @@
+// ignore: unused_import
+import 'package:intl/intl.dart' as intl;
+import 'app_localizations.dart';
+
+// ignore_for_file: type=lint
+
+/// The translations for Chinese (`zh`).
+class AppLocalizationsZh extends AppLocalizations {
+  AppLocalizationsZh([String locale = 'zh']) : super(locale);
+
+  @override
+  String get appTitle => 'Open Live Writer';
+
+  @override
+  String get welcome => '欢迎使用 Open Live Writer';
+
+  @override
+  String get welcomeSubtitle => '连接到你的 WordPress 博客开始写作。';
+
+  @override
+  String get blogCredentials => '博客与凭据';
+
+  @override
+  String get connectionSettings => '连接设置';
+
+  @override
+  String get chooseBlog => '选择博客';
+
+  @override
+  String get blogUrl => '博客首页地址';
+
+  @override
+  String get blogUrlHint => 'https://example.com';
+
+  @override
+  String get username => '用户名';
+
+  @override
+  String get password => '密码 / 应用程序密码';
+
+  @override
+  String get passwordHelper =>
+      'REST API 请使用应用程序密码（WP 后台 → 用户 → 个人资料 → 应用程序密码）。';
+
+  @override
+  String get enterBlogUrl => '请输入博客地址';
+
+  @override
+  String get enterUsername => '请输入用户名';
+
+  @override
+  String get enterPassword => '请输入密码';
+
+  @override
+  String get detectSettings => '检测博客设置';
+
+  @override
+  String get connect => '连接';
+
+  @override
+  String get finish => '完成';
+
+  @override
+  String get back => '返回';
+
+  @override
+  String get blogEngine => '博客引擎';
+
+  @override
+  String get xmlrpcEndpoint => 'XML-RPC 端点';
+
+  @override
+  String get restApi => 'REST API';
+
+  @override
+  String get notDetected => '未检测到';
+
+  @override
+  String get unknown => '未知';
+
+  @override
+  String get connectionProtocol => '连接协议';
+
+  @override
+  String get xmlrpcClassic => 'XML-RPC（经典 Open Live Writer）';
+
+  @override
+  String get flavor => '类型';
+
+  @override
+  String get restV2 => 'WordPress REST API v2';
+
+  @override
+  String get endpoint => '端点';
+
+  @override
+  String get notAvailable => '不可用';
+
+  @override
+  String get xmlrpcFlavor => 'XML-RPC API 类型';
+
+  @override
+  String get authentication => '认证方式';
+
+  @override
+  String detectionFailed(Object error) {
+    return '检测失败：$error';
+  }
+
+  @override
+  String connectionFailed(Object error) {
+    return '连接失败：$error';
+  }
+
+  @override
+  String get connectedNoBlogs => '已连接，但这些凭据没有返回任何博客。';
+
+  @override
+  String saveAccountFailed(Object error) {
+    return '保存账户失败：$error';
+  }
+
+  @override
+  String get newPost => '新建文章';
+
+  @override
+  String get refresh => '刷新';
+
+  @override
+  String get manageAccounts => '管理账户';
+
+  @override
+  String get accountsSettings => '账户与设置';
+
+  @override
+  String get addBlogAccount => '添加博客账户';
+
+  @override
+  String get addAnotherBlog => '添加其他博客';
+
+  @override
+  String removeAccount(String name) {
+    return '移除「$name」';
+  }
+
+  @override
+  String get noPostsYet => '暂无文章';
+
+  @override
+  String get createFirstPost => '使用下方按钮创建你的第一篇文章。';
+
+  @override
+  String get retry => '重试';
+
+  @override
+  String get untitled => '（无标题）';
+
+  @override
+  String get page => '页面';
+
+  @override
+  String get newPostTitle => '新建文章';
+
+  @override
+  String get newPageTitle => '新建页面';
+
+  @override
+  String editTitle(String title) {
+    return '编辑：$title';
+  }
+
+  @override
+  String get saveDraft => '存为草稿';
+
+  @override
+  String get publish => '发布';
+
+  @override
+  String get postSettings => '文章设置';
+
+  @override
+  String get postTitle => '文章标题';
+
+  @override
+  String get writePostHint => '撰写文章…（HTML）';
+
+  @override
+  String get write => '撰写';
+
+  @override
+  String get preview => '预览';
+
+  @override
+  String previewTheme(String name) {
+    return '预览 • $name';
+  }
+
+  @override
+  String get startWritingHint => '开始写作以查看实时预览…';
+
+  @override
+  String get statusApplied => '状态（下次发布时应用）';
+
+  @override
+  String get publishDate => '发布日期';
+
+  @override
+  String get immediately => '立即';
+
+  @override
+  String get categories => '分类';
+
+  @override
+  String get tagsLabel => '标签（逗号分隔）';
+
+  @override
+  String get applyTags => '应用标签';
+
+  @override
+  String get excerpt => '摘要';
+
+  @override
+  String get urlSlug => 'URL 别名';
+
+  @override
+  String get allowComments => '允许评论';
+
+  @override
+  String get allowPingbacks => '允许 Pingback / Trackback';
+
+  @override
+  String get treatAsPage => '作为页面（非文章）';
+
+  @override
+  String get discardChanges => '放弃更改？';
+
+  @override
+  String get discardConfirm => '你有未保存的更改。仍要离开编辑器？';
+
+  @override
+  String get stay => '留下';
+
+  @override
+  String get discard => '放弃';
+
+  @override
+  String postPublished(String id) {
+    return '文章已发布$id。';
+  }
+
+  @override
+  String get draftSaved => '草稿已保存。';
+
+  @override
+  String get saveFailed => '保存失败。';
+
+  @override
+  String get loadingPost => '加载文章中…';
+
+  @override
+  String loadPostFailed(Object error) {
+    return '加载文章失败：$error';
+  }
+
+  @override
+  String get bold => '加粗';
+
+  @override
+  String get italic => '斜体';
+
+  @override
+  String get underline => '下划线';
+
+  @override
+  String get strikethrough => '删除线';
+
+  @override
+  String get h2 => '二级标题';
+
+  @override
+  String get h3 => '三级标题';
+
+  @override
+  String get blockquote => '引用';
+
+  @override
+  String get bulletList => '无序列表';
+
+  @override
+  String get numberedList => '有序列表';
+
+  @override
+  String get insertLink => '插入链接';
+
+  @override
+  String get insertImage => '插入图片';
+
+  @override
+  String get codeBlock => '代码块';
+
+  @override
+  String get moreTag => '更多标签（摘要分隔）';
+
+  @override
+  String get copyHtml => '复制 HTML';
+
+  @override
+  String get linkUrl => '链接地址';
+
+  @override
+  String get imageUrl => '图片地址';
+
+  @override
+  String get altText => '替代文本（可选）';
+
+  @override
+  String get cancel => '取消';
+
+  @override
+  String get ok => '确定';
+
+  @override
+  String get postStatusDraft => '草稿';
+
+  @override
+  String get postStatusPending => '待审';
+
+  @override
+  String get postStatusPrivate => '私有';
+
+  @override
+  String get postStatusPublish => '已发布';
+
+  @override
+  String get postStatusScheduled => '已排期';
+
+  @override
+  String get postStatusTrash => '回收站';
+
+  @override
+  String get protocolXmlrpc => 'XML-RPC';
+
+  @override
+  String get protocolRest => 'REST API v2';
+
+  @override
+  String get flavorWordpress => 'WordPress';
+
+  @override
+  String get flavorMetaweblog => 'MetaWeblog';
+
+  @override
+  String get flavorMovabletype => 'MovableType';
+
+  @override
+  String get flavorBlogger => 'Blogger';
+
+  @override
+  String get authAppPassword => '应用程序密码';
+
+  @override
+  String get authJwt => 'JWT Bearer';
+}

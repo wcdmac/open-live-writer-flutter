@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 
+import '../../l10n/app_localizations.dart';
 import '../../services/theme_detector.dart';
 
 /// Real-time preview: renders the post with Flutter's own engine
@@ -63,6 +64,7 @@ class _LivePreviewState extends State<LivePreview> {
   Widget build(BuildContext context) {
     final theme = widget.theme;
     final scheme = Theme.of(context).colorScheme;
+    final l10n = AppLocalizations.of(context)!;
 
     // Build inline CSS-ish styling for the rendered HTML widget.
     final fontFamily = theme?.fontFamily;
@@ -108,7 +110,7 @@ class _LivePreviewState extends State<LivePreview> {
                       Padding(
                         padding: const EdgeInsets.only(bottom: 16),
                         child: Text(
-                          'Preview • ${widget.theme!.name}',
+                          l10n.previewTheme(widget.theme!.name!),
                           style: Theme.of(context).textTheme.labelSmall?.copyWith(
                                 color: scheme.outline,
                               ),
@@ -116,7 +118,7 @@ class _LivePreviewState extends State<LivePreview> {
                       ),
                     HtmlWidget(
                       _content.isEmpty
-                          ? '<p style="opacity:0.5">Start writing to see the live preview…</p>'
+                          ? '<p style="opacity:0.5">${l10n.startWritingHint}</p>'
                           : _content,
                       textStyle: bodyStyle,
                       customStylesBuilder: (element) {

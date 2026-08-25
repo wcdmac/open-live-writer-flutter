@@ -352,6 +352,19 @@ class WordPressRestClient {
     };
   }
 
+  /// Picks editable content: prefer `raw` (edit context), fall back to
+  /// `rendered` when raw is missing or empty (common on list endpoints).
+  static String _pickContent(dynamic c) {
+    if (c is Map) {
+      final raw = c['raw'];
+      if (raw is String && raw.trim().isNotEmpty) return raw;
+      final rendered = c['rendered'];
+      if (rendered is String && rendered.isNotEmpty) return rendered;
+      return '';
+    }
+    return c == null ? '' : '$c';
+  }
+
   BlogPost _postFromJson(Map raw, {bool isPage = false}) {
     DateTime? parseDate(dynamic raw) {
       if (raw is! String || raw.isEmpty) return null;
@@ -361,11 +374,11 @@ class WordPressRestClient {
     final status = PostStatus.fromWp('${raw['status'] ?? 'draft'}');
     return BlogPost(
       id: '${raw['id'] ?? ''}',
-      title: (raw['title'] is Map ? '${raw['title']['raw'] ?? raw['title']['rendered']}' : '${raw['title'] ?? ''}')
+      title: (raw['title'] is Map
+              ? '${raw['title']['raw'] ?? raw['title']['rendered']}'
+              : '${raw['title'] ?? ''}')
           .trim(),
-      content: raw['content'] is Map
-          ? '${raw['content']['raw'] ?? raw['content']['rendered'] ?? ''}'
-          : '${raw['content'] ?? ''}',
+      content: _pickContent(raw['content']),
       excerpt: raw['excerpt'] is Map
           ? '${raw['excerpt']['raw'] ?? raw['excerpt']['rendered'] ?? ''}'
           : '${raw['excerpt'] ?? ''}',

@@ -1,11 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../l10n/app_localizations.dart';
 import '../models/blog_post.dart';
 import '../state/app_state.dart';
 import '../state/editor_state.dart';
 import 'editor/editor_toolbar.dart';
 import 'editor/live_preview.dart';
+
+/// Localized display label for a [PostStatus] (dashboard chips + editor).
+String statusLabel(AppLocalizations l10n, PostStatus status) =>
+    switch (status) {
+      PostStatus.draft => l10n.postStatusDraft,
+      PostStatus.pending => l10n.postStatusPending,
+      PostStatus.private => l10n.postStatusPrivate,
+      PostStatus.publish => l10n.postStatusPublish,
+      PostStatus.scheduled => l10n.postStatusScheduled,
+      PostStatus.trash => l10n.postStatusTrash,
+    };
 
 /// Post editor with real-time preview. Layout adapts to screen width:
 /// split view (editor + preview) on desktop, tabs on phones.
@@ -25,6 +37,10 @@ class _PostEditorPageState extends State<PostEditorPage> {
   late final TextEditingController _tagController;
   int _tabIndex = 0; // 0: write, 1: preview (narrow screens)
 
+  /// Full-content fetch state when opening an existing post.
+  bool _loadingFull = false;
+  String? _loadError;
+
   @override
   void initState() {
     super.initState();
@@ -39,6 +55,46 @@ class _PostEditorPageState extends State<PostEditorPage> {
         TextEditingController(text: widget.existingPost?.content ?? '');
     _tagController =
         TextEditingController(text: widget.existingPost?.tags.join(', ') ?? '');
+
+    // Post lists often ship without full content — fetch the complete
+    // post from the service (this mirrors OLW opening a post).
+    final existing = widget.existingPost;
+    if (existing != null && !existing.isNew && app.service != null) {
+      _loadingFull = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _loadFullPost());
+    }
+  }
+
+  Future<void> _loadFullPost() async {
+    final app = context.read<AppState>();
+    final svc = app.service;
+    final existing = widget.existingPost;
+    if (svc == null || existing == null) return;
+    try {
+      final fresh = await svc.getPost(existing.id!, isPage: existing.isPage);
+      if (!mounted) return;
+      setState(() {
+        _loadingFull = false;
+        _loadError = null;
+        _editor.applyPost(fresh);
+        if (fresh.title.trim().isNotEmpty) {
+          _titleController.text = fresh.title;
+        }
+        if (fresh.content.trim().isNotEmpty) {
+          _contentController.text = fresh.content;
+        }
+        if (fresh.tags.isNotEmpty) {
+          _tagController.text = fresh.tags.join(', ');
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+      // Degrade gracefully: keep whatever the post list gave us.
+      setState(() {
+        _loadingFull = false;
+        _loadError = '$e';
+      });
+    }
   }
 
   @override
@@ -51,34 +107,37 @@ class _PostEditorPageState extends State<PostEditorPage> {
   }
 
   Future<void> _save({required bool publish}) async {
+    final l10n = AppLocalizations.of(context)!;
     final ok = await _editor.save(publish: publish);
     if (!mounted) return;
     showEditorSnack(
       context,
       ok
           ? (publish
-              ? 'Post published${_editor.lastSavedId != null ? ' (id ${_editor.lastSavedId})' : ''}.'
-              : 'Draft saved.')
-          : (_editor.saveError ?? 'Save failed.'),
+              ? l10n.postPublished(_editor.lastSavedId != null
+                  ? ' (id ${_editor.lastSavedId})'
+                  : '')
+              : l10n.draftSaved)
+          : (_editor.saveError ?? l10n.saveFailed),
     );
   }
 
   Future<bool> _confirmDiscard() async {
     if (!_editor.isDirty) return true;
+    final l10n = AppLocalizations.of(context)!;
     final result = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Discard changes?'),
-        content: const Text(
-            'You have unsaved changes. Leave the editor anyway?'),
+        title: Text(l10n.discardChanges),
+        content: Text(l10n.discardConfirm),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Stay'),
+            child: Text(l10n.stay),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Discard'),
+            child: Text(l10n.discard),
           ),
         ],
       ),
@@ -89,6 +148,7 @@ class _PostEditorPageState extends State<PostEditorPage> {
   @override
   Widget build(BuildContext context) {
     final app = context.watch<AppState>();
+    final l10n = AppLocalizations.of(context)!;
     final isWide = MediaQuery.of(context).size.width >= 1000;
 
     return PopScope(
@@ -103,8 +163,10 @@ class _PostEditorPageState extends State<PostEditorPage> {
         appBar: AppBar(
           title: Text(
             _editor.post.isNew
-                ? (_editor.post.isPage ? 'New page' : 'New post')
-                : 'Edit: ${_editor.post.title.isEmpty ? "(untitled)" : _editor.post.title}',
+                ? (_editor.post.isPage ? l10n.newPageTitle : l10n.newPostTitle)
+                : l10n.editTitle(_editor.post.title.isEmpty
+                    ? l10n.untitled
+                    : _editor.post.title),
             overflow: TextOverflow.ellipsis,
           ),
           actions: [
@@ -120,23 +182,57 @@ class _PostEditorPageState extends State<PostEditorPage> {
             else ...[
               TextButton(
                 onPressed: () => _save(publish: false),
-                child: const Text('Save draft'),
+                child: Text(l10n.saveDraft),
               ),
               FilledButton(
                 onPressed: () => _save(publish: true),
-                child: const Text('Publish'),
+                child: Text(l10n.publish),
               ),
             ],
             IconButton(
-              tooltip: 'Post settings',
+              tooltip: l10n.postSettings,
               icon: const Icon(Icons.tune),
               onPressed: () => _openSettingsSheet(context, app),
             ),
           ],
         ),
-        body: isWide
-            ? _buildSplitView(app)
-            : _buildTabbedView(app),
+        body: _loadingFull
+            ? const Center(child: CircularProgressIndicator())
+            : Column(
+                children: [
+                  if (_loadError != null)
+                    MaterialBanner(
+                      backgroundColor:
+                          Theme.of(context).colorScheme.errorContainer,
+                      content: Text(
+                        AppLocalizations.of(context)!
+                            .loadPostFailed(_loadError!),
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onErrorContainer,
+                        ),
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () {
+                            setState(() => _loadError = null);
+                            _loadFullPost();
+                          },
+                          child: Text(AppLocalizations.of(context)!.retry),
+                        ),
+                        TextButton(
+                          onPressed: () =>
+                              setState(() => _loadError = null),
+                          child: Text(AppLocalizations.of(context)!.cancel),
+                        ),
+                      ],
+                    ),
+                  Expanded(
+                    child: isWide
+                        ? _buildSplitView(app)
+                        : _buildTabbedView(app),
+                  ),
+                ],
+              ),
       ),
     );
   }
@@ -159,13 +255,14 @@ class _PostEditorPageState extends State<PostEditorPage> {
   }
 
   Widget _buildTabbedView(AppState app) {
+    final l10n = AppLocalizations.of(context)!;
     return Column(
       children: [
         TabBar(
           onTap: (i) => setState(() => _tabIndex = i),
-          tabs: const [
-            Tab(icon: Icon(Icons.edit), text: 'Write'),
-            Tab(icon: Icon(Icons.visibility), text: 'Preview'),
+          tabs: [
+            Tab(icon: const Icon(Icons.edit), text: l10n.write),
+            Tab(icon: const Icon(Icons.visibility), text: l10n.preview),
           ],
         ),
         Expanded(
@@ -187,6 +284,7 @@ class _PostEditorPageState extends State<PostEditorPage> {
   }
 
   Widget _buildEditorPane(AppState app) {
+    final l10n = AppLocalizations.of(context)!;
     return Column(
       children: [
         Padding(
@@ -197,9 +295,9 @@ class _PostEditorPageState extends State<PostEditorPage> {
                 .textTheme
                 .headlineSmall
                 ?.copyWith(fontWeight: FontWeight.w700),
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               border: InputBorder.none,
-              hintText: 'Post title',
+              hintText: l10n.postTitle,
             ),
             onChanged: _editor.updateTitle,
           ),
@@ -228,9 +326,9 @@ class _PostEditorPageState extends State<PostEditorPage> {
                 fontSize: 14,
                 height: 1.6,
               ),
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 border: InputBorder.none,
-                hintText: 'Write your post… (HTML)',
+                hintText: l10n.writePostHint,
               ),
               onChanged: _editor.updateContent,
             ),
@@ -276,23 +374,25 @@ class _PostSettingsSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return ListenableBuilder(
       listenable: editor,
       builder: (context, _) => ListView(
         controller: scrollController,
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
         children: [
-          Text('Post settings',
+          Text(l10n.postSettings,
               style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 16),
 
           // --- Status ------------------------------------------------------
           DropdownButtonFormField<PostStatus>(
             value: editor.post.status,
-            decoration: const InputDecoration(
-                labelText: 'Status (applied on next publish)'),
+            decoration: InputDecoration(
+                labelText: l10n.statusApplied),
             items: PostStatus.values
-                .map((s) => DropdownMenuItem(value: s, child: Text(s.label)))
+                .map((s) =>
+                    DropdownMenuItem(value: s, child: Text(statusLabel(l10n, s))))
                 .toList(),
             onChanged: (v) => editor.updateStatus(v!),
           ),
@@ -301,9 +401,9 @@ class _PostSettingsSheet extends StatelessWidget {
           // --- Schedule ----------------------------------------------------
           ListTile(
             contentPadding: EdgeInsets.zero,
-            title: const Text('Publish date'),
+            title: Text(l10n.publishDate),
             subtitle: Text(editor.post.datePublished == null
-                ? 'Immediately'
+                ? l10n.immediately
                 : '${editor.post.datePublished!.toLocal()}'),
             trailing: const Icon(Icons.calendar_month),
             onTap: () async {
@@ -332,7 +432,7 @@ class _PostSettingsSheet extends StatelessWidget {
 
           // --- Categories --------------------------------------------------
           if (app.categories.isNotEmpty) ...[
-            Text('Categories',
+            Text(l10n.categories,
                 style: Theme.of(context).textTheme.titleSmall),
             ...app.categories.map(
               (cat) => CheckboxListTile(
@@ -346,7 +446,7 @@ class _PostSettingsSheet extends StatelessWidget {
             ),
             const SizedBox(height: 8),
           ] else if (editor.post.categories.isNotEmpty) ...[
-            Text('Categories', style: Theme.of(context).textTheme.titleSmall),
+            Text(l10n.categories, style: Theme.of(context).textTheme.titleSmall),
             Wrap(
               spacing: 6,
               runSpacing: 6,
@@ -361,10 +461,10 @@ class _PostSettingsSheet extends StatelessWidget {
           TextField(
             controller: tagController,
             decoration: InputDecoration(
-              labelText: 'Tags (comma separated)',
+              labelText: l10n.tagsLabel,
               suffixIcon: IconButton(
                 icon: const Icon(Icons.check),
-                tooltip: 'Apply tags',
+                tooltip: l10n.applyTags,
                 onPressed: () => editor.setTags(
                   tagController.text
                       .split(',')
@@ -406,8 +506,8 @@ class _PostSettingsSheet extends StatelessWidget {
               ..selection = TextSelection.fromPosition(
                   TextPosition(offset: editor.post.excerpt.length)),
             maxLines: 3,
-            decoration: const InputDecoration(
-              labelText: 'Excerpt',
+            decoration: InputDecoration(
+              labelText: l10n.excerpt,
               alignLabelWithHint: true,
             ),
             onChanged: editor.updateExcerpt,
@@ -417,8 +517,8 @@ class _PostSettingsSheet extends StatelessWidget {
             controller: TextEditingController(text: editor.post.slug ?? '')
               ..selection = TextSelection.fromPosition(
                   TextPosition(offset: (editor.post.slug ?? '').length)),
-            decoration: const InputDecoration(
-              labelText: 'URL slug',
+            decoration: InputDecoration(
+              labelText: l10n.urlSlug,
               prefixText: '/?',
             ),
             onChanged: editor.updateSlug,
@@ -428,19 +528,19 @@ class _PostSettingsSheet extends StatelessWidget {
           // --- Discussion --------------------------------------------------
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
-            title: const Text('Allow comments'),
+            title: Text(l10n.allowComments),
             value: editor.post.commentsEnabled,
             onChanged: editor.setCommentsEnabled,
           ),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
-            title: const Text('Allow pingbacks / trackbacks'),
+            title: Text(l10n.allowPingbacks),
             value: editor.post.pingsEnabled,
             onChanged: editor.setPingsEnabled,
           ),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
-            title: const Text('Treat as page (not post)'),
+            title: Text(l10n.treatAsPage),
             value: editor.post.isPage,
             onChanged: editor.setIsPage,
           ),
