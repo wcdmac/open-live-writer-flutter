@@ -1,7 +1,7 @@
-﻿{
+{
   "@@locale": "zh",
-  "appTitle": "Open Live Writer",
-  "welcome": "欢迎使用 Open Live Writer",
+  "appTitle": "Starmaster Writer",
+  "welcome": "欢迎使用 Starmaster Writer",
   "welcomeSubtitle": "连接到你的 WordPress 博客开始写作。",
   "blogCredentials": "博客与凭据",
   "connectionSettings": "连接设置",
@@ -24,7 +24,7 @@
   "notDetected": "未检测到",
   "unknown": "未知",
   "connectionProtocol": "连接协议",
-  "xmlrpcClassic": "XML-RPC（经典 Open Live Writer）",
+  "xmlrpcClassic": "XML-RPC（经典协议）",
   "flavor": "类型",
   "restV2": "WordPress REST API v2",
   "endpoint": "端点",
@@ -145,6 +145,26 @@
   "flavorMovabletype": "MovableType",
   "flavorBlogger": "Blogger",
   "authAppPassword": "应用程序密码",
-  "authJwt": "JWT Bearer"
+  "authJwt": "JWT Bearer",
+  "visualMode": "可视化",
+  "sourceMode": "源代码",
+  "addBlock": "插入块",
+  "paragraphBlock": "段落",
+  "headingBlock": "标题",
+  "imageBlock": "图片",
+  "tableBlock": "表格",
+  "videoBlock": "视频",
+  "videoUrl": "视频地址",
+  "videoUrlHint": "YouTube 链接、MP4 直链或可嵌入页面",
+  "tableHeaderRow": "首行为表头",
+  "addRow": "加一行",
+  "addColumn": "加一列",
+  "removeRow": "删一行",
+  "removeColumn": "删一列",
+  "deleteBlock": "删除此块",
+  "moveUp": "上移",
+  "moveDown": "下移",
+  "captionLabel": "图片说明（可选）",
+  "emptyBlockHint": "在此输入…"
 }
 

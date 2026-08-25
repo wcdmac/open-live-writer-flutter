@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../editor/block_editor.dart';
 import '../l10n/app_localizations.dart';
 import '../models/blog.dart';
 import '../models/blog_post.dart';
@@ -12,7 +13,7 @@ import 'editor/live_preview.dart';
 
 /// App version stamped into the copy-diagnostics report so user-submitted
 /// diagnostics always identify which build they came from.
-const String kAppVersion = 'v1.4.6';
+const String kAppVersion = 'v1.5.0';
 
 /// Localized display label for a [PostStatus] (dashboard chips + editor).
 String statusLabel(AppLocalizations l10n, PostStatus status) =>
@@ -46,8 +47,11 @@ class _PostEditorPageState extends State<PostEditorPage>
   // TabBar build fails (assertion in debug, null-controller crash subtree in
   // release) and the whole editor pane goes blank on phones.
   late final TabController _tabController =
-      TabController(length: 2, vsync: this);
-  int _tabIndex = 0; // 0: write, 1: preview (narrow screens)
+      TabController(length: 3, vsync: this);
+  int _tabIndex = 0; // 0: visual, 1: source, 2: preview (narrow screens)
+
+  /// Wide layout: which editor mode the left pane shows (visual / source).
+  int _wideEditorMode = 0;
 
   /// Full-content fetch state when opening an existing post.
   /// Non-blocking: the editor renders immediately with whatever the post
@@ -155,7 +159,7 @@ class _PostEditorPageState extends State<PostEditorPage>
     final account = app.currentAccount;
     final svc = app.service;
     final buf = StringBuffer()
-      ..writeln('== Open Live Writer 诊断 ==')
+      ..writeln('== Starmaster Writer 诊断 ==')
       ..writeln('版本: $kAppVersion')
       ..writeln('当前页面: ${widget.existingPost == null ? "新建文章" : "文章 id=${widget.existingPost!.id}"}')
       ..writeln('协议: ${account?.protocol.name ?? "?"}'
@@ -394,9 +398,39 @@ class _PostEditorPageState extends State<PostEditorPage>
   }
 
   Widget _buildSplitView(AppState app) {
+    final l10n = AppLocalizations.of(context)!;
     return Row(
       children: [
-        Expanded(child: _buildEditorPane(app)),
+        Expanded(
+          child: Column(
+            children: [
+              // Visual / source mode switch for the desktop split layout.
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                child: SegmentedButton<int>(
+                  segments: [
+                    ButtonSegment(
+                        value: 0,
+                        icon: const Icon(Icons.visibility, size: 16),
+                        label: Text(l10n.visualMode)),
+                    ButtonSegment(
+                        value: 1,
+                        icon: const Icon(Icons.code, size: 16),
+                        label: Text(l10n.sourceMode)),
+                  ],
+                  selected: {_wideEditorMode},
+                  onSelectionChanged: (s) =>
+                      setState(() => _wideEditorMode = s.first),
+                ),
+              ),
+              Expanded(
+                child: _wideEditorMode == 0
+                    ? _buildVisualPane(app)
+                    : _buildEditorPane(app),
+              ),
+            ],
+          ),
+        ),
         VerticalDivider(width: 1, thickness: 1, color: Colors.grey.shade300),
         Expanded(
           child: LivePreview(
@@ -418,14 +452,16 @@ class _PostEditorPageState extends State<PostEditorPage>
           controller: _tabController,
           onTap: (i) => setState(() => _tabIndex = i),
           tabs: [
-            Tab(icon: const Icon(Icons.edit), text: l10n.write),
-            Tab(icon: const Icon(Icons.visibility), text: l10n.preview),
+            Tab(icon: const Icon(Icons.visibility), text: l10n.visualMode),
+            Tab(icon: const Icon(Icons.code), text: l10n.sourceMode),
+            Tab(icon: const Icon(Icons.preview), text: l10n.preview),
           ],
         ),
         Expanded(
           child: IndexedStack(
             index: _tabIndex,
             children: [
+              _buildVisualPane(app),
               _buildEditorPane(app),
               LivePreview(
                 content: _editor.post.content,
@@ -434,6 +470,54 @@ class _PostEditorPageState extends State<PostEditorPage>
                 onContentChanged: _editor.contentChanged,
               ),
             ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Visual (WYSIWYG) block editor pane. Edits flow back into the shared
+  /// content controller + editor state so source mode and preview stay in
+  /// sync; external content loads are picked up via BlockEditor's
+  /// didUpdateWidget.
+  Widget _buildVisualPane(AppState app) {
+    final l10n = AppLocalizations.of(context)!;
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+          child: TextField(
+            controller: _titleController,
+            style: Theme.of(context)
+                .textTheme
+                .headlineSmall
+                ?.copyWith(fontWeight: FontWeight.w700),
+            decoration: InputDecoration(
+              border: InputBorder.none,
+              hintText: l10n.postTitle,
+            ),
+            onChanged: _editor.updateTitle,
+          ),
+        ),
+        const Divider(height: 1),
+        Expanded(
+          child: BlockEditor(
+            content: _contentController.text,
+            onContentChanged: (html) {
+              // Programmatic controller update — doesn't re-trigger onChanged.
+              _contentController.value = TextEditingValue(
+                text: html,
+                selection: TextSelection.collapsed(offset: html.length),
+              );
+              _editor.updateContent(html);
+            },
+            uploadMedia: (filename, bytes, mime) {
+              final svc = app.service;
+              if (svc == null) {
+                throw StateError('No blog connection');
+              }
+              return svc.uploadMedia(filename, bytes, mime);
+            },
           ),
         ),
       ],

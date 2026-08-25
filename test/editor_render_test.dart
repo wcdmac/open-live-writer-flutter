@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 import 'package:open_live_writer/l10n/app_localizations.dart';
 import 'package:open_live_writer/models/blog_post.dart';
 import 'package:open_live_writer/state/app_state.dart';
@@ -56,25 +56,25 @@ void main() {
     final exception = tester.takeException();
     debugPrint('BUILD EXCEPTION: $exception');
 
+    // Tab 0 is the visual editor: the paragraph block must render its
+    // WYSIWYG form (an HtmlWidget card), and the title field exists.
+    expect(find.text('世界，您好！'), findsWidgets);
+    expect(find.byType(HtmlWidget), findsOneWidget);
+
+    // Switch to the source tab: the raw content TextField must render with
+    // real size inside the viewport.
+    // Regression: the TabBar used to build without a TabController, which
+    // killed the whole editor pane on phone widths (blank content).
+    await tester.tap(find.text('Source'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+
     final editables =
         tester.widgetList<EditableText>(find.byType(EditableText)).toList();
     debugPrint('editable count: ${editables.length}');
-    for (final e in editables) {
-      debugPrint(
-          'editable: textLen=${e.controller.text.length} expands=${e.expands} maxLines=${e.maxLines}');
-    }
 
     final boxes = tester.renderObjectList<RenderBox>(
         find.byType(EditableText)).toList();
-    for (final b in boxes) {
-      final pos = b.localToGlobal(Offset.zero);
-      debugPrint(
-          'EditableText box: size=${b.size} pos=$pos paintBounds=${b.paintBounds}');
-    }
-
-    // The content field must render with real size inside the viewport.
-    // Regression: the TabBar used to build without a TabController, which
-    // killed the whole editor pane on phone widths (blank content).
     expect(boxes.length, 2, reason: 'title + content fields');
     final contentBox = boxes.last; // expands:true content field
     expect(contentBox.size.width, greaterThan(300));

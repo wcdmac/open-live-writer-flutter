@@ -11,7 +11,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // First-time users land on the add-account wizard.
-    expect(find.text('Open Live Writer'), findsOneWidget);
+    expect(find.text('Starmaster Writer'), findsOneWidget);
     expect(find.text('Blog homepage URL'), findsOneWidget);
     expect(find.text('Username'), findsOneWidget);
     expect(find.text('Detect blog settings'), findsOneWidget);
