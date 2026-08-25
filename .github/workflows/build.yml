@@ -90,16 +90,13 @@ jobs:
           cache: true
 
       - name: Build iOS (no codesign)
-        run: flutter build ipa --release --no-codesign
+        run: flutter build ios --release --no-codesign
 
       - name: Package unsigned IPA
         run: |
-          cd build/ios/ipa
-          # --no-codesign produces a .xcarchive; wrap Payload into an IPA.
+          # flutter build ios --no-codesign outputs build/ios/iphoneos/Runner.app
           mkdir -p Payload
-          if [ -d *.xcarchive/Products/Applications/*.app ]; then
-            cp -R *.xcarchive/Products/Applications/*.app Payload/
-          fi
+          cp -R build/ios/iphoneos/Runner.app Payload/
           zip -qry open-live-writer-ios-unsigned.ipa Payload
           mkdir -p "${GITHUB_WORKSPACE}/dist"
           cp open-live-writer-ios-unsigned.ipa "${GITHUB_WORKSPACE}/dist/"
@@ -154,7 +151,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y clang cmake ninja-build pkg-config \
-            libgtk-3-dev liblzma-dev libstdc++-12-dev
+            libgtk-3-dev liblzma-dev libstdc++-12-dev libsecret-1-dev
 
       - uses: subosito/flutter-action@v2
         with:
