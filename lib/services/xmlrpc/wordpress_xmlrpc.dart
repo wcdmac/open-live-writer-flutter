@@ -117,14 +117,14 @@ class WordPressXmlRpcClient {
         }
 
         if (status != null) {
-          return wpGetPosts(status.wpValue);
+          return await wpGetPosts(status.wpValue);
         }
         try {
           return await wpGetPosts(
               ['publish', 'draft', 'future', 'pending', 'private']);
         } on XmlRpcFault {
           // Degrade: some servers / roles reject the status array.
-          return wpGetPosts('publish,draft,future,pending,private');
+          return await wpGetPosts('publish,draft,future,pending,private');
         }
       } on XmlRpcFault catch (e) {
         if (!_isMethodMissing(e)) rethrow;
