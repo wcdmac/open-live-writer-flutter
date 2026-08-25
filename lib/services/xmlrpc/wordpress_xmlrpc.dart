@@ -487,14 +487,29 @@ class WordPressXmlRpcClient {
   /// Parses a wp.getPosts struct.
   BlogPost _postFromWpStruct(Map m, {bool isPage = false}) {
     List<String> extractTerms(dynamic terms, String taxonomy) {
-      if (terms is! Map) return const [];
-      final list = terms[taxonomy];
-      if (list is! List) return const [];
-      return list
-          .whereType<Map>()
-          .map((t) => '${t['term_id'] ?? t['name'] ?? ''}')
-          .where((s) => s.isNotEmpty)
-          .toList();
+      // wp.getPost / wp.getPosts return a FLAT array of term structs,
+      // each carrying its own `taxonomy` field (confirmed against live
+      // WordPress responses) — not a {taxonomy: [...]} map.
+      if (terms is List) {
+        return terms
+            .whereType<Map>()
+            .where((t) => '${t['taxonomy'] ?? ''}' == taxonomy)
+            .map((t) => '${t['term_id'] ?? t['name'] ?? ''}')
+            .where((s) => s.isNotEmpty)
+            .toList();
+      }
+      // Some servers wrap terms as {taxonomy: [structs]} — keep support.
+      if (terms is Map) {
+        final list = terms[taxonomy];
+        if (list is List) {
+          return list
+              .whereType<Map>()
+              .map((t) => '${t['term_id'] ?? t['name'] ?? ''}')
+              .where((s) => s.isNotEmpty)
+              .toList();
+        }
+      }
+      return const [];
     }
 
     DateTime? parseDate(dynamic raw) {

@@ -71,10 +71,30 @@ class BlogService {
           ? rest.getPosts(perPage: count, pages: pages, status: status)
           : xmlrpc.getPosts(count: count, pages: pages, status: status);
 
-  Future<BlogPost> getPost(String id, {bool isPage = false}) =>
-      account.protocol == BlogProtocol.rest
-          ? rest.getPost(id, isPage: isPage)
-          : xmlrpc.getPost(id, isPage: isPage);
+  /// Diagnostics for the most recent getPost call, kept at the SERVICE
+  /// level so it survives page navigation — the in-app "copy diagnostics"
+  /// can then be triggered from any page and still reveal what happened
+  /// when an article was opened.
+  String? lastGetPostDiag;
+
+  Future<BlogPost> getPost(String id, {bool isPage = false}) async {
+    final sw = Stopwatch()..start();
+    try {
+      final post = account.protocol == BlogProtocol.rest
+          ? await rest.getPost(id, isPage: isPage)
+          : await xmlrpc.getPost(id, isPage: isPage);
+      sw.stop();
+      lastGetPostDiag = 'getPost($id): 成功 ${sw.elapsedMilliseconds}ms, '
+          '标题=${post.title.length}字, 正文=${post.content.length}字, '
+          '摘要=${post.excerpt.length}字, 分类=${post.categories.length}个, '
+          '标签=${post.tags.length}个';
+      return post;
+    } catch (e) {
+      sw.stop();
+      lastGetPostDiag = 'getPost($id): 失败 ${sw.elapsedMilliseconds}ms ($e)';
+      rethrow;
+    }
+  }
 
   /// Creates a new post. Returns the post id (XML-RPC) or the created
   /// post (REST gives us the full object back).

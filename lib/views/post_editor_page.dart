@@ -146,11 +146,13 @@ class _PostEditorPageState extends State<PostEditorPage> {
     final svc = app.service;
     final buf = StringBuffer()
       ..writeln('== Open Live Writer 诊断 ==')
+      ..writeln('当前页面: ${widget.existingPost == null ? "新建文章" : "文章 id=${widget.existingPost!.id}"}')
       ..writeln('协议: ${account?.protocol.name ?? "?"}'
           '${account?.protocol == BlogProtocol.rest ? " (${account?.restAuth.name})" : " (${account?.flavor.name})"}')
       ..writeln('站点: ${account?.homepageUrl ?? "?"}')
       ..writeln('接口: ${account?.apiUrl ?? "?"}')
       ..writeln('用户: ${account?.username ?? "?"}')
+      ..writeln('最近文章加载: ${svc?.lastGetPostDiag ?? "(本会话未调用)"}')
       ..writeln(_diagListInfo)
       ..writeln(_diagFetchInfo)
       ..writeln('编辑器实际文本: 标题=${_titleController.text.length}字, '
