@@ -1,0 +1,249 @@
+name: Build & Release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  FLUTTER_VERSION: stable
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Static analysis + unit/widget tests
+  # ---------------------------------------------------------------------------
+  analyze-test:
+    name: Analyze & Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+        working-directory: open_live_writer
+
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos
+        working-directory: open_live_writer
+
+      - name: Test
+        run: flutter test
+        working-directory: open_live_writer
+
+  # ---------------------------------------------------------------------------
+  # Android (APK + AAB)
+  # ---------------------------------------------------------------------------
+  build-android:
+    name: Build Android
+    needs: analyze-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Build APK
+        run: flutter build apk --release --split-per-abi
+        working-directory: open_live_writer
+
+      - name: Build App Bundle
+        run: flutter build appbundle --release
+        working-directory: open_live_writer
+
+      - name: Rename artifacts
+        run: |
+          cd open_live_writer/build/app/outputs
+          mkdir -p "${GITHUB_WORKSPACE}/dist"
+          cp flutter-apk/app-*-release.apk "${GITHUB_WORKSPACE}/dist/"
+          cp bundle/release/*.aab "${GITHUB_WORKSPACE}/dist/"
+          ls -la "${GITHUB_WORKSPACE}/dist"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: open-live-writer-android
+          path: dist/*
+
+  # ---------------------------------------------------------------------------
+  # iOS (unsigned IPA for sideloading / re-signing)
+  # ---------------------------------------------------------------------------
+  build-ios:
+    name: Build iOS
+    needs: analyze-test
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Build iOS (no codesign)
+        run: flutter build ipa --release --no-codesign
+        working-directory: open_live_writer
+
+      - name: Package unsigned IPA
+        run: |
+          cd open_live_writer/build/ios/ipa
+          # --no-codesign produces a .xcarchive; wrap Payload into an IPA.
+          mkdir -p Payload
+          if [ -d *.xcarchive/Products/Applications/*.app ]; then
+            cp -R *.xcarchive/Products/Applications/*.app Payload/
+          fi
+          zip -qry open-live-writer-ios-unsigned.ipa Payload
+          mkdir -p "${GITHUB_WORKSPACE}/dist"
+          cp open-live-writer-ios-unsigned.ipa "${GITHUB_WORKSPACE}/dist/"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: open-live-writer-ios
+          path: dist/*
+
+  # ---------------------------------------------------------------------------
+  # Windows (portable ZIP)
+  # ---------------------------------------------------------------------------
+  build-windows:
+    name: Build Windows
+    needs: analyze-test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Build Windows
+        run: flutter build windows --release
+        working-directory: open_live_writer
+
+      - name: Package ZIP
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Compress-Archive -Path "open_live_writer/build/windows/x64/runner/Release/*" `
+            -DestinationPath "dist/open-live-writer-windows-x64.zip"
+          Get-ChildItem dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: open-live-writer-windows
+          path: dist/*
+
+  # ---------------------------------------------------------------------------
+  # Linux (tar.gz)
+  # ---------------------------------------------------------------------------
+  build-linux:
+    name: Build Linux
+    needs: analyze-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config \
+            libgtk-3-dev liblzma-dev libstdc++-12-dev
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Build Linux
+        run: flutter build linux --release
+        working-directory: open_live_writer
+
+      - name: Package tar.gz
+        run: |
+          mkdir -p dist
+          tar -czf dist/open-live-writer-linux-x64.tar.gz \
+            -C open_live_writer/build/linux/x64/release/bundle .
+          ls -la dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: open-live-writer-linux
+          path: dist/*
+
+  # ---------------------------------------------------------------------------
+  # macOS (zip of .app)
+  # ---------------------------------------------------------------------------
+  build-macos:
+    name: Build macOS
+    needs: analyze-test
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Build macOS
+        run: flutter build macos --release
+        working-directory: open_live_writer
+
+      - name: Package ZIP
+        run: |
+          mkdir -p dist
+          ditto -c -k --sequesterRsrc --keepParent \
+            "open_live_writer/build/macos/Build/Products/Release/open_live_writer.app" \
+            "dist/open-live-writer-macos.zip"
+          ls -la dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: open-live-writer-macos
+          path: dist/*
+
+  # ---------------------------------------------------------------------------
+  # Release: publish all build artifacts to GitHub Releases (on v* tags)
+  # ---------------------------------------------------------------------------
+  release:
+    name: Publish GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs:
+      - build-android
+      - build-ios
+      - build-windows
+      - build-linux
+      - build-macos
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: List release files
+        run: ls -la dist
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: dist/*
+          fail_on_unmatched_files: true
