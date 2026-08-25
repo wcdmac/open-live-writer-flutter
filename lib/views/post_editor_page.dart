@@ -38,7 +38,9 @@ class _PostEditorPageState extends State<PostEditorPage> {
   int _tabIndex = 0; // 0: write, 1: preview (narrow screens)
 
   /// Full-content fetch state when opening an existing post.
-  bool _loadingFull = false;
+  /// Non-blocking: the editor renders immediately with whatever the post
+  /// list provided; the fresh copy replaces it in the background.
+  bool _fetchingFull = false;
   String? _loadError;
   bool _emptyContent = false;
 
@@ -56,12 +58,13 @@ class _PostEditorPageState extends State<PostEditorPage> {
         TextEditingController(text: widget.existingPost?.content ?? '');
     _tagController =
         TextEditingController(text: widget.existingPost?.tags.join(', ') ?? '');
+    _emptyContent = (widget.existingPost?.content ?? '').trim().isEmpty;
 
     // Post lists often ship without full content — fetch the complete
-    // post from the service (this mirrors OLW opening a post).
+    // post in the background. The editor stays interactive the whole time.
     final existing = widget.existingPost;
     if (existing != null && !existing.isNew && app.service != null) {
-      _loadingFull = true;
+      _fetchingFull = true;
       WidgetsBinding.instance.addPostFrameCallback((_) => _loadFullPost());
     }
   }
@@ -70,12 +73,20 @@ class _PostEditorPageState extends State<PostEditorPage> {
     final app = context.read<AppState>();
     final svc = app.service;
     final existing = widget.existingPost;
-    if (svc == null || existing == null) return;
+    // The caller only arms this when both are present; guard anyway and
+    // ALWAYS clear the fetching flag — a stuck spinner used to leave the
+    // whole editor (title included) invisible and uneditable.
+    if (svc == null || existing == null) {
+      if (mounted) setState(() => _fetchingFull = false);
+      return;
+    }
     try {
-      final fresh = await svc.getPost(existing.id!, isPage: existing.isPage);
+      final fresh = await svc
+          .getPost(existing.id!, isPage: existing.isPage)
+          .timeout(const Duration(seconds: 20));
       if (!mounted) return;
       setState(() {
-        _loadingFull = false;
+        _fetchingFull = false;
         _loadError = null;
         _editor.applyPost(fresh);
         if (fresh.title.trim().isNotEmpty) {
@@ -83,7 +94,12 @@ class _PostEditorPageState extends State<PostEditorPage> {
         }
         if (fresh.content.trim().isNotEmpty) {
           _emptyContent = false;
-          _contentController.text = fresh.content;
+          // Keep the caret at the end after replacing the text.
+          _contentController.value = TextEditingValue(
+            text: fresh.content,
+            selection: TextSelection.collapsed(
+                offset: fresh.content.length),
+          );
         } else {
           // Distinguish "failed to load" from "server returned empty body".
           _emptyContent = _contentController.text.trim().isEmpty;
@@ -96,7 +112,7 @@ class _PostEditorPageState extends State<PostEditorPage> {
       if (!mounted) return;
       // Degrade gracefully: keep whatever the post list gave us.
       setState(() {
-        _loadingFull = false;
+        _fetchingFull = false;
         _loadError = '$e';
       });
     }
@@ -174,13 +190,30 @@ class _PostEditorPageState extends State<PostEditorPage> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: Text(
-            _editor.post.isNew
-                ? (_editor.post.isPage ? l10n.newPageTitle : l10n.newPostTitle)
-                : l10n.editTitle(_editor.post.title.isEmpty
-                    ? l10n.untitled
-                    : _editor.post.title),
-            overflow: TextOverflow.ellipsis,
+          title: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                child: Text(
+                  _editor.post.isNew
+                      ? (_editor.post.isPage
+                          ? l10n.newPageTitle
+                          : l10n.newPostTitle)
+                      : l10n.editTitle(_editor.post.title.isEmpty
+                          ? l10n.untitled
+                          : _editor.post.title),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (_fetchingFull) ...[
+                const SizedBox(width: 10),
+                const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ],
+            ],
           ),
           actions: [
             if (_editor.saving)
@@ -209,62 +242,65 @@ class _PostEditorPageState extends State<PostEditorPage> {
             ),
           ],
         ),
-        body: _loadingFull
-            ? const Center(child: CircularProgressIndicator())
-            : Column(
-                children: [
-                  if (_emptyContent)
-                    MaterialBanner(
-                      backgroundColor:
-                          Theme.of(context).colorScheme.secondaryContainer,
-                      content: Text(
-                        l10n.emptyContentNotice,
-                        style: TextStyle(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .onSecondaryContainer,
-                        ),
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => setState(() => _emptyContent = false),
-                          child: Text(l10n.cancel),
-                        ),
-                      ],
-                    ),
-                  if (_loadError != null)
-                    MaterialBanner(
-                      backgroundColor:
-                          Theme.of(context).colorScheme.errorContainer,
-                      content: Text(
-                        AppLocalizations.of(context)!
-                            .loadPostFailed(_loadError!),
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.onErrorContainer,
-                        ),
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () {
-                            setState(() => _loadError = null);
-                            _loadFullPost();
-                          },
-                          child: Text(AppLocalizations.of(context)!.retry),
-                        ),
-                        TextButton(
-                          onPressed: () =>
-                              setState(() => _loadError = null),
-                          child: Text(AppLocalizations.of(context)!.cancel),
-                        ),
-                      ],
-                    ),
-                  Expanded(
-                    child: isWide
-                        ? _buildSplitView(app)
-                        : _buildTabbedView(app),
+        // Non-blocking body: the editor renders immediately with the list
+        // data; the fresh full-content copy arrives in the background. A
+        // full-screen spinner here used to make the whole editor (title
+        // included) invisible and uneditable whenever the fetch stalled.
+        body: Column(
+          children: [
+            if (_emptyContent && !_fetchingFull)
+              MaterialBanner(
+                backgroundColor:
+                    Theme.of(context).colorScheme.secondaryContainer,
+                content: Text(
+                  l10n.emptyContentNotice,
+                  style: TextStyle(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onSecondaryContainer,
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => setState(() => _emptyContent = false),
+                    child: Text(l10n.cancel),
                   ),
                 ],
               ),
+            if (_loadError != null)
+              MaterialBanner(
+                backgroundColor:
+                    Theme.of(context).colorScheme.errorContainer,
+                content: Text(
+                  AppLocalizations.of(context)!
+                      .loadPostFailed(_loadError!),
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onErrorContainer,
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () {
+                      setState(() {
+                        _loadError = null;
+                        _fetchingFull = true;
+                      });
+                      _loadFullPost();
+                    },
+                    child: Text(AppLocalizations.of(context)!.retry),
+                  ),
+                  TextButton(
+                    onPressed: () =>
+                        setState(() => _loadError = null),
+                    child: Text(AppLocalizations.of(context)!.cancel),
+                  ),
+                ],
+              ),
+            Expanded(
+              child: isWide ? _buildSplitView(app) : _buildTabbedView(app),
+            ),
+          ],
+        ),
       ),
     ),
     );
