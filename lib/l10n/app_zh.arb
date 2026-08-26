@@ -237,6 +237,9 @@
   "exportAllWxr": "导出全部文章（WXR）",
   "exportAllWxrHelp": "生成 WordPress 标准导出文件，可在后台重新导入",
   "exportingPosts": "正在拉取全部文章…",
+  "exportingPostsProgress": "正在拉取全部文章… 已获取 {count} 篇",
+  "@exportingPostsProgress": { "placeholders": { "count": { "type": "num" } } },
+  "exportCancelled": "已取消导出",
   "crashRecoveryTitle": "发现未保存的内容",
   "crashRecoveryBody": "检测到 {time} 未保存的草稿，是否恢复？",
   "@crashRecoveryBody": {

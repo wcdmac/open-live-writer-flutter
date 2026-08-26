@@ -133,5 +133,11 @@ void main() {
       expect(wxr, contains(']]]]><![CDATA[>'));
       expect(wxr, isNot(contains('<p>]]></p>')));
     });
+
+    test('safeName strips path separators and keeps CJK titles', () {
+      final name = PostExporter.safeName('测试也/a:b*c?"<>|');
+      expect(name, isNot(contains(RegExp(r'[\\/:*?"<>|]'))));
+      expect(PostExporter.safeName('测试也-32'), '测试也-32');
+    });
   });
 }

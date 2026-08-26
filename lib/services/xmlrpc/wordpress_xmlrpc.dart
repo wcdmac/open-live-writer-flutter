@@ -94,6 +94,7 @@ class WordPressXmlRpcClient {
     int offset = 0,
     bool pages = false,
     PostStatus? status,
+    Duration timeout = const Duration(seconds: 30),
   }) async {
     if (flavor == XmlRpcFlavor.wordpress || flavor == XmlRpcFlavor.movabletype) {
       try {
@@ -107,8 +108,9 @@ class WordPressXmlRpcClient {
             // reject the multi-status filter.
             'post_status': postStatus,
           };
-          final result = await _client.callMethod('wp.getPosts',
-              [_blogId, _client.username, _client.password, filter]);
+          final result = await _client.callMethod(
+              'wp.getPosts', [_blogId, _client.username, _client.password, filter],
+              timeout: timeout);
           final rows = result is List ? result : [result];
           return rows
               .whereType<Map>()
@@ -132,7 +134,8 @@ class WordPressXmlRpcClient {
     }
 
     final result = await _client.callMethod('metaWeblog.getRecentPosts',
-        [_blogId, _client.username, _client.password, count]);
+        [_blogId, _client.username, _client.password, count],
+        timeout: timeout);
     final rows = result is List ? result : [result];
     return rows.whereType<Map>().map(_postFromMetaweblogStruct).toList();
   }

@@ -1226,6 +1226,18 @@ abstract class AppLocalizations {
   /// **'Fetching all posts…'**
   String get exportingPosts;
 
+  /// No description provided for @exportingPostsProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'Fetching all posts… {count} fetched'**
+  String exportingPostsProgress(num count);
+
+  /// No description provided for @exportCancelled.
+  ///
+  /// In en, this message translates to:
+  /// **'Export cancelled'**
+  String get exportCancelled;
+
   /// No description provided for @crashRecoveryTitle.
   ///
   /// In en, this message translates to:

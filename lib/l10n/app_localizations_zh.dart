@@ -610,6 +610,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String get exportingPosts => '正在拉取全部文章…';
 
   @override
+  String exportingPostsProgress(num count) {
+    return '正在拉取全部文章… 已获取 $count 篇';
+  }
+
+  @override
+  String get exportCancelled => '已取消导出';
+
+  @override
   String get crashRecoveryTitle => '发现未保存的内容';
 
   @override

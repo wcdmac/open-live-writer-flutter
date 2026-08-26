@@ -13,11 +13,22 @@ import '../models/blog_post.dart';
 /// WP admin can re-import (Tools → Import → WordPress).
 class PostExporter {
   /// Downloads folder when the platform has one, otherwise the app's
-  /// documents folder (mobile).
+  /// documents folder (mobile). On iOS path_provider reports a
+  /// Downloads path inside the app container that does not exist yet —
+  /// create it, and fall back to the documents folder if that fails.
   static Future<String> exportDir() async {
-    final downloads = await getDownloadsDirectory();
-    return downloads?.path ??
-        (await getApplicationDocumentsDirectory()).path;
+    try {
+      final downloads = await getDownloadsDirectory();
+      if (downloads != null) {
+        if (!await downloads.exists()) {
+          await downloads.create(recursive: true);
+        }
+        return downloads.path;
+      }
+    } catch (_) {
+      // Fall through to the documents folder.
+    }
+    return (await getApplicationDocumentsDirectory()).path;
   }
 
   static Future<File> write(String fileName, String contents) async {
