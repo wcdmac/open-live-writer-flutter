@@ -383,10 +383,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get altText => '替代文本（可选）';
 
   @override
-  String get copyDiagnostics => '复制诊断';
+  String get alignLeft => '左对齐';
 
   @override
-  String get diagnosticsCopied => '诊断信息已复制';
+  String get alignCenter => '居中';
+
+  @override
+  String get alignRight => '右对齐';
 
   @override
   String get cancel => '取消';

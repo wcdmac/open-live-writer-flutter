@@ -336,7 +336,22 @@ TableData parseTable(String html) {
           r'style\s*=\s*"[^"]*border|<table[^>]*\bborder\b',
           caseSensitive: false)
       .hasMatch(html);
-  return TableData(rows: rows, hasHeader: hasHeader, hasBorder: hasBorder);
+  // Gutenberg stores alignment as has-text-align-* classes on the figure
+  // or the table; legacy content may use style="text-align:*". The figure
+  // class comes first in the markup, so scan every class/style attribute.
+  TableCellAlign? align;
+  for (final m in RegExp(r'(?:class|style)\s*=\s*"([^"]*)"',
+          caseSensitive: false)
+      .allMatches(html)) {
+    align = TableCellAlign.fromStyle(m.group(1)!);
+    if (align != null) break;
+  }
+  return TableData(
+    rows: rows,
+    hasHeader: hasHeader,
+    hasBorder: hasBorder,
+    align: align ?? TableCellAlign.left,
+  );
 }
 
 /// Serializes back to Gutenberg-canonical table markup:
@@ -346,7 +361,8 @@ TableData parseTable(String html) {
 /// uneven line widths. Frontend borders come from WordPress core
 /// block styles (`.wp-block-table td/th { border: 1px solid }`).
 String serializeTable(TableData table, {bool wrapFigure = true}) {
-  final buf = StringBuffer('<table class="has-fixed-layout"><tbody>');
+  final align = table.align == TableCellAlign.left ? '' : ' ${table.align.cssClass}';
+  final buf = StringBuffer('<table class="has-fixed-layout$align"><tbody>');
   for (var r = 0; r < table.rows.length; r++) {
     buf.write('<tr>');
     final isHeader = table.hasHeader && r == 0;
@@ -361,13 +377,48 @@ String serializeTable(TableData table, {bool wrapFigure = true}) {
   return '<figure class="wp-block-table">${buf.toString()}</figure>';
 }
 
+/// Horizontal text alignment inside table cells. The string values are the
+/// CSS/Gutenberg classes written into the table markup.
+enum TableCellAlign { left('has-text-align-left'), center('has-text-align-center'), right('has-text-align-right');
+
+  const TableCellAlign(this.cssClass);
+  final String cssClass;
+
+  /// Parses Gutenberg `has-text-align-*` classes (or a legacy
+  /// `text-align:*` style) from a class/style attribute value.
+  static TableCellAlign? fromStyle(String styleOrClass) {
+    if (RegExp(r'has-text-align-center|text-align:\s*center', caseSensitive: false)
+        .hasMatch(styleOrClass)) {
+      return TableCellAlign.center;
+    }
+    if (RegExp(r'has-text-align-right|text-align:\s*right', caseSensitive: false)
+        .hasMatch(styleOrClass)) {
+      return TableCellAlign.right;
+    }
+    if (RegExp(r'has-text-align-left|text-align:\s*left', caseSensitive: false)
+        .hasMatch(styleOrClass)) {
+      return TableCellAlign.left;
+    }
+    return null;
+  }
+}
+
 /// Editable table payload.
 class TableData {
-  TableData({required this.rows, this.hasHeader = false, this.hasBorder = false});
+  TableData({
+    required this.rows,
+    this.hasHeader = false,
+    this.hasBorder = false,
+    this.align = TableCellAlign.left,
+  });
 
   List<List<String>> rows;
   bool hasHeader;
   bool hasBorder;
+
+  /// Table-wide horizontal alignment (Gutenberg's alignment applies to the
+  /// whole block; per-cell alignment is not part of the core table block).
+  TableCellAlign align;
 
   int get columnCount => rows.isEmpty ? 0 : rows.reduce((a, b) => a.length >= b.length ? a : b).length;
 }

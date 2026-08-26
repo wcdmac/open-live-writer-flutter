@@ -48,10 +48,6 @@ class WordPressRestClient {
 
   static const _timeout = Duration(seconds: 30);
 
-  /// Raw body of the most recent response (truncated) — used by the
-  /// in-app diagnostics when a post opens with empty content.
-  String? lastResponseBody;
-
   // ---------------------------------------------------------------------------
   // Discovery
   // ---------------------------------------------------------------------------
@@ -157,10 +153,6 @@ class WordPressRestClient {
     }
     final res = await _http.send(request).timeout(_timeout);
     final response = await http.Response.fromStream(res);
-
-    lastResponseBody = response.body.length > 4000
-        ? '${response.body.substring(0, 4000)}…'
-        : response.body;
 
     if (response.statusCode >= 400) {
       String code = 'http_error';

@@ -788,17 +788,23 @@ abstract class AppLocalizations {
   /// **'Alt text (optional)'**
   String get altText;
 
-  /// No description provided for @copyDiagnostics.
+  /// No description provided for @alignLeft.
   ///
   /// In en, this message translates to:
-  /// **'Copy diagnostics'**
-  String get copyDiagnostics;
+  /// **'Align left'**
+  String get alignLeft;
 
-  /// No description provided for @diagnosticsCopied.
+  /// No description provided for @alignCenter.
   ///
   /// In en, this message translates to:
-  /// **'Diagnostics copied to clipboard'**
-  String get diagnosticsCopied;
+  /// **'Align center'**
+  String get alignCenter;
+
+  /// No description provided for @alignRight.
+  ///
+  /// In en, this message translates to:
+  /// **'Align right'**
+  String get alignRight;
 
   /// No description provided for @cancel.
   ///

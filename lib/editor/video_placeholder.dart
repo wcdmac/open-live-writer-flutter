@@ -3,7 +3,8 @@ import 'package:html/dom.dart' as dom;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../l10n/app_localizations.dart';
-import 'block_document.dart' show TableData, parseTable;
+import 'block_document.dart'
+    show TableCellAlign, TableData, parseTable;
 
 /// Combined builder for media the stock HTML renderer renders poorly:
 /// video/iframe/embed placeholders, images with visible loading and error
@@ -60,6 +61,11 @@ class _PreviewTable extends StatelessWidget {
                         horizontal: 8, vertical: 6),
                     child: Text(
                       table.rows[r][c],
+                      textAlign: switch (table.align) {
+                        TableCellAlign.left => TextAlign.left,
+                        TableCellAlign.center => TextAlign.center,
+                        TableCellAlign.right => TextAlign.right,
+                      },
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: r == 0 && table.hasHeader

@@ -896,6 +896,11 @@ class _TableFieldState extends State<_TableField> {
                       TableCell(
                         child: TextField(
                           controller: _cellCtrls[r][c],
+                          textAlign: switch (_table.align) {
+                            TableCellAlign.left => TextAlign.left,
+                            TableCellAlign.center => TextAlign.center,
+                            TableCellAlign.right => TextAlign.right,
+                          },
                           decoration: const InputDecoration(
                             border: InputBorder.none,
                             isDense: true,
@@ -938,6 +943,34 @@ class _TableFieldState extends State<_TableField> {
             ),
             // No border toggle: inline border styles break Gutenberg block
             // validation; frontend borders come from WordPress core styles.
+            SegmentedButton<TableCellAlign>(
+              showSelectedIcon: false,
+              style: const ButtonStyle(
+                visualDensity: VisualDensity.compact,
+              ),
+              segments: [
+                ButtonSegment(
+                  value: TableCellAlign.left,
+                  icon: const Icon(Icons.format_align_left),
+                  tooltip: l10n.alignLeft,
+                ),
+                ButtonSegment(
+                  value: TableCellAlign.center,
+                  icon: const Icon(Icons.format_align_center),
+                  tooltip: l10n.alignCenter,
+                ),
+                ButtonSegment(
+                  value: TableCellAlign.right,
+                  icon: const Icon(Icons.format_align_right),
+                  tooltip: l10n.alignRight,
+                ),
+              ],
+              selected: {_table.align},
+              onSelectionChanged: (s) {
+                setState(() => _table.align = s.first);
+                _emit();
+              },
+            ),
           ],
         ),
       ],

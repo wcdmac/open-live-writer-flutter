@@ -89,6 +89,21 @@ void main() {
     expect(out, isNot(contains('style=')));
   });
 
+  test('table alignment round-trips through has-text-align classes', () {
+    final out = serializeTable(TableData(rows: [
+      ['A']
+    ], align: TableCellAlign.center));
+    expect(
+        out, contains('<table class="has-fixed-layout has-text-align-center">'));
+    // Left is the default and emits no class, matching Gutenberg.
+    final left = serializeTable(TableData(rows: [
+      ['A']
+    ]));
+    expect(left, contains('<table class="has-fixed-layout">'));
+    // Parsing picks the class back up.
+    expect(parseTable(out).align, TableCellAlign.center);
+  });
+
   test('buildVideoEmbed handles youtube links, media files and iframes', () {
     expect(
         buildVideoEmbed('https://www.youtube.com/watch?v=abc123XYZ'),

@@ -387,10 +387,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get altText => 'Alt text (optional)';
 
   @override
-  String get copyDiagnostics => 'Copy diagnostics';
+  String get alignLeft => 'Align left';
 
   @override
-  String get diagnosticsCopied => 'Diagnostics copied to clipboard';
+  String get alignCenter => 'Align center';
+
+  @override
+  String get alignRight => 'Align right';
 
   @override
   String get cancel => 'Cancel';

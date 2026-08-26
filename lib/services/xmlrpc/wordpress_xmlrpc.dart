@@ -18,9 +18,6 @@ class WordPressXmlRpcClient {
   final XmlRpcClient _client;
   final XmlRpcFlavor flavor;
 
-  /// Raw body of the most recent XML-RPC response (diagnostics).
-  String? get lastResponseBody => _client.lastResponseBody;
-
   String get _blogId => _clientEndpointBlogId;
   String _clientEndpointBlogId = '';
 
