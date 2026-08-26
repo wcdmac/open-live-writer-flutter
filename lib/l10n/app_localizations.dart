@@ -482,6 +482,48 @@ abstract class AppLocalizations {
   /// **'Publish'**
   String get publish;
 
+  /// No description provided for @postActions.
+  ///
+  /// In en, this message translates to:
+  /// **'Post actions'**
+  String get postActions;
+
+  /// No description provided for @editPost.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit'**
+  String get editPost;
+
+  /// No description provided for @moveToDraft.
+  ///
+  /// In en, this message translates to:
+  /// **'Move to draft'**
+  String get moveToDraft;
+
+  /// No description provided for @setAsPrivate.
+  ///
+  /// In en, this message translates to:
+  /// **'Set as private'**
+  String get setAsPrivate;
+
+  /// No description provided for @moveToTrash.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete (move to trash)'**
+  String get moveToTrash;
+
+  /// No description provided for @deletePostConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Move \"{title}\" to trash? You can restore it from Trash in the WordPress admin.'**
+  String deletePostConfirm(Object title);
+
+  /// No description provided for @operationFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Operation failed: {error}'**
+  String operationFailed(Object error);
+
   /// No description provided for @postSettings.
   ///
   /// In en, this message translates to:

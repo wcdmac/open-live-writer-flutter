@@ -335,7 +335,137 @@ class _PostTile extends StatelessWidget {
           builder: (_) => PostEditorPage(existingPost: post),
         ),
       ),
+      onLongPress: () => _showActions(context, post),
     );
+  }
+
+  /// Long-press management sheet: quick status transitions and delete,
+  /// all backed by the same editPost/deletePost calls the editor uses.
+  void _showActions(BuildContext context, BlogPost post) {
+    final l10n = AppLocalizations.of(context)!;
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                post.title.isEmpty ? l10n.untitled : post.title,
+                style: const TextStyle(fontWeight: FontWeight.bold),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.edit_outlined),
+              title: Text(l10n.editPost),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => PostEditorPage(existingPost: post),
+                  ),
+                );
+              },
+            ),
+            if (post.status != PostStatus.publish)
+              ListTile(
+                leading: const Icon(Icons.publish_outlined),
+                title: Text(l10n.publish),
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _changeStatus(context, post, PostStatus.publish);
+                },
+              ),
+            if (post.status != PostStatus.draft)
+              ListTile(
+                leading: const Icon(Icons.edit_note_outlined),
+                title: Text(l10n.moveToDraft),
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _changeStatus(context, post, PostStatus.draft);
+                },
+              ),
+            if (post.status != PostStatus.private)
+              ListTile(
+                leading: const Icon(Icons.lock_outline),
+                title: Text(l10n.setAsPrivate),
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _changeStatus(context, post, PostStatus.private);
+                },
+              ),
+            ListTile(
+              leading: Icon(Icons.delete_outline,
+                  color: Theme.of(context).colorScheme.error),
+              title: Text(l10n.moveToTrash,
+                  style:
+                      TextStyle(color: Theme.of(context).colorScheme.error)),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                _deletePost(context, post);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _changeStatus(
+      BuildContext context, BlogPost post, PostStatus target) async {
+    final l10n = AppLocalizations.of(context)!;
+    final svc = app.service;
+    if (svc == null) return;
+    post.status = target;
+    try {
+      // editPost(publish: false) always saves as draft — exactly what a
+      // "move to draft" needs; other targets ride the publish path.
+      await svc.editPost(post, publish: target != PostStatus.draft);
+      await app.refresh();
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(l10n.operationFailed('$e'))));
+      }
+    }
+  }
+
+  Future<void> _deletePost(BuildContext context, BlogPost post) async {
+    final l10n = AppLocalizations.of(context)!;
+    final svc = app.service;
+    if (svc == null || post.id == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(l10n.moveToTrash),
+        content: Text(l10n
+            .deletePostConfirm(post.title.isEmpty ? l10n.untitled : post.title)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(l10n.cancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(l10n.moveToTrash),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await svc.deletePost(post.id!, isPage: post.isPage);
+      await app.refresh();
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(l10n.operationFailed('$e'))));
+      }
+    }
   }
 }
 

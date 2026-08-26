@@ -220,6 +220,31 @@ class AppLocalizationsZh extends AppLocalizations {
   String get publish => '发布';
 
   @override
+  String get postActions => '文章操作';
+
+  @override
+  String get editPost => '编辑';
+
+  @override
+  String get moveToDraft => '转为草稿';
+
+  @override
+  String get setAsPrivate => '设为私有';
+
+  @override
+  String get moveToTrash => '删除（移入回收站）';
+
+  @override
+  String deletePostConfirm(Object title) {
+    return '将《$title》移入回收站？可在 WordPress 后台的回收站中恢复。';
+  }
+
+  @override
+  String operationFailed(Object error) {
+    return '操作失败：$error';
+  }
+
+  @override
   String get postSettings => '文章设置';
 
   @override

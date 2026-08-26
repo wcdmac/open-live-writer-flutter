@@ -223,6 +223,31 @@ class AppLocalizationsEn extends AppLocalizations {
   String get publish => 'Publish';
 
   @override
+  String get postActions => 'Post actions';
+
+  @override
+  String get editPost => 'Edit';
+
+  @override
+  String get moveToDraft => 'Move to draft';
+
+  @override
+  String get setAsPrivate => 'Set as private';
+
+  @override
+  String get moveToTrash => 'Delete (move to trash)';
+
+  @override
+  String deletePostConfirm(Object title) {
+    return 'Move \"$title\" to trash? You can restore it from Trash in the WordPress admin.';
+  }
+
+  @override
+  String operationFailed(Object error) {
+    return 'Operation failed: $error';
+  }
+
+  @override
   String get postSettings => 'Post settings';
 
   @override
