@@ -369,7 +369,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get insertImage => 'Insert image';
 
   @override
-  String get codeBlock => 'Code block';
+  String get codeBlock => 'Code';
 
   @override
   String get moreTag => 'More tag (excerpt break)';

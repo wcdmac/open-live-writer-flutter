@@ -4,7 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../l10n/app_localizations.dart';
 import 'block_document.dart'
-    show TableCellAlign, TableData, parseTable;
+    show TableCellAlign, TableData, parseCodeBlock, parseTable;
 
 /// Combined builder for media the stock HTML renderer renders poorly:
 /// video/iframe/embed placeholders, images with visible loading and error
@@ -26,7 +26,46 @@ Widget? mediaPlaceholderBuilder(dom.Element element) {
     if (table.rows.isEmpty) return null;
     return _PreviewTable(table: table);
   }
+  // Code blocks render natively: mono font on a tinted card so the preview
+  // matches the visual editor (fwfh renders bare <pre> with theme text
+  // styles and no background).
+  if (element.localName == 'pre') {
+    return _PreviewCode(parseCodeBlock(element.outerHtml) ?? '');
+  }
   return null;
+}
+
+/// Code card for previews: mono font, tinted background, horizontal scroll.
+class _PreviewCode extends StatelessWidget {
+  const _PreviewCode(this.code);
+
+  final String code;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Text(
+          code,
+          style: TextStyle(
+            fontFamily: 'monospace',
+            fontSize: 13,
+            height: 1.5,
+            color: scheme.onSurface,
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// Native bordered table for previews: IntrinsicColumnWidth sizes every

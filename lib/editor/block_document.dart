@@ -205,6 +205,22 @@ BlockType _classifyType(String html) {
 // Field-level helpers used by the visual editor widgets.
 // ---------------------------------------------------------------------------
 
+/// Extracts the plain-text payload of a code block (`wp:code` saves as
+/// `<pre class="wp-block-code"><code>escaped</code></pre>`; bare `<pre>`
+/// content is accepted too). Returns null when [html] is not a code block.
+String? parseCodeBlock(String html) {
+  final m = RegExp(
+          r'^\s*<pre[^>]*>\s*(?:<code[^>]*>)?([\s\S]*?)(?:</code>)?\s*</pre>\s*$',
+          caseSensitive: false)
+      .firstMatch(html);
+  return m == null ? null : _decodeEntities(m.group(1)!);
+}
+
+/// Wraps code text into Gutenberg core/code markup. Entities are escaped
+/// so angle brackets and ampersands in source code survive the round trip.
+String buildCodeHtml(String code) =>
+    '<pre class="wp-block-code"><code>${_encodeEntities(code)}</code></pre>';
+
 /// Normalizes a picked image for upload.
 ///
 /// WordPress rejects formats that are not in the site's allowed MIME list

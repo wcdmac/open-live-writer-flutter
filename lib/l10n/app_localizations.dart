@@ -755,7 +755,7 @@ abstract class AppLocalizations {
   /// No description provided for @codeBlock.
   ///
   /// In en, this message translates to:
-  /// **'Code block'**
+  /// **'Code'**
   String get codeBlock;
 
   /// No description provided for @moreTag.

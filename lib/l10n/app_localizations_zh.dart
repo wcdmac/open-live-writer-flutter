@@ -365,7 +365,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get insertImage => '插入图片';
 
   @override
-  String get codeBlock => '代码块';
+  String get codeBlock => '代码';
 
   @override
   String get moreTag => '更多标签（摘要分隔）';

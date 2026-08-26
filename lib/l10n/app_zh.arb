@@ -150,6 +150,7 @@
   "alignLeft": "左对齐",
   "alignCenter": "居中",
   "alignRight": "右对齐",
+  "codeBlock": "代码",
   "cancel": "取消",
   "ok": "确定",
   "postStatusDraft": "草稿",

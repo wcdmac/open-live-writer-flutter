@@ -107,6 +107,18 @@ void main() {
     expect(parseTable(out).align, TableCellAlign.center);
   });
 
+  test('code block helpers round-trip source with special characters', () {
+    const src = 'int main() {\n  return x < y && y > z;\n}';
+    final html = buildCodeHtml(src);
+    expect(html,
+        '<pre class="wp-block-code"><code>int main() {\n  return x &lt; y &amp;&amp; y &gt; z;\n}</code></pre>');
+    expect(parseCodeBlock(html), src);
+    // Bare <pre> without the code wrapper also parses.
+    expect(parseCodeBlock('<pre>plain</pre>'), 'plain');
+    // Non-code markup returns null (caller keeps the raw html).
+    expect(parseCodeBlock('<p>not code</p>'), isNull);
+  });
+
   test('buildVideoEmbed handles youtube links, media files and iframes', () {
     expect(
         buildVideoEmbed('https://www.youtube.com/watch?v=abc123XYZ'),

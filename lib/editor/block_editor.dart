@@ -244,6 +244,11 @@ class _BlockCardState extends State<_BlockCard> {
       if (widget.block.type == BlockType.table) {
         return _ReadOnlyTable(widget.block.html);
       }
+      // Code blocks render natively: mono font, tinted background, no
+      // HTML interpretation of the source inside.
+      if (widget.block.type == BlockType.code) {
+        return _ReadOnlyCode(widget.block.html);
+      }
       return HtmlWidget(
         widget.block.serialize(),
         textStyle: Theme.of(context)
@@ -273,7 +278,9 @@ class _BlockCardState extends State<_BlockCard> {
           block: widget.block,
           onChanged: widget.onHtmlChanged,
           uploadMedia: widget.uploadMedia),
-      // Lists, quotes, code and unknown markup edit their raw HTML — the
+      BlockType.code => _CodeField(
+          block: widget.block, onChanged: widget.onHtmlChanged),
+      // Lists, quotes and unknown markup edit their raw HTML — the
       // only lossless option — while unfocused rendering stays WYSIWYG.
       _ => _TextBlockField(
           controllerSeed: widget.block.html,
@@ -768,6 +775,109 @@ class _ReadOnlyTable extends StatelessWidget {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Code block: edit the plain-text payload, serialize as core/code.
+// ---------------------------------------------------------------------------
+
+/// Read-only code rendering for the unfocused (WYSIWYG) view. Rendered
+/// natively so the HTML renderer never interprets the source inside.
+class _ReadOnlyCode extends StatelessWidget {
+  const _ReadOnlyCode(this.html);
+
+  final String html;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final code = parseCodeBlock(html) ?? html;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Text(
+          code,
+          style: TextStyle(
+            fontFamily: 'monospace',
+            fontSize: 13,
+            height: 1.5,
+            color: scheme.onSurface,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Focused code editor: multi-line mono field; re-serializes to Gutenberg
+/// core/code markup on every change.
+class _CodeField extends StatefulWidget {
+  const _CodeField({required this.block, required this.onChanged});
+
+  final ContentBlock block;
+  final ValueChanged<String> onChanged;
+
+  @override
+  State<_CodeField> createState() => _CodeFieldState();
+}
+
+class _CodeFieldState extends State<_CodeField> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: parseCodeBlock(widget.block.html));
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return TextField(
+      controller: _controller,
+      maxLines: null,
+      minLines: 3,
+      keyboardType: TextInputType.multiline,
+      style: TextStyle(
+        fontFamily: 'monospace',
+        fontSize: 13,
+        height: 1.5,
+        color: scheme.onSurface,
+      ),
+      decoration: InputDecoration(
+        filled: true,
+        fillColor: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: scheme.outlineVariant),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: scheme.outlineVariant),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: scheme.primary),
+        ),
+        isDense: true,
+        contentPadding: const EdgeInsets.all(12),
+      ),
+      onChanged: (text) => widget.onChanged(buildCodeHtml(text)),
+    );
+  }
+}
+
 class _TableField extends StatefulWidget {
   const _TableField({required this.block, required this.onChanged});
 
@@ -1206,6 +1316,17 @@ class _InsertBar extends StatelessWidget {
               html: buildTable(),
               wpOpen: '<!-- wp:table -->',
               wpClose: '<!-- /wp:table -->',
+            )),
+          ),
+          const SizedBox(width: 6),
+          ActionChip(
+            avatar: const Icon(Icons.code, size: 18),
+            label: Text(l10n.codeBlock),
+            onPressed: () => onInsert(ContentBlock(
+              type: BlockType.code,
+              html: buildCodeHtml(''),
+              wpOpen: '<!-- wp:code -->',
+              wpClose: '<!-- /wp:code -->',
             )),
           ),
           const SizedBox(width: 6),
