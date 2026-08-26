@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:open_live_writer/services/xmlrpc/xmlrpc_codec.dart';
@@ -31,6 +33,28 @@ void main() {
       // Only `<` and `&` must be escaped in XML text; the xml package
       // leaves `>` and quotes as-is.
       expect(xml, contains('&lt;b>&amp;amp; "quotes"&lt;/b>'));
+    });
+
+    test('encodes byte payloads as base64, not int array (upload regression)',
+        () {
+      final bytes = List<int>.generate(300, (i) => i % 256);
+      final xml = XmlRpcCodec.encodeRequest('wp.uploadFile', [
+        1,
+        'user',
+        'pass',
+        {'name': 'a.jpg', 'type': 'image/jpeg', 'bits': bytes},
+      ]);
+
+      // bits must be a single <base64> value; encoding as <array> of ints
+      // bloats the document ~30x and servers reject it (413 / parse error).
+      expect(xml, contains('<name>bits</name><value><base64>'));
+      expect(xml, isNot(contains('<name>bits</name><value><array>')));
+      // and must survive decode back to bytes
+      final doc = XmlRpcCodec.decodeResponse('''
+<?xml version="1.0"?>
+<methodResponse><params><param><value><base64>${base64Encode(bytes)}</base64></value></param></params></methodResponse>
+''');
+      expect(doc, equals(bytes));
     });
   });
 
