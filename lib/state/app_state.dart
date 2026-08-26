@@ -6,14 +6,18 @@ import '../models/blog.dart';
 import '../models/blog_post.dart';
 import '../services/account_store.dart';
 import '../services/blog_service.dart';
+import '../services/local_draft_store.dart';
 import '../services/theme_detector.dart';
 
 /// Root application state: accounts, the active account, its taxonomies
 /// and post list. Backed by [AccountStore] for persistence.
 class AppState extends ChangeNotifier {
-  AppState({AccountStore? store}) : store = store ?? AccountStore();
+  AppState({AccountStore? store})
+      : store = store ?? AccountStore(),
+        drafts = LocalDraftStore();
 
   final AccountStore store;
+  final LocalDraftStore drafts;
 
   List<BlogAccount> accounts = [];
   BlogAccount? currentAccount;
@@ -23,6 +27,7 @@ class AppState extends ChangeNotifier {
   List<PostCategory> categories = [];
   List<PostTag> tags = [];
   List<BlogPost> posts = [];
+  List<LocalDraft> localDrafts = [];
   BlogTheme? theme;
   bool loading = false;
   String? error;
@@ -40,6 +45,7 @@ class AppState extends ChangeNotifier {
         orElse: () => accounts.first,
       );
       await _connectCurrent();
+      await _loadLocalDrafts();
       notifyListeners();
       // Auto-load the post list on startup. HomePage's post-frame callback
       // alone races with this async load and can miss the refresh entirely,
@@ -54,6 +60,7 @@ class AppState extends ChangeNotifier {
     currentAccount = account;
     (await store.prefs).setString('olw.currentAccount', account.id);
     await _connectCurrent();
+    await _loadLocalDrafts();
     notifyListeners();
   }
 
@@ -152,6 +159,55 @@ class AppState extends ChangeNotifier {
   String categoryName(String id) {
     final c = categories.where((c) => c.id == id).firstOrNull;
     return c?.name ?? id;
+  }
+
+  // --- Local drafts ---------------------------------------------------------
+
+  Future<void> _loadLocalDrafts() async {
+    final id = currentAccount?.id;
+    if (id == null) return;
+    localDrafts = await drafts.loadDrafts(id);
+  }
+
+  /// Saves (or updates) a local draft for the current account and refreshes
+  /// the home list.
+  Future<void> saveLocalDraft(LocalDraft draft) async {
+    await drafts.saveDraft(draft);
+    await _loadLocalDrafts();
+    notifyListeners();
+  }
+
+  /// Deletes a local draft for the current account.
+  Future<void> deleteLocalDraft(String draftId) async {
+    final id = currentAccount?.id;
+    if (id == null) return;
+    await drafts.deleteDraft(id, draftId);
+    await _loadLocalDrafts();
+    notifyListeners();
+  }
+
+  String newDraftId() =>
+      'local-${DateTime.now().millisecondsSinceEpoch}-${Random().nextInt(9999)}';
+
+  /// Creates a category on the blog and refreshes the local taxonomy list.
+  /// Both protocol stacks implement this (wp.newCategory / REST terms).
+  Future<bool> createCategory(String name) async {
+    final svc = _service;
+    if (svc == null || name.trim().isEmpty) return false;
+    try {
+      final id = await svc.newCategory(name.trim());
+      final created = await svc.getCategories();
+      categories = created;
+      // Pre-select the new category in the editor flow by leaving selection
+      // to the caller — here we only refresh the taxonomy.
+      notifyListeners();
+      return id.isNotEmpty;
+    } catch (e) {
+      if (kDebugMode) print('createCategory failed: $e');
+      error = 'Create category failed: $e';
+      notifyListeners();
+      return false;
+    }
   }
 
   /// Resolves tag ids to display names.

@@ -280,6 +280,10 @@ class _BlockCardState extends State<_BlockCard> {
           uploadMedia: widget.uploadMedia),
       BlockType.code => _CodeField(
           block: widget.block, onChanged: widget.onHtmlChanged),
+      BlockType.list => _ListField(
+          block: widget.block, onChanged: widget.onHtmlChanged),
+      BlockType.quote => _QuoteField(
+          block: widget.block, onChanged: widget.onHtmlChanged),
       // Lists, quotes and unknown markup edit their raw HTML — the
       // only lossless option — while unfocused rendering stays WYSIWYG.
       _ => _TextBlockField(
@@ -878,6 +882,328 @@ class _CodeFieldState extends State<_CodeField> {
   }
 }
 
+// ---------------------------------------------------------------------------
+// List block: per-item fields with a shared inline-format toolbar that
+// targets the focused item.
+// ---------------------------------------------------------------------------
+
+class _ListField extends StatefulWidget {
+  const _ListField({required this.block, required this.onChanged});
+
+  final ContentBlock block;
+  final ValueChanged<String> onChanged;
+
+  @override
+  State<_ListField> createState() => _ListFieldState();
+}
+
+class _ListFieldState extends State<_ListField> {
+  late final ListData _list;
+  final List<TextEditingController> _ctrls = [];
+  int? _focusedIdx;
+
+  @override
+  void initState() {
+    super.initState();
+    _list = parseList(widget.block.html);
+    _syncCtrls();
+  }
+
+  @override
+  void dispose() {
+    for (final c in _ctrls) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  void _syncCtrls() {
+    while (_ctrls.length < _list.items.length) {
+      _ctrls.add(TextEditingController(
+          text: _ctrls.length < _list.items.length
+              ? _list.items[_ctrls.length]
+              : ''));
+    }
+    while (_ctrls.length > _list.items.length) {
+      _ctrls.removeLast().dispose();
+    }
+    // Keep controller texts in sync after add/remove reorders indices.
+    for (var i = 0; i < _ctrls.length; i++) {
+      if (_ctrls[i].text != _list.items[i]) {
+        _ctrls[i].text = _list.items[i];
+      }
+    }
+  }
+
+  void _emit() => widget.onChanged(buildListHtml(_list));
+
+  void _wrapFocused(String open, String close) {
+    final idx = _focusedIdx;
+    if (idx == null || idx >= _ctrls.length) return;
+    final c = _ctrls[idx];
+    final sel = c.selection;
+    if (!sel.isValid) return;
+    final selected = sel.textInside(c.text);
+    c.value = c.value.copyWith(
+      text: c.text.replaceRange(sel.start, sel.end, '$open$selected$close'),
+      selection: TextSelection.collapsed(
+          offset: sel.start + open.length + selected.length),
+    );
+    _list.items[idx] = c.text;
+    _emit();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final scheme = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 2,
+          children: [
+            _MiniTool(icon: Icons.format_bold, tooltip: l10n.bold, onTap: () => _wrapFocused('<strong>', '</strong>')),
+            _MiniTool(icon: Icons.format_italic, tooltip: l10n.italic, onTap: () => _wrapFocused('<em>', '</em>')),
+            _MiniTool(icon: Icons.link, tooltip: l10n.insertLink, onTap: () => _wrapFocused('<a href="https://">', '</a>')),
+            SegmentedButton<bool>(
+              showSelectedIcon: false,
+              style: const ButtonStyle(visualDensity: VisualDensity.compact),
+              segments: [
+                ButtonSegment(
+                    value: false,
+                    icon: const Icon(Icons.format_list_bulleted, size: 18)),
+                ButtonSegment(
+                    value: true,
+                    icon: const Icon(Icons.format_list_numbered, size: 18)),
+              ],
+              selected: {_list.ordered},
+              onSelectionChanged: (s) {
+                setState(() => _list.ordered = s.first);
+                _emit();
+              },
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        for (var i = 0; i < _list.items.length; i++)
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: _list.ordered
+                    ? Text('${i + 1}.',
+                        style: TextStyle(
+                            color: scheme.onSurfaceVariant, fontSize: 14))
+                    : Icon(Icons.circle,
+                        size: 6, color: scheme.onSurfaceVariant),
+              ),
+              Expanded(
+                child: TextField(
+                  controller: _ctrls[i],
+                  onTap: () => _focusedIdx = i,
+                  decoration: const InputDecoration(
+                    border: InputBorder.none,
+                    isDense: true,
+                  ),
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodyLarge
+                      ?.copyWith(fontSize: 15, height: 1.6),
+                  onChanged: (v) {
+                    _list.items[i] = v;
+                    _emit();
+                  },
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close, size: 16),
+                tooltip: l10n.removeItem,
+                visualDensity: VisualDensity.compact,
+                onPressed: () {
+                  setState(() {
+                    _list.items.removeAt(i);
+                    _syncCtrls();
+                  });
+                  _emit();
+                },
+              ),
+            ],
+          ),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            icon: const Icon(Icons.add, size: 18),
+            label: Text(l10n.addItem),
+            onPressed: () {
+              setState(() {
+                _list.items.add('');
+                _syncCtrls();
+                _focusedIdx = _list.items.length - 1;
+              });
+              _emit();
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Quote block: per-paragraph fields with the same shared toolbar pattern.
+// ---------------------------------------------------------------------------
+
+class _QuoteField extends StatefulWidget {
+  const _QuoteField({required this.block, required this.onChanged});
+
+  final ContentBlock block;
+  final ValueChanged<String> onChanged;
+
+  @override
+  State<_QuoteField> createState() => _QuoteFieldState();
+}
+
+class _QuoteFieldState extends State<_QuoteField> {
+  late final QuoteData _quote;
+  final List<TextEditingController> _ctrls = [];
+  int? _focusedIdx;
+
+  @override
+  void initState() {
+    super.initState();
+    _quote = parseQuote(widget.block.html) ?? QuoteData(paragraphs: []);
+    _syncCtrls();
+  }
+
+  @override
+  void dispose() {
+    for (final c in _ctrls) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  void _syncCtrls() {
+    while (_ctrls.length < _quote.paragraphs.length) {
+      _ctrls.add(TextEditingController(
+          text: _ctrls.length < _quote.paragraphs.length
+              ? _quote.paragraphs[_ctrls.length]
+              : ''));
+    }
+    while (_ctrls.length > _quote.paragraphs.length) {
+      _ctrls.removeLast().dispose();
+    }
+    for (var i = 0; i < _ctrls.length; i++) {
+      if (_ctrls[i].text != _quote.paragraphs[i]) {
+        _ctrls[i].text = _quote.paragraphs[i];
+      }
+    }
+  }
+
+  void _emit() => widget.onChanged(buildQuoteHtml(_quote));
+
+  void _wrapFocused(String open, String close) {
+    final idx = _focusedIdx;
+    if (idx == null || idx >= _ctrls.length) return;
+    final c = _ctrls[idx];
+    final sel = c.selection;
+    if (!sel.isValid) return;
+    final selected = sel.textInside(c.text);
+    c.value = c.value.copyWith(
+      text: c.text.replaceRange(sel.start, sel.end, '$open$selected$close'),
+      selection: TextSelection.collapsed(
+          offset: sel.start + open.length + selected.length),
+    );
+    _quote.paragraphs[idx] = c.text;
+    _emit();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 8, 8, 4),
+      decoration: BoxDecoration(
+        border: Border(
+          left: BorderSide(width: 3, color: scheme.primary.withValues(alpha: 0.6)),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 2,
+            children: [
+              _MiniTool(icon: Icons.format_bold, tooltip: l10n.bold, onTap: () => _wrapFocused('<strong>', '</strong>')),
+              _MiniTool(icon: Icons.format_italic, tooltip: l10n.italic, onTap: () => _wrapFocused('<em>', '</em>')),
+              _MiniTool(icon: Icons.link, tooltip: l10n.insertLink, onTap: () => _wrapFocused('<a href="https://">', '</a>')),
+            ],
+          ),
+          for (var i = 0; i < _quote.paragraphs.length; i++)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _ctrls[i],
+                    onTap: () => _focusedIdx = i,
+                    maxLines: null,
+                    decoration: const InputDecoration(
+                      border: InputBorder.none,
+                      isDense: true,
+                    ),
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodyLarge
+                        ?.copyWith(
+                            fontSize: 15,
+                            height: 1.6,
+                            fontStyle: FontStyle.italic),
+                    onChanged: (v) {
+                      _quote.paragraphs[i] = v;
+                      _emit();
+                    },
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, size: 16),
+                  tooltip: l10n.removeItem,
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () {
+                    setState(() {
+                      _quote.paragraphs.removeAt(i);
+                      _syncCtrls();
+                    });
+                    _emit();
+                  },
+                ),
+              ],
+            ),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              icon: const Icon(Icons.add, size: 18),
+              label: Text(l10n.addParagraph),
+              onPressed: () {
+                setState(() {
+                  _quote.paragraphs.add('');
+                  _syncCtrls();
+                  _focusedIdx = _quote.paragraphs.length - 1;
+                });
+                _emit();
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _TableField extends StatefulWidget {
   const _TableField({required this.block, required this.onChanged});
 
@@ -1327,6 +1653,28 @@ class _InsertBar extends StatelessWidget {
               html: buildCodeHtml(''),
               wpOpen: '<!-- wp:code -->',
               wpClose: '<!-- /wp:code -->',
+            )),
+          ),
+          const SizedBox(width: 6),
+          ActionChip(
+            avatar: const Icon(Icons.format_list_bulleted, size: 18),
+            label: Text(l10n.listBlock),
+            onPressed: () => onInsert(ContentBlock(
+              type: BlockType.list,
+              html: buildListHtml(ListData(items: [''])),
+              wpOpen: '<!-- wp:list -->',
+              wpClose: '<!-- /wp:list -->',
+            )),
+          ),
+          const SizedBox(width: 6),
+          ActionChip(
+            avatar: const Icon(Icons.format_quote, size: 18),
+            label: Text(l10n.quoteBlock),
+            onPressed: () => onInsert(ContentBlock(
+              type: BlockType.quote,
+              html: buildQuoteHtml(QuoteData(paragraphs: [''])),
+              wpOpen: '<!-- wp:quote -->',
+              wpClose: '<!-- /wp:quote -->',
             )),
           ),
           const SizedBox(width: 6),

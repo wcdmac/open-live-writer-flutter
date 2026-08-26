@@ -81,6 +81,14 @@ class EditorState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Sets/clears the post password. An empty string clears protection —
+  /// both protocols already serialize `post.password`.
+  void updatePassword(String password) {
+    post.password = password.trim().isEmpty ? null : password.trim();
+    _dirty = true;
+    notifyListeners();
+  }
+
   void updateStatus(PostStatus status) {
     post.status = status;
     _statusTouched = true;

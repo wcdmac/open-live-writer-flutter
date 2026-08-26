@@ -1,16 +1,19 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../editor/block_editor.dart';
 import '../l10n/app_localizations.dart';
 import '../models/blog_post.dart';
+import '../services/local_draft_store.dart';
 import '../state/app_state.dart';
 import '../state/editor_state.dart';
 import 'editor/editor_toolbar.dart';
 import 'editor/live_preview.dart';
 
 /// App version.
-const String kAppVersion = 'v1.5.13';
+const String kAppVersion = 'v1.6.0';
 
 /// Localized display label for a [PostStatus] (dashboard chips + editor).
 String statusLabel(AppLocalizations l10n, PostStatus status) =>
@@ -26,9 +29,14 @@ String statusLabel(AppLocalizations l10n, PostStatus status) =>
 /// Post editor with real-time preview. Layout adapts to screen width:
 /// split view (editor + preview) on desktop, tabs on phones.
 class PostEditorPage extends StatefulWidget {
-  const PostEditorPage({super.key, this.existingPost});
+  const PostEditorPage({super.key, this.existingPost, this.localDraft});
 
   final BlogPost? existingPost;
+
+  /// Opens the editor pre-filled from a locally stored draft (offline
+  /// writing). On the first successful save to the blog the local draft
+  /// is removed automatically.
+  final LocalDraft? localDraft;
 
   @override
   State<PostEditorPage> createState() => _PostEditorPageState();
@@ -57,24 +65,59 @@ class _PostEditorPageState extends State<PostEditorPage>
   String? _loadError;
   bool _emptyContent = false;
 
+  // --- Undo / redo + word count ------------------------------------------
+  // Page-level snapshot history covering title + content. The visual editor
+  // picks external controller changes up via its didUpdateWidget, so one
+  // stack covers both editing modes.
+  final List<(String, String)> _undoStack = [];
+  final List<(String, String)> _redoStack = [];
+  bool _applyingHistory = false;
+  Timer? _historyDebounce;
+  int _charCount = 0;
+
+  /// Id of the local draft this editor session was opened from (null when
+  /// not editing a local draft). Consumed after the first successful save.
+  String? _sourceDraftId;
+
   @override
   void initState() {
     super.initState();
     final app = context.read<AppState>();
+    final draft = widget.localDraft;
     _editor = EditorState(
       service: app.service,
       initialPost: widget.existingPost?.copy(),
       theme: app.theme,
     );
-    _titleController = TextEditingController(text: widget.existingPost?.title ?? '');
-    _contentController =
-        TextEditingController(text: widget.existingPost?.content ?? '');
+    _titleController = TextEditingController(
+        text: widget.existingPost?.title ?? draft?.title ?? '');
+    _contentController = TextEditingController(
+        text: widget.existingPost?.content ?? draft?.content ?? '');
     _tagController =
         TextEditingController(text: widget.existingPost?.tags.join(', ') ?? '');
+    if (draft != null) {
+      _editor.updateTitle(draft.title);
+      _editor.updateContent(draft.content);
+      if (draft.excerpt.isNotEmpty) _editor.updateExcerpt(draft.excerpt);
+      if (draft.slug?.isNotEmpty == true) _editor.updateSlug(draft.slug!);
+      _sourceDraftId = draft.id;
+    }
+    // Baseline snapshot: undo can never go past the state the page opened
+    // with.
+    _undoStack.add((_titleController.text, _contentController.text));
+    _titleController.addListener(_onHistorySourceChanged);
+    _contentController.addListener(_onHistorySourceChanged);
+    _updateCharCount();
     // The empty-content notice is only meaningful for EXISTING posts whose
     // content failed to load — never for a brand-new blank post.
     _emptyContent = widget.existingPost != null &&
         widget.existingPost!.content.trim().isEmpty;
+
+    // Crash recovery: a NEW post (not opened from a local draft) checks for
+    // an unsaved snapshot from a previous session.
+    if (widget.existingPost == null && draft == null && app.hasAccount) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _checkCrashSnapshot(app));
+    }
 
     // Post lists often ship without full content — fetch the complete
     // post in the background. The editor stays interactive the whole time.
@@ -123,6 +166,14 @@ class _PostEditorPageState extends State<PostEditorPage>
         if (fresh.tags.isNotEmpty) {
           _tagController.text = fresh.tags.join(', ');
         }
+        // Fresh server copy = new baseline; user edits start from here.
+        _applyingHistory = true;
+        _undoStack
+          ..clear()
+          ..add((_titleController.text, _contentController.text));
+        _redoStack.clear();
+        _applyingHistory = false;
+        _updateCharCount();
       });
     } catch (e) {
       if (!mounted) return;
@@ -136,6 +187,7 @@ class _PostEditorPageState extends State<PostEditorPage>
 
   @override
   void dispose() {
+    _historyDebounce?.cancel();
     _tabController.dispose();
     _titleController.dispose();
     _contentController.dispose();
@@ -144,23 +196,236 @@ class _PostEditorPageState extends State<PostEditorPage>
     super.dispose();
   }
 
+  // --- Undo / redo + word count -------------------------------------------
+
+  /// Debounced snapshot capture on every title/content change.
+  void _onHistorySourceChanged() {
+    if (_applyingHistory) return;
+    _updateCharCount();
+    _historyDebounce?.cancel();
+    _historyDebounce = Timer(const Duration(milliseconds: 700), _pushHistory);
+  }
+
+  void _pushHistory() {
+    if (_applyingHistory || !mounted) return;
+    final snap = (_titleController.text, _contentController.text);
+    final last = _undoStack.lastOrNull;
+    if (last != null && last.$1 == snap.$1 && last.$2 == snap.$2) return;
+    _undoStack.add(snap);
+    if (_undoStack.length > 100) _undoStack.removeAt(0);
+    _redoStack.clear();
+    setState(() {});
+    // Crash-recovery autosave: a NEW post's in-progress work is mirrored
+    // to the per-account snapshot slot after every committed edit batch.
+    if (widget.existingPost == null &&
+        (snap.$1.trim().isNotEmpty || snap.$2.trim().isNotEmpty)) {
+      final app = context.read<AppState>();
+      final account = app.currentAccount;
+      if (account != null) {
+        app.drafts.saveSnapshot(
+          account.id,
+          CrashSnapshot(
+            title: snap.$1,
+            content: snap.$2,
+            savedAt: DateTime.now(),
+          ),
+        );
+      }
+    }
+  }
+
+  void _undo() {
+    if (_undoStack.length < 2 || _applyingHistory) return;
+    _applyHistory(_undoStack.removeLast(), _redoStack);
+  }
+
+  void _redo() {
+    if (_redoStack.isEmpty || _applyingHistory) return;
+    _applyHistory(_redoStack.removeLast(), _undoStack);
+  }
+
+  void _applyHistory((String, String) target, List<(String, String)> other) {
+    setState(() {
+      _applyingHistory = true;
+      other.add((_titleController.text, _contentController.text));
+      _titleController.value = TextEditingValue(
+        text: target.$1,
+        selection: TextSelection.collapsed(offset: target.$1.length),
+      );
+      _contentController.value = TextEditingValue(
+        text: target.$2,
+        selection: TextSelection.collapsed(offset: target.$2.length),
+      );
+      _editor.updateTitle(target.$1);
+      _editor.updateContent(target.$2);
+      _applyingHistory = false;
+      _updateCharCount();
+    });
+  }
+
+  /// Counts visible characters (tags, WP block comments and whitespace
+  /// stripped). For CJK text this is the conventional "字数".
+  void _updateCharCount() {
+    final text =
+        (_titleController.text + _contentController.text)
+            .replaceAll(RegExp(r'<!--[\s\S]*?-->'), '')
+            .replaceAll(RegExp(r'<[^>]+>'), '')
+            .replaceAll(RegExp(r'\s'), '');
+    final n = text.runes.length;
+    if (n != _charCount) {
+      _charCount = n;
+      if (mounted) setState(() {});
+    }
+  }
+
+  /// Compact bar under the AppBar: undo / redo + live word count.
+  Widget _buildHistoryBar() {
+    final l10n = AppLocalizations.of(context)!;
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: scheme.surfaceContainerLow,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: Row(
+          children: [
+            IconButton(
+              tooltip: l10n.undo,
+              icon: const Icon(Icons.undo, size: 20),
+              visualDensity: VisualDensity.compact,
+              onPressed: _undoStack.length >= 2 ? _undo : null,
+            ),
+            IconButton(
+              tooltip: l10n.redo,
+              icon: const Icon(Icons.redo, size: 20),
+              visualDensity: VisualDensity.compact,
+              onPressed: _redoStack.isNotEmpty ? _redo : null,
+            ),
+            const Spacer(),
+            Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: Text(
+                l10n.charCount(_charCount),
+                style: Theme.of(context)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(color: scheme.onSurfaceVariant),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _save({required bool publish}) async {
     final l10n = AppLocalizations.of(context)!;
     final ok = await _editor.save(publish: publish);
     if (!mounted) return;
-    showEditorSnack(
-      context,
-      ok
-          ? (publish
-              ? l10n.postPublished(_editor.lastSavedId != null
-                  ? ' (id ${_editor.lastSavedId})'
-                  : '')
-              : l10n.draftSaved)
-          : (_editor.saveError ?? l10n.saveFailed),
-    );
-    // Reload the home post list so the saved post shows up immediately.
+    final app = context.read<AppState>();
     if (ok) {
-      context.read<AppState>().refresh();
+      showEditorSnack(
+        context,
+        publish
+            ? l10n.postPublished(_editor.lastSavedId != null
+                ? ' (id ${_editor.lastSavedId})'
+                : '')
+            : l10n.draftSaved,
+      );
+      final account = app.currentAccount;
+      if (account != null) {
+        // The draft made it to the server: crash snapshot and source
+        // local draft are both obsolete.
+        app.drafts.clearSnapshot(account.id);
+        if (_sourceDraftId != null) {
+          await app.deleteLocalDraft(_sourceDraftId!);
+          _sourceDraftId = null;
+        }
+      }
+      app.refresh();
+    } else if (_isNetworkError(_editor.saveError)) {
+      // Offline fallback: park the draft locally so nothing is lost; the
+      // home screen lists it under local drafts for later publishing.
+      await _saveLocalDraft(app);
+      if (mounted) showEditorSnack(context, l10n.savedOfflineDraft);
+    } else {
+      showEditorSnack(context, _editor.saveError ?? l10n.saveFailed);
+    }
+  }
+
+  /// True when the save error looks like a connectivity failure rather
+  /// than a server rejection.
+  bool _isNetworkError(String? message) => message != null &&
+      RegExp(
+          r'SocketException|TimeoutException|Connection|Failed host lookup|ClientException|Transport error|Network is unreachable',
+          caseSensitive: false).hasMatch(message);
+
+  /// Saves the current editor content as a local (offline) draft.
+  Future<void> _saveLocalDraft(AppState app) async {
+    final account = app.currentAccount;
+    if (account == null) return;
+    await app.saveLocalDraft(LocalDraft(
+      id: _sourceDraftId ?? app.newDraftId(),
+      accountId: account.id,
+      title: _titleController.text,
+      content: _contentController.text,
+      excerpt: _editor.post.excerpt,
+      slug: _editor.post.slug,
+      updatedAt: DateTime.now(),
+    ));
+    _sourceDraftId ??= app.localDrafts
+        .where((d) => d.accountId == account.id &&
+            d.title == _titleController.text &&
+            d.content == _contentController.text)
+        .firstOrNull
+        ?.id;
+  }
+
+  /// Offers to restore the crash snapshot left by a previous new-post
+  /// session (app kill, crash, forced quit).
+  Future<void> _checkCrashSnapshot(AppState app) async {
+    final account = app.currentAccount;
+    if (account == null || !mounted) return;
+    final snap = await app.drafts.loadSnapshot(account.id);
+    if (snap == null || !mounted) return;
+    final l10n = AppLocalizations.of(context)!;
+    final restore = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l10n.crashRecoveryTitle),
+        content: Text(l10n.crashRecoveryBody(
+            snap.savedAt.toLocal().toString().substring(0, 16))),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(l10n.discard),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(l10n.restore),
+          ),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    if (restore == true) {
+      setState(() {
+        _applyingHistory = true;
+        _titleController.text = snap.title;
+        _contentController.value = TextEditingValue(
+          text: snap.content,
+          selection: TextSelection.collapsed(offset: snap.content.length),
+        );
+        _editor.updateTitle(snap.title);
+        _editor.updateContent(snap.content);
+        _applyingHistory = false;
+        _undoStack
+          ..clear()
+          ..add((_titleController.text, _contentController.text));
+        _redoStack.clear();
+        _updateCharCount();
+      });
+    } else {
+      app.drafts.clearSnapshot(account.id);
     }
   }
 
@@ -316,6 +581,7 @@ class _PostEditorPageState extends State<PostEditorPage>
                   ),
                 ],
               ),
+            _buildHistoryBar(),
             Expanded(
               child: isWide ? _buildSplitView(app) : _buildTabbedView(app),
             ),
@@ -563,7 +829,34 @@ class _PostSettingsSheet extends StatelessWidget {
         children: [
           Text(l10n.postSettings,
               style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 16),
+          const SizedBox(height: 8),
+
+          // --- Save local draft (offline writing) -------------------------
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.cloud_off_outlined),
+            title: Text(l10n.saveLocalDraft),
+            subtitle: Text(l10n.saveLocalDraftHelp),
+            onTap: () async {
+              final account = app.currentAccount;
+              if (account == null) return;
+              final messenger = ScaffoldMessenger.of(context);
+              await app.saveLocalDraft(LocalDraft(
+                id: app.newDraftId(),
+                accountId: account.id,
+                title: editor.post.title,
+                content: editor.post.content,
+                excerpt: editor.post.excerpt,
+                slug: editor.post.slug,
+                updatedAt: DateTime.now(),
+              ));
+              messenger.showSnackBar(
+                  SnackBar(content: Text(l10n.savedOfflineDraft)));
+              if (context.mounted) Navigator.of(context).pop();
+            },
+          ),
+          const Divider(height: 1),
+          const SizedBox(height: 12),
 
           // --- Status ------------------------------------------------------
           DropdownButtonFormField<PostStatus>(
@@ -622,6 +915,14 @@ class _PostSettingsSheet extends StatelessWidget {
                 value: editor.post.categories.contains(cat.id),
                 title: Text(cat.name),
                 onChanged: (_) => editor.toggleCategory(cat.id),
+              ),
+            ),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                icon: const Icon(Icons.add, size: 18),
+                label: Text(l10n.newCategory),
+                onPressed: () => _createCategory(context, app, editor),
               ),
             ),
             const SizedBox(height: 8),
@@ -703,6 +1004,21 @@ class _PostSettingsSheet extends StatelessWidget {
             ),
             onChanged: editor.updateSlug,
           ),
+          const SizedBox(height: 12),
+          // Password protection: visitors must enter this password to read
+          // the post (public + password; distinct from the private status,
+          // which hides the post from everyone but the owner).
+          TextField(
+            controller: TextEditingController(text: editor.post.password ?? '')
+              ..selection = TextSelection.fromPosition(
+                  TextPosition(offset: (editor.post.password ?? '').length)),
+            decoration: InputDecoration(
+              labelText: l10n.postPassword,
+              helperText: l10n.postPasswordHelp,
+              prefixIcon: const Icon(Icons.lock_outline),
+            ),
+            onChanged: editor.updatePassword,
+          ),
           const SizedBox(height: 16),
 
           // --- Discussion --------------------------------------------------
@@ -727,5 +1043,41 @@ class _PostSettingsSheet extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  /// Creates a category on the blog, then pre-selects it for this post.
+  Future<void> _createCategory(
+      BuildContext context, AppState app, EditorState editor) async {
+    final l10n = AppLocalizations.of(context)!;
+    final controller = TextEditingController();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l10n.newCategory),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: InputDecoration(hintText: l10n.newCategoryHint),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(l10n.cancel)),
+          FilledButton(
+              onPressed: () =>
+                  Navigator.of(context).pop(controller.text.trim()),
+              child: Text(l10n.ok)),
+        ],
+      ),
+    );
+    if (name == null || name.isEmpty) return;
+    final ok = await app.createCategory(name);
+    if (!ok || !context.mounted) return;
+    // Pre-select the freshly created category by name.
+    final created =
+        app.categories.where((c) => c.name == name).firstOrNull;
+    if (created != null && !editor.post.categories.contains(created.id)) {
+      editor.toggleCategory(created.id);
+    }
   }
 }

@@ -275,9 +275,9 @@ class WordPressRestClient {
   }
 
   Future<bool> deletePost(String id, {bool isPage = false}) async {
-    await _request(
-        'DELETE', '/wp/v2/${isPage ? 'pages' : 'posts'}/$id',
-        query: {'force': 'true'});
+    // No force param: WordPress moves the post to trash, matching the
+    // "move to trash" semantics of wp.deletePost in XML-RPC.
+    await _request('DELETE', '/wp/v2/${isPage ? 'pages' : 'posts'}/$id');
     return true;
   }
 
@@ -305,7 +305,7 @@ class WordPressRestClient {
       {String? parentId, String? slug}) async {
     final data = await _request('POST', '/wp/v2/categories', body: {
       'name': name,
-      if (slug != null) 'slug': slug,
+      'slug': ?slug,
       if (parentId != null && parentId != '0') 'parent': int.tryParse(parentId),
     });
     return PostCategory(

@@ -187,6 +187,48 @@
   "moveUp": "上移",
   "moveDown": "下移",
   "captionLabel": "图片说明（可选）",
-  "emptyBlockHint": "在此输入…"
+  "emptyBlockHint": "在此输入…",
+  "listBlock": "列表",
+  "quoteBlock": "引用",
+  "removeItem": "删除此项",
+  "addItem": "添加一项",
+  "addParagraph": "添加段落",
+  "postPassword": "文章密码",
+  "postPasswordHelp": "读者需输入此密码才能查看文章（留空 = 不加保护）",
+  "newCategory": "新建分类",
+  "newCategoryHint": "分类名称",
+  "undo": "撤销",
+  "redo": "重做",
+  "charCount": "{count} 字",
+  "@charCount": {
+    "placeholders": {
+      "count": {
+        "type": "num"
+      }
+    }
+  },
+  "saveLocalDraft": "保存到本地草稿",
+  "saveLocalDraftHelp": "仅保存在本机，联网后再发布",
+  "savedOfflineDraft": "网络不可用——草稿已保存到本地，稍后可从首页发布。",
+  "localDraftSubtitle": "本地草稿 · {time} · 未同步",
+  "@localDraftSubtitle": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "deleteDraftTitle": "删除本地草稿",
+  "crashRecoveryTitle": "发现未保存的内容",
+  "crashRecoveryBody": "检测到 {time} 未保存的草稿，是否恢复？",
+  "@crashRecoveryBody": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "restore": "恢复",
+  "delete": "删除"
 }
 

@@ -243,6 +243,48 @@
   "moveUp": "Move up",
   "moveDown": "Move down",
   "captionLabel": "Caption (optional)",
-  "emptyBlockHint": "Type here…"
+  "emptyBlockHint": "Type here…",
+  "listBlock": "List",
+  "quoteBlock": "Quote",
+  "removeItem": "Remove item",
+  "addItem": "Add item",
+  "addParagraph": "Add paragraph",
+  "postPassword": "Post password",
+  "postPasswordHelp": "Readers must enter this password to view the post (empty = no protection)",
+  "newCategory": "New category",
+  "newCategoryHint": "Category name",
+  "undo": "Undo",
+  "redo": "Redo",
+  "charCount": "{count} characters",
+  "@charCount": {
+    "placeholders": {
+      "count": {
+        "type": "num"
+      }
+    }
+  },
+  "saveLocalDraft": "Save local draft",
+  "saveLocalDraftHelp": "Store on this device only; publish later when online",
+  "savedOfflineDraft": "Network unavailable — draft saved locally. Publish it later from the home screen.",
+  "localDraftSubtitle": "Local draft • {time} • not synced",
+  "@localDraftSubtitle": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "deleteDraftTitle": "Delete local draft",
+  "crashRecoveryTitle": "Unsaved changes found",
+  "crashRecoveryBody": "An unsaved draft from {time} was recovered. Restore it?",
+  "@crashRecoveryBody": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "restore": "Restore",
+  "delete": "Delete"
 }
 

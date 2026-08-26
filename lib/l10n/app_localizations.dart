@@ -1027,6 +1027,132 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Type here…'**
   String get emptyBlockHint;
+
+  /// No description provided for @listBlock.
+  ///
+  /// In en, this message translates to:
+  /// **'List'**
+  String get listBlock;
+
+  /// No description provided for @quoteBlock.
+  ///
+  /// In en, this message translates to:
+  /// **'Quote'**
+  String get quoteBlock;
+
+  /// No description provided for @removeItem.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove item'**
+  String get removeItem;
+
+  /// No description provided for @addItem.
+  ///
+  /// In en, this message translates to:
+  /// **'Add item'**
+  String get addItem;
+
+  /// No description provided for @addParagraph.
+  ///
+  /// In en, this message translates to:
+  /// **'Add paragraph'**
+  String get addParagraph;
+
+  /// No description provided for @postPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Post password'**
+  String get postPassword;
+
+  /// No description provided for @postPasswordHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Readers must enter this password to view the post (empty = no protection)'**
+  String get postPasswordHelp;
+
+  /// No description provided for @newCategory.
+  ///
+  /// In en, this message translates to:
+  /// **'New category'**
+  String get newCategory;
+
+  /// No description provided for @newCategoryHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Category name'**
+  String get newCategoryHint;
+
+  /// No description provided for @undo.
+  ///
+  /// In en, this message translates to:
+  /// **'Undo'**
+  String get undo;
+
+  /// No description provided for @redo.
+  ///
+  /// In en, this message translates to:
+  /// **'Redo'**
+  String get redo;
+
+  /// No description provided for @charCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} characters'**
+  String charCount(num count);
+
+  /// No description provided for @saveLocalDraft.
+  ///
+  /// In en, this message translates to:
+  /// **'Save local draft'**
+  String get saveLocalDraft;
+
+  /// No description provided for @saveLocalDraftHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Store on this device only; publish later when online'**
+  String get saveLocalDraftHelp;
+
+  /// No description provided for @savedOfflineDraft.
+  ///
+  /// In en, this message translates to:
+  /// **'Network unavailable — draft saved locally. Publish it later from the home screen.'**
+  String get savedOfflineDraft;
+
+  /// No description provided for @localDraftSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Local draft • {time} • not synced'**
+  String localDraftSubtitle(String time);
+
+  /// No description provided for @deleteDraftTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete local draft'**
+  String get deleteDraftTitle;
+
+  /// No description provided for @crashRecoveryTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Unsaved changes found'**
+  String get crashRecoveryTitle;
+
+  /// No description provided for @crashRecoveryBody.
+  ///
+  /// In en, this message translates to:
+  /// **'An unsaved draft from {time} was recovered. Restore it?'**
+  String crashRecoveryBody(String time);
+
+  /// No description provided for @restore.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore'**
+  String get restore;
+
+  /// No description provided for @delete.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get delete;
 }
 
 class _AppLocalizationsDelegate

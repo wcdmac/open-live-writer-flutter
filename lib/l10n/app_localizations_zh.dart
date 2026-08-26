@@ -501,4 +501,73 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get emptyBlockHint => '在此输入…';
+
+  @override
+  String get listBlock => '列表';
+
+  @override
+  String get quoteBlock => '引用';
+
+  @override
+  String get removeItem => '删除此项';
+
+  @override
+  String get addItem => '添加一项';
+
+  @override
+  String get addParagraph => '添加段落';
+
+  @override
+  String get postPassword => '文章密码';
+
+  @override
+  String get postPasswordHelp => '读者需输入此密码才能查看文章（留空 = 不加保护）';
+
+  @override
+  String get newCategory => '新建分类';
+
+  @override
+  String get newCategoryHint => '分类名称';
+
+  @override
+  String get undo => '撤销';
+
+  @override
+  String get redo => '重做';
+
+  @override
+  String charCount(num count) {
+    return '$count 字';
+  }
+
+  @override
+  String get saveLocalDraft => '保存到本地草稿';
+
+  @override
+  String get saveLocalDraftHelp => '仅保存在本机，联网后再发布';
+
+  @override
+  String get savedOfflineDraft => '网络不可用——草稿已保存到本地，稍后可从首页发布。';
+
+  @override
+  String localDraftSubtitle(String time) {
+    return '本地草稿 · $time · 未同步';
+  }
+
+  @override
+  String get deleteDraftTitle => '删除本地草稿';
+
+  @override
+  String get crashRecoveryTitle => '发现未保存的内容';
+
+  @override
+  String crashRecoveryBody(String time) {
+    return '检测到 $time 未保存的草稿，是否恢复？';
+  }
+
+  @override
+  String get restore => '恢复';
+
+  @override
+  String get delete => '删除';
 }

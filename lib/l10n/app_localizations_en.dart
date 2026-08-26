@@ -505,4 +505,76 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get emptyBlockHint => 'Type here…';
+
+  @override
+  String get listBlock => 'List';
+
+  @override
+  String get quoteBlock => 'Quote';
+
+  @override
+  String get removeItem => 'Remove item';
+
+  @override
+  String get addItem => 'Add item';
+
+  @override
+  String get addParagraph => 'Add paragraph';
+
+  @override
+  String get postPassword => 'Post password';
+
+  @override
+  String get postPasswordHelp =>
+      'Readers must enter this password to view the post (empty = no protection)';
+
+  @override
+  String get newCategory => 'New category';
+
+  @override
+  String get newCategoryHint => 'Category name';
+
+  @override
+  String get undo => 'Undo';
+
+  @override
+  String get redo => 'Redo';
+
+  @override
+  String charCount(num count) {
+    return '$count characters';
+  }
+
+  @override
+  String get saveLocalDraft => 'Save local draft';
+
+  @override
+  String get saveLocalDraftHelp =>
+      'Store on this device only; publish later when online';
+
+  @override
+  String get savedOfflineDraft =>
+      'Network unavailable — draft saved locally. Publish it later from the home screen.';
+
+  @override
+  String localDraftSubtitle(String time) {
+    return 'Local draft • $time • not synced';
+  }
+
+  @override
+  String get deleteDraftTitle => 'Delete local draft';
+
+  @override
+  String get crashRecoveryTitle => 'Unsaved changes found';
+
+  @override
+  String crashRecoveryBody(String time) {
+    return 'An unsaved draft from $time was recovered. Restore it?';
+  }
+
+  @override
+  String get restore => 'Restore';
+
+  @override
+  String get delete => 'Delete';
 }

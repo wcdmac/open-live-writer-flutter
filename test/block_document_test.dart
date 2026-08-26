@@ -62,6 +62,54 @@ void main() {
     expect(blocks[1].type, BlockType.list);
   });
 
+  test('list helpers parse legacy and modern markup, emit Gutenberg canonical',
+      () {
+    // Legacy markup (bare <li>, no wp:list-item comments).
+    final legacy = parseList('<ul class="wp-block-list"><li>a</li><li>b</li></ul>');
+    expect(legacy.items, ['a', 'b']);
+    expect(legacy.ordered, isFalse);
+    // Modern markup (WP 6.7+ wp:list-item inner blocks).
+    const modern =
+        '<ul class="wp-block-list"><!-- wp:list-item -->\n<li>x</li>\n<!-- /wp:list-item --><!-- wp:list-item -->\n<li>y</li>\n<!-- /wp:list-item --></ul>';
+    final parsed = parseList(modern);
+    expect(parsed.items, ['x', 'y']);
+    // Ordered lists are detected.
+    expect(parseList('<ol><li>1</li></ol>').ordered, isTrue);
+    // Canonical output matches what the block editor itself saves.
+    expect(
+      buildListHtml(ListData(items: ['x', 'y'])),
+      '<ul class="wp-block-list"><!-- wp:list-item -->\n<li>x</li>\n<!-- /wp:list-item --><!-- wp:list-item -->\n<li>y</li>\n<!-- /wp:list-item --></ul>',
+    );
+    expect(
+      buildListHtml(ListData(items: ['1'], ordered: true)),
+      '<ol class="wp-block-list"><!-- wp:list-item -->\n<li>1</li>\n<!-- /wp:list-item --></ol>',
+    );
+    // Inline formatting inside items survives verbatim.
+    final fmt = parseList('<ul><li><strong>bold</strong> text</li></ul>');
+    expect(fmt.items.single, '<strong>bold</strong> text');
+  });
+
+  test('quote helpers parse paragraphs and preserve the opening tag', () {
+    const src = '<blockquote class="wp-block-quote is-style-plain">'
+        '<!-- wp:paragraph -->\n<p>first</p>\n<!-- /wp:paragraph -->'
+        '<!-- wp:paragraph -->\n<p>second</p>\n<!-- /wp:paragraph -->'
+        '</blockquote>';
+    final quote = parseQuote(src);
+    expect(quote, isNotNull);
+    expect(quote!.paragraphs, ['first', 'second']);
+    expect(quote.openTag,
+        '<blockquote class="wp-block-quote is-style-plain">');
+    expect(buildQuoteHtml(quote), src);
+    // Plain blockquote without <p> wrappers falls back to one paragraph.
+    final plain = parseQuote('<blockquote>raw text</blockquote>');
+    expect(plain!.paragraphs, ['raw text']);
+    // Default serialization is Gutenberg canonical.
+    expect(
+      buildQuoteHtml(QuoteData(paragraphs: ['hi'])),
+      '<blockquote class="wp-block-quote"><!-- wp:paragraph -->\n<p>hi</p>\n<!-- /wp:paragraph --></blockquote>',
+    );
+  });
+
   test('table helpers parse and serialize cells', () {
     const src =
         '<figure class="wp-block-table"><table class="has-fixed-layout"><thead><tr><th>Name</th><th>Qty</th></tr></thead>'

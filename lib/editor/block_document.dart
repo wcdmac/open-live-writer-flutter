@@ -449,6 +449,96 @@ class TableData {
   int get columnCount => rows.isEmpty ? 0 : rows.reduce((a, b) => a.length >= b.length ? a : b).length;
 }
 
+// ---------------------------------------------------------------------------
+// List block (core/list): items are the inner HTML of each <li> so inline
+// formatting (links, bold) survives editing verbatim.
+// ---------------------------------------------------------------------------
+
+/// Editable list payload.
+class ListData {
+  ListData({required this.items, this.ordered = false});
+
+  /// Inner HTML of each `<li>` — raw markup, edited as-is.
+  List<String> items;
+  bool ordered;
+}
+
+/// Parses `<ul>/<ol>` markup (with or without wp:list-item comments).
+ListData parseList(String html) {
+  final ordered =
+      RegExp(r'<ol\b', caseSensitive: false).hasMatch(html);
+  // Strip optional wp:list-item wrappers; both legacy (bare <li>) and
+  // modern (WP 6.7+) markup parse into the same shape.
+  final cleaned = html
+      .replaceAll(RegExp(r'<!--\s*wp:list-item\s*-->', caseSensitive: false), '')
+      .replaceAll(RegExp(r'<!--\s*/wp:list-item\s*-->', caseSensitive: false), '');
+  final items = RegExp(r'<li[^>]*>([\s\S]*?)</li>', caseSensitive: false)
+      .allMatches(cleaned)
+      .map((m) => m.group(1)!.trim())
+      .where((s) => s.isNotEmpty)
+      .toList();
+  return ListData(items: items, ordered: ordered);
+}
+
+/// Serializes to Gutenberg core/list markup with wp:list-item inner block
+/// comments (WP 6.7+ canonical; older WP versions migrate it transparently).
+String buildListHtml(ListData list) {
+  final tag = list.ordered ? 'ol' : 'ul';
+  final items = list.items
+      .map((i) => '<!-- wp:list-item -->\n<li>$i</li>\n<!-- /wp:list-item -->')
+      .join();
+  return '<$tag class="wp-block-list">$items</$tag>';
+}
+
+// ---------------------------------------------------------------------------
+// Quote block (core/quote): paragraphs are the inner HTML of each <p>.
+// ---------------------------------------------------------------------------
+
+/// Editable quote payload.
+class QuoteData {
+  QuoteData({required this.paragraphs, this.openTag});
+
+  /// Inner HTML of each `<p>` inside the blockquote.
+  List<String> paragraphs;
+
+  /// Original `<blockquote ...>` opening tag (preserves classes like
+  /// is-style-plain / has-text-align-*); null uses the default.
+  String? openTag;
+}
+
+/// Parses blockquote markup. Returns null for non-quote html.
+QuoteData? parseQuote(String html) {
+  final open =
+      RegExp(r'<blockquote[^>]*>', caseSensitive: false).firstMatch(html);
+  if (open == null) return null;
+  final openTag = open.group(0)!;
+  final paragraphs =
+      RegExp(r'<p[^>]*>([\s\S]*?)</p>', caseSensitive: false)
+          .allMatches(html)
+          .map((m) => m.group(1)!.trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+  if (paragraphs.isEmpty) {
+    // Quote without <p> wrappers: treat the raw inner text as one paragraph.
+    final inner = html
+        .replaceAll(RegExp(r'</?blockquote[^>]*>', caseSensitive: false), '')
+        .trim();
+    if (inner.isEmpty) return QuoteData(paragraphs: [], openTag: openTag);
+    return QuoteData(paragraphs: [inner], openTag: openTag);
+  }
+  return QuoteData(paragraphs: paragraphs, openTag: openTag);
+}
+
+/// Serializes to Gutenberg core/quote markup: each paragraph is an inner
+/// wp:paragraph block, matching how the block editor saves quotes.
+String buildQuoteHtml(QuoteData quote) {
+  final open = quote.openTag ?? '<blockquote class="wp-block-quote">';
+  final inner = quote.paragraphs
+      .map((p) => '<!-- wp:paragraph -->\n<p>$p</p>\n<!-- /wp:paragraph -->')
+      .join();
+  return '$open$inner</blockquote>';
+}
+
 String _decodeEntities(String s) => s
     .replaceAll('&amp;', '&')
     .replaceAll('&lt;', '<')
