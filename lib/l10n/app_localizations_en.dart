@@ -565,6 +565,62 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deleteDraftTitle => 'Delete local draft';
 
   @override
+  String deleteDraftConfirm(Object title) {
+    return 'Permanently delete the local draft \"$title\"? It has not been uploaded, so it cannot be recovered from the blog\'s trash.';
+  }
+
+  @override
+  String offlineCopySubtitle(String time) {
+    return 'Offline copy • $time • editable offline';
+  }
+
+  @override
+  String get deleteLocalCopy => 'Delete local copy';
+
+  @override
+  String get syncNow => 'Sync now';
+
+  @override
+  String get syncedToBlog => 'Synced to blog';
+
+  @override
+  String get saveOfflineCopy => 'Save offline copy';
+
+  @override
+  String get saveOfflineCopyHelp =>
+      'Download the full post for offline editing';
+
+  @override
+  String get savedOfflineCopy =>
+      'Offline copy saved — editable without network';
+
+  @override
+  String get exportPost => 'Export post';
+
+  @override
+  String get exportFormatHint =>
+      'Choose a format: HTML keeps the block markup, Markdown suits general editors.';
+
+  @override
+  String get markdownFormat => 'Markdown';
+
+  @override
+  String get htmlFormat => 'HTML';
+
+  @override
+  String get exportDoneTitle => 'Export complete';
+
+  @override
+  String get exportAllWxr => 'Export all posts (WXR)';
+
+  @override
+  String get exportAllWxrHelp =>
+      'Builds a standard WordPress export file re-importable in the admin';
+
+  @override
+  String get exportingPosts => 'Fetching all posts…';
+
+  @override
   String get crashRecoveryTitle => 'Unsaved changes found';
 
   @override

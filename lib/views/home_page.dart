@@ -6,6 +6,7 @@ import '../l10n/app_localizations.dart';
 import '../models/blog.dart';
 import '../models/blog_post.dart';
 import '../services/local_draft_store.dart';
+import '../services/post_exporter.dart';
 import '../state/app_state.dart';
 import 'add_account_page.dart';
 import 'post_editor_page.dart';
@@ -188,6 +189,15 @@ class _HomePageState extends State<HomePage> {
               },
             ),
             ListTile(
+              leading: const Icon(Icons.file_upload_outlined),
+              title: Text(l10n.exportAllWxr),
+              subtitle: Text(l10n.exportAllWxrHelp),
+              onTap: () {
+                Navigator.of(context).pop();
+                _exportAllWxr(context, app);
+              },
+            ),
+            ListTile(
               leading: const Icon(Icons.delete_outline),
               title: Text(l10n
                   .removeAccount(app.currentAccount?.name ?? '')),
@@ -201,6 +211,52 @@ class _HomePageState extends State<HomePage> {
         ),
       ),
     );
+  }
+
+  /// Whole-blog export: fetches every post (paged) and writes a WXR
+  /// file the WordPress admin can re-import.
+  Future<void> _exportAllWxr(BuildContext context, AppState app) async {
+    final l10n = AppLocalizations.of(context)!;
+    final account = app.currentAccount;
+    final svc = app.service;
+    if (account == null || svc == null) return;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          content: Row(
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(width: 20),
+              Expanded(child: Text(l10n.exportingPosts)),
+            ],
+          ),
+        ),
+      ),
+    );
+    try {
+      final posts = await svc.getAllPosts();
+      final wxr = PostExporter.buildWxr(posts,
+          account: account,
+          categories: app.categories,
+          tags: app.tags);
+      final stamp = DateFormat('yyyyMMdd-HHmm').format(DateTime.now());
+      final file =
+          await PostExporter.write('wordpress-export-$stamp.wxr', wxr);
+      if (context.mounted) {
+        Navigator.of(context).pop();
+        showExportedPath(
+            context, '${file.path} (${posts.length} posts)');
+      }
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(l10n.operationFailed('$e'))));
+      }
+    }
   }
 }
 
@@ -283,50 +339,133 @@ class _BlogSwitcher extends StatelessWidget {
   }
 }
 
-/// A locally stored draft (offline writing). Tapping opens it in the
-/// editor; long-press deletes it after confirmation.
+/// A locally stored draft (offline writing) or an offline copy of a
+/// server post. Tapping opens it in the editor; long-press offers
+/// management (sync/delete for copies, delete for plain drafts).
 class _LocalDraftTile extends StatelessWidget {
   const _LocalDraftTile({required this.draft, required this.app});
 
   final LocalDraft draft;
   final AppState app;
 
+  void _openEditor(BuildContext context) => Navigator.of(context).push(
+        MaterialPageRoute(
+            builder: (_) => PostEditorPage(localDraft: draft)),
+      );
+
+  Future<void> _confirmDelete(BuildContext context) async {
+    final l10n = AppLocalizations.of(context)!;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(draft.isOfflineCopy
+            ? l10n.deleteLocalCopy
+            : l10n.deleteDraftTitle),
+        content: Text(l10n.deleteDraftConfirm(
+            draft.title.isEmpty ? l10n.untitled : draft.title)),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text(l10n.cancel)),
+          FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: Text(l10n.delete)),
+        ],
+      ),
+    );
+    if (ok == true) app.deleteLocalDraft(draft.id);
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final dateFmt = DateFormat.yMMMd().add_jm();
     return ListTile(
-      leading: const Icon(Icons.cloud_off_outlined),
+      leading: Icon(draft.isOfflineCopy
+          ? Icons.cloud_done_outlined
+          : Icons.cloud_off_outlined),
       title: Text(
         draft.title.trim().isEmpty ? l10n.untitled : draft.title,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
-      subtitle: Text(l10n.localDraftSubtitle(dateFmt.format(draft.updatedAt))),
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(
-            builder: (_) => PostEditorPage(localDraft: draft)),
-      ),
-      onLongPress: () async {
-        final ok = await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: Text(l10n.deleteDraftTitle),
-            content: Text(l10n.deletePostConfirm(
-                draft.title.isEmpty ? l10n.untitled : draft.title)),
-            actions: [
-              TextButton(
-                  onPressed: () => Navigator.of(context).pop(false),
-                  child: Text(l10n.cancel)),
-              FilledButton(
-                  onPressed: () => Navigator.of(context).pop(true),
-                  child: Text(l10n.delete)),
-            ],
-          ),
-        );
-        if (ok == true) app.deleteLocalDraft(draft.id);
-      },
+      subtitle: Text(draft.isOfflineCopy
+          ? l10n.offlineCopySubtitle(dateFmt.format(draft.updatedAt))
+          : l10n.localDraftSubtitle(dateFmt.format(draft.updatedAt))),
+      onTap: () => _openEditor(context),
+      onLongPress: () => draft.isOfflineCopy
+          ? _showCopyActions(context)
+          : _confirmDelete(context),
     );
+  }
+
+  /// Offline-copy management sheet: open, push changes to the server,
+  /// or remove the local copy.
+  void _showCopyActions(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                draft.title.isEmpty ? l10n.untitled : draft.title,
+                style: const TextStyle(fontWeight: FontWeight.bold),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.edit_outlined),
+              title: Text(l10n.editPost),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                _openEditor(context);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.sync),
+              title: Text(l10n.syncNow),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                _sync(context);
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.delete_outline,
+                  color: Theme.of(context).colorScheme.error),
+              title: Text(l10n.deleteLocalCopy,
+                  style:
+                      TextStyle(color: Theme.of(context).colorScheme.error)),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                _confirmDelete(context);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _sync(BuildContext context) async {
+    final l10n = AppLocalizations.of(context)!;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final ok = await app.syncOfflineCopy(draft);
+      if (!context.mounted) return;
+      messenger.showSnackBar(SnackBar(
+          content: Text(ok ? l10n.syncedToBlog : l10n.operationFailed(''))));
+    } catch (e) {
+      if (context.mounted) {
+        messenger.showSnackBar(
+            SnackBar(content: Text(l10n.operationFailed('$e'))));
+      }
+    }
   }
 }
 
@@ -425,6 +564,23 @@ class _PostTile extends StatelessWidget {
                 );
               },
             ),
+            ListTile(
+              leading: const Icon(Icons.cloud_download_outlined),
+              title: Text(l10n.saveOfflineCopy),
+              subtitle: Text(l10n.saveOfflineCopyHelp),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                _saveOffline(context, post);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.file_download_outlined),
+              title: Text(l10n.exportPost),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                _exportPost(context, post);
+              },
+            ),
             if (post.status != PostStatus.publish)
               ListTile(
                 leading: const Icon(Icons.publish_outlined),
@@ -488,6 +644,74 @@ class _PostTile extends StatelessWidget {
     }
   }
 
+  /// Downloads the full post and stores it as an offline copy.
+  Future<void> _saveOffline(BuildContext context, BlogPost post) async {
+    final l10n = AppLocalizations.of(context)!;
+    final messenger = ScaffoldMessenger.of(context);
+    final svc = app.service;
+    if (svc == null || post.id == null) return;
+    try {
+      final full = await svc.getPost(post.id!, isPage: post.isPage);
+      await app.saveOfflinePost(full);
+      if (context.mounted) {
+        messenger.showSnackBar(
+            SnackBar(content: Text(l10n.savedOfflineCopy)));
+      }
+    } catch (e) {
+      if (context.mounted) {
+        messenger.showSnackBar(
+            SnackBar(content: Text(l10n.operationFailed('$e'))));
+      }
+    }
+  }
+
+  /// Single-post export: HTML or Markdown, saved to the local file
+  /// system. Fetches the full post first — list entries can be partial.
+  Future<void> _exportPost(BuildContext context, BlogPost post) async {
+    final l10n = AppLocalizations.of(context)!;
+    final svc = app.service;
+    if (svc == null || post.id == null) return;
+    BlogPost full = post;
+    try {
+      full = await svc.getPost(post.id!, isPage: post.isPage);
+    } catch (_) {
+      // Offline: fall back to whatever the list provided.
+    }
+    if (!context.mounted) return;
+    final format = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l10n.exportPost),
+        content: Text(l10n.exportFormatHint),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(l10n.cancel)),
+          TextButton(
+              onPressed: () => Navigator.of(context).pop('md'),
+              child: Text(l10n.markdownFormat)),
+          FilledButton(
+              onPressed: () => Navigator.of(context).pop('html'),
+              child: Text(l10n.htmlFormat)),
+        ],
+      ),
+    );
+    if (format == null || !context.mounted) return;
+    try {
+      final contents = format == 'md'
+          ? PostExporter.toMarkdown(full, categoryName: app.categoryName)
+          : PostExporter.buildHtmlDocument(full);
+      final file = await PostExporter.write(
+          PostExporter.postFileName(full, format), contents);
+      if (context.mounted) showExportedPath(context, file.path);
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(l10n.operationFailed('$e'))));
+      }
+    }
+  }
+
   Future<void> _deletePost(BuildContext context, BlogPost post) async {
     final l10n = AppLocalizations.of(context)!;
     final svc = app.service;
@@ -521,6 +745,23 @@ class _PostTile extends StatelessWidget {
       }
     }
   }
+}
+
+/// Shows where an export landed so the file is easy to find.
+void showExportedPath(BuildContext context, String path) {
+  final l10n = AppLocalizations.of(context)!;
+  showDialog<void>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text(l10n.exportDoneTitle),
+      content: SelectableText(path),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(l10n.ok)),
+      ],
+    ),
+  );
 }
 
 class _StatusChip extends StatelessWidget {

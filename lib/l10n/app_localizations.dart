@@ -1130,6 +1130,102 @@ abstract class AppLocalizations {
   /// **'Delete local draft'**
   String get deleteDraftTitle;
 
+  /// No description provided for @deleteDraftConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Permanently delete the local draft \"{title}\"? It has not been uploaded, so it cannot be recovered from the blog\'s trash.'**
+  String deleteDraftConfirm(Object title);
+
+  /// No description provided for @offlineCopySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Offline copy • {time} • editable offline'**
+  String offlineCopySubtitle(String time);
+
+  /// No description provided for @deleteLocalCopy.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete local copy'**
+  String get deleteLocalCopy;
+
+  /// No description provided for @syncNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync now'**
+  String get syncNow;
+
+  /// No description provided for @syncedToBlog.
+  ///
+  /// In en, this message translates to:
+  /// **'Synced to blog'**
+  String get syncedToBlog;
+
+  /// No description provided for @saveOfflineCopy.
+  ///
+  /// In en, this message translates to:
+  /// **'Save offline copy'**
+  String get saveOfflineCopy;
+
+  /// No description provided for @saveOfflineCopyHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Download the full post for offline editing'**
+  String get saveOfflineCopyHelp;
+
+  /// No description provided for @savedOfflineCopy.
+  ///
+  /// In en, this message translates to:
+  /// **'Offline copy saved — editable without network'**
+  String get savedOfflineCopy;
+
+  /// No description provided for @exportPost.
+  ///
+  /// In en, this message translates to:
+  /// **'Export post'**
+  String get exportPost;
+
+  /// No description provided for @exportFormatHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a format: HTML keeps the block markup, Markdown suits general editors.'**
+  String get exportFormatHint;
+
+  /// No description provided for @markdownFormat.
+  ///
+  /// In en, this message translates to:
+  /// **'Markdown'**
+  String get markdownFormat;
+
+  /// No description provided for @htmlFormat.
+  ///
+  /// In en, this message translates to:
+  /// **'HTML'**
+  String get htmlFormat;
+
+  /// No description provided for @exportDoneTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Export complete'**
+  String get exportDoneTitle;
+
+  /// No description provided for @exportAllWxr.
+  ///
+  /// In en, this message translates to:
+  /// **'Export all posts (WXR)'**
+  String get exportAllWxr;
+
+  /// No description provided for @exportAllWxrHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Builds a standard WordPress export file re-importable in the admin'**
+  String get exportAllWxrHelp;
+
+  /// No description provided for @exportingPosts.
+  ///
+  /// In en, this message translates to:
+  /// **'Fetching all posts…'**
+  String get exportingPosts;
+
   /// No description provided for @crashRecoveryTitle.
   ///
   /// In en, this message translates to:

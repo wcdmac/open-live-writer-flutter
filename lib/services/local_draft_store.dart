@@ -2,8 +2,14 @@ import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../models/blog_post.dart';
+
 /// A locally stored draft — written offline or auto-saved on network
 /// failure, later opened and published to the blog. Stored per account.
+///
+/// When [postId] is set the entry is an OFFLINE COPY of an existing
+/// server post (downloaded for offline editing); otherwise it is a plain
+/// new-post draft.
 class LocalDraft {
   LocalDraft({
     required this.id,
@@ -13,7 +19,14 @@ class LocalDraft {
     this.excerpt = '',
     this.slug,
     required this.updatedAt,
-  });
+    this.postId,
+    this.postStatus,
+    this.isPage = false,
+    List<String>? categories,
+    List<String>? tags,
+    this.remoteModified,
+  })  : categories = categories ?? const [],
+        tags = tags ?? const [];
 
   final String id;
   final String accountId;
@@ -23,6 +36,36 @@ class LocalDraft {
   String? slug;
   DateTime updatedAt;
 
+  /// Server post id when this draft is an offline copy of a post.
+  final String? postId;
+
+  /// WordPress status value ('publish', 'draft', ...) of the source post.
+  final String? postStatus;
+  final bool isPage;
+
+  /// Category ids / tag names of the source post.
+  final List<String> categories;
+  final List<String> tags;
+
+  /// When the server copy was last known to match this content.
+  final DateTime? remoteModified;
+
+  bool get isOfflineCopy => postId != null && postId!.isNotEmpty;
+
+  /// Rebuilds the server post model from this copy, so the editor and
+  /// sync flows can push it back with editPost.
+  BlogPost toBlogPost() => BlogPost(
+        id: postId,
+        title: title,
+        content: content,
+        excerpt: excerpt,
+        slug: slug,
+        status: PostStatus.fromWp(postStatus),
+        isPage: isPage,
+        categories: List.of(categories),
+        tags: List.of(tags),
+      );
+
   Map<String, dynamic> toJson() => {
         'id': id,
         'accountId': accountId,
@@ -31,6 +74,12 @@ class LocalDraft {
         'excerpt': excerpt,
         'slug': slug,
         'updatedAt': updatedAt.toIso8601String(),
+        'postId': postId,
+        'postStatus': postStatus,
+        'isPage': isPage,
+        'categories': categories,
+        'tags': tags,
+        'remoteModified': remoteModified?.toIso8601String(),
       };
 
   static LocalDraft fromJson(Map<String, dynamic> json) => LocalDraft(
@@ -42,6 +91,17 @@ class LocalDraft {
         slug: json['slug'] as String?,
         updatedAt: DateTime.tryParse(json['updatedAt'] as String? ?? '') ??
             DateTime.now(),
+        postId: json['postId'] as String?,
+        postStatus: json['postStatus'] as String?,
+        isPage: (json['isPage'] ?? false) as bool,
+        categories: ((json['categories'] ?? const []) as List<dynamic>)
+            .map((e) => '$e')
+            .toList(),
+        tags: ((json['tags'] ?? const []) as List<dynamic>)
+            .map((e) => '$e')
+            .toList(),
+        remoteModified:
+            DateTime.tryParse(json['remoteModified'] as String? ?? ''),
       );
 }
 

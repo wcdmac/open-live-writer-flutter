@@ -558,6 +558,58 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deleteDraftTitle => '删除本地草稿';
 
   @override
+  String deleteDraftConfirm(Object title) {
+    return '永久删除本地草稿《$title》？该草稿尚未上传，删除后无法恢复。';
+  }
+
+  @override
+  String offlineCopySubtitle(String time) {
+    return '离线副本 · $time · 可离线编辑';
+  }
+
+  @override
+  String get deleteLocalCopy => '删除本地副本';
+
+  @override
+  String get syncNow => '立即同步到博客';
+
+  @override
+  String get syncedToBlog => '已同步到博客';
+
+  @override
+  String get saveOfflineCopy => '保存到本地（离线副本）';
+
+  @override
+  String get saveOfflineCopyHelp => '下载全文到本机，断网也能查看和编辑';
+
+  @override
+  String get savedOfflineCopy => '已保存离线副本，断网时也可编辑';
+
+  @override
+  String get exportPost => '导出文章';
+
+  @override
+  String get exportFormatHint => '选择导出格式：HTML 保留区块标记，Markdown 便于通用编辑。';
+
+  @override
+  String get markdownFormat => 'Markdown';
+
+  @override
+  String get htmlFormat => 'HTML';
+
+  @override
+  String get exportDoneTitle => '导出完成';
+
+  @override
+  String get exportAllWxr => '导出全部文章（WXR）';
+
+  @override
+  String get exportAllWxrHelp => '生成 WordPress 标准导出文件，可在后台重新导入';
+
+  @override
+  String get exportingPosts => '正在拉取全部文章…';
+
+  @override
   String get crashRecoveryTitle => '发现未保存的内容';
 
   @override

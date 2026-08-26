@@ -3,6 +3,7 @@ import 'package:html/dom.dart' as dom;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../l10n/app_localizations.dart';
+import '../services/media_cache.dart';
 import 'block_document.dart'
     show TableCellAlign, TableData, parseCodeBlock, parseTable;
 
@@ -252,8 +253,10 @@ class ImagePlaceholder extends StatelessWidget {
     final l10n = AppLocalizations.of(context)!;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Image.network(
-        src,
+      // CachedImage: renders the MediaCache disk copy when offline and
+      // warms the cache while online, so saved posts keep their images.
+      child: CachedImage(
+        url: src,
         width: double.infinity,
         fit: BoxFit.scaleDown,
         loadingBuilder: (context, child, progress) => progress == null
@@ -269,7 +272,7 @@ class ImagePlaceholder extends StatelessWidget {
                             progress.expectedTotalBytes!,
                       ),
               ),
-        errorBuilder: (_, _, _) => Container(
+        errorBuilder: (_) => Container(
           width: double.infinity,
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
