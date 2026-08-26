@@ -9,10 +9,10 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
-  String get appTitle => 'Starmaster Writer';
+  String get appTitle => 'Open Live Writer';
 
   @override
-  String get welcome => 'Welcome to Starmaster Writer';
+  String get welcome => 'Welcome to Open Live Writer';
 
   @override
   String get welcomeSubtitle =>

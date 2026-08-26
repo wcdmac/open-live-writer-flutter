@@ -1,7 +1,7 @@
 {
   "@@locale": "en",
-  "appTitle": "Starmaster Writer",
-  "welcome": "Welcome to Starmaster Writer",
+  "appTitle": "Open Live Writer",
+  "welcome": "Welcome to Open Live Writer",
   "welcomeSubtitle": "Connect to your WordPress blog to start writing.",
   "blogCredentials": "Blog & credentials",
   "connectionSettings": "Connection settings",

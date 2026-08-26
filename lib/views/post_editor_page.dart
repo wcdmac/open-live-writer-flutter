@@ -13,7 +13,7 @@ import 'editor/live_preview.dart';
 
 /// App version stamped into the copy-diagnostics report so user-submitted
 /// diagnostics always identify which build they came from.
-const String kAppVersion = 'v1.5.1';
+const String kAppVersion = 'v1.5.2';
 
 /// Localized display label for a [PostStatus] (dashboard chips + editor).
 String statusLabel(AppLocalizations l10n, PostStatus status) =>
@@ -159,7 +159,7 @@ class _PostEditorPageState extends State<PostEditorPage>
     final account = app.currentAccount;
     final svc = app.service;
     final buf = StringBuffer()
-      ..writeln('== Starmaster Writer 诊断 ==')
+      ..writeln('== Open Live Writer 诊断 ==')
       ..writeln('版本: $kAppVersion')
       ..writeln('当前页面: ${widget.existingPost == null ? "新建文章" : "文章 id=${widget.existingPost!.id}"}')
       ..writeln('协议: ${account?.protocol.name ?? "?"}'

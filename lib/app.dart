@@ -20,7 +20,7 @@ class AppShell extends StatelessWidget {
     );
 
     return MaterialApp(
-      title: 'Starmaster Writer',
+      title: 'Open Live Writer',
       onGenerateTitle: (context) => AppLocalizations.of(context)!.appTitle,
       debugShowCheckedModeBanner: false,
       localizationsDelegates: const [

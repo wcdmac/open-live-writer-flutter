@@ -352,8 +352,13 @@ class WordPressXmlRpcClient {
   // ---------------------------------------------------------------------------
 
   /// wp.uploadFile / metaWeblog.newMediaObject.
+  ///
+  /// Uses a dedicated 5-minute timeout: media uploads travel cross-border,
+  /// base64-encoded (~33% larger), and the server re-encodes images — the
+  /// default 30s call timeout aborts them mid-flight (transport error -32300).
   Future<MediaUploadResult> uploadMedia(
       String filename, List<int> bytes, String mimeType) async {
+    const uploadTimeout = Duration(minutes: 5);
     final data = <String, dynamic>{
       'name': filename,
       'type': mimeType,
@@ -362,13 +367,16 @@ class WordPressXmlRpcClient {
     };
     try {
       final result = await _client.callMethod(
-          'wp.uploadFile', [_blogId, _client.username, _client.password, data]);
+          'wp.uploadFile', [_blogId, _client.username, _client.password, data],
+          timeout: uploadTimeout);
       if (result is Map) return _mediaFromStruct(result);
     } on XmlRpcFault catch (e) {
       if (!_isMethodMissing(e)) rethrow;
     }
-    final result = await _client.callMethod('metaWeblog.newMediaObject',
-        [_blogId, _client.username, _client.password, data]);
+    final result = await _client.callMethod(
+        'metaWeblog.newMediaObject',
+        [_blogId, _client.username, _client.password, data],
+        timeout: uploadTimeout);
     return _mediaFromStruct(result as Map);
   }
 

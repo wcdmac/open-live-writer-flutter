@@ -101,13 +101,13 @@ abstract class AppLocalizations {
   /// No description provided for @appTitle.
   ///
   /// In en, this message translates to:
-  /// **'Starmaster Writer'**
+  /// **'Open Live Writer'**
   String get appTitle;
 
   /// No description provided for @welcome.
   ///
   /// In en, this message translates to:
-  /// **'Welcome to Starmaster Writer'**
+  /// **'Welcome to Open Live Writer'**
   String get welcome;
 
   /// No description provided for @welcomeSubtitle.

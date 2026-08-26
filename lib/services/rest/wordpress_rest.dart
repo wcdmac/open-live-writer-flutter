@@ -98,7 +98,7 @@ class WordPressRestClient {
   Future<Map<String, String>> _headers(
       {Map<String, String> extra = const {}}) async {
     final h = <String, String>{
-      'User-Agent': 'StarmasterWriter/1.5',
+      'User-Agent': 'OpenLiveWriter/1.5',
       'Accept': 'application/json',
       ...extra,
     };
@@ -346,7 +346,11 @@ class WordPressRestClient {
       ..files.add(http.MultipartFile.fromBytes('file', bytes,
           filename: filename,
           contentType: http.MediaType.parse(mimeType)));
-    final res = await _http.send(request).timeout(_timeout);
+    // Media uploads need a much longer budget than regular API calls
+    // (cross-border transfer + server-side image re-encoding).
+    final res = await _http
+        .send(request)
+        .timeout(const Duration(minutes: 5));
     final response = await http.Response.fromStream(res);
     if (response.statusCode >= 400) {
       throw WordPressRestException(

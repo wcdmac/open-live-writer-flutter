@@ -1,7 +1,7 @@
 {
   "@@locale": "zh",
-  "appTitle": "Starmaster Writer",
-  "welcome": "欢迎使用 Starmaster Writer",
+  "appTitle": "Open Live Writer",
+  "welcome": "欢迎使用 Open Live Writer",
   "welcomeSubtitle": "连接到你的 WordPress 博客开始写作。",
   "blogCredentials": "博客与凭据",
   "connectionSettings": "连接设置",

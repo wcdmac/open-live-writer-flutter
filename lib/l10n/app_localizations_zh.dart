@@ -9,10 +9,10 @@ class AppLocalizationsZh extends AppLocalizations {
   AppLocalizationsZh([String locale = 'zh']) : super(locale);
 
   @override
-  String get appTitle => 'Starmaster Writer';
+  String get appTitle => 'Open Live Writer';
 
   @override
-  String get welcome => '欢迎使用 Starmaster Writer';
+  String get welcome => '欢迎使用 Open Live Writer';
 
   @override
   String get welcomeSubtitle => '连接到你的 WordPress 博客开始写作。';
