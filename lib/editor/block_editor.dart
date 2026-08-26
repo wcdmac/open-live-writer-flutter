@@ -826,7 +826,9 @@ class _TableFieldState extends State<_TableField> {
     }
   }
 
-  void _emit() => widget.onChanged(serializeTable(_table, wrapFigure: false));
+  // wrapFigure: wp:table blocks must contain <figure class="wp-block-table">
+  // or Gutenberg flags the block as invalid content.
+  void _emit() => widget.onChanged(serializeTable(_table, wrapFigure: true));
 
   void _addRow() {
     setState(() {

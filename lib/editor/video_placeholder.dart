@@ -3,11 +3,12 @@ import 'package:html/dom.dart' as dom;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../l10n/app_localizations.dart';
+import 'block_document.dart' show TableData, parseTable;
 
 /// Combined builder for media the stock HTML renderer renders poorly:
-/// video/iframe/embed placeholders plus images with visible loading
-/// and error states (a hot-link-blocked or non-image URL otherwise
-/// fails silently as blank space).
+/// video/iframe/embed placeholders, images with visible loading and error
+/// states, and tables — the renderer computes <th> column widths from the
+/// header row only, clipping longer body cells.
 Widget? mediaPlaceholderBuilder(dom.Element element) {
   final video = videoPlaceholderBuilder(element);
   if (video != null) return video;
@@ -19,7 +20,60 @@ Widget? mediaPlaceholderBuilder(dom.Element element) {
       alt: element.attributes['alt'] ?? '',
     );
   }
+  if (element.localName == 'table') {
+    final table = parseTable(element.outerHtml);
+    if (table.rows.isEmpty) return null;
+    return _PreviewTable(table: table);
+  }
   return null;
+}
+
+/// Native bordered table for previews: IntrinsicColumnWidth sizes every
+/// column to the widest cell across ALL rows, so long body text under a
+/// short header is never clipped.
+class _PreviewTable extends StatelessWidget {
+  const _PreviewTable({required this.table});
+
+  final TableData table;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Table(
+        defaultColumnWidth: const IntrinsicColumnWidth(),
+        border: table.hasBorder
+            ? TableBorder.all(color: scheme.outlineVariant)
+            : null,
+        children: [
+          for (var r = 0; r < table.rows.length; r++)
+            TableRow(
+              decoration: r == 0 && table.hasHeader
+                  ? BoxDecoration(
+                      color: scheme.secondaryContainer.withValues(alpha: 0.4))
+                  : null,
+              children: [
+                for (var c = 0; c < table.rows[r].length; c++)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 6),
+                    child: Text(
+                      table.rows[r][c],
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: r == 0 && table.hasHeader
+                            ? FontWeight.w700
+                            : null,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
 }
 
 /// Tappable placeholder card for media the HTML renderer cannot play

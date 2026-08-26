@@ -162,12 +162,18 @@ class WordPressXmlRpcClient {
   }
 
   /// wp.newPost / metaWeblog.newPost. Returns the new post id.
+  ///
+  /// Saves use a 3-minute timeout: full-post bodies over slow cross-border
+  /// links can exceed the 30s default — the edit still lands server-side
+  /// while the client reports a bogus "transport error".
   Future<String> newPost(BlogPost post, {required bool publish}) async {
+    const saveTimeout = Duration(minutes: 3);
     if (flavor == XmlRpcFlavor.wordpress || flavor == XmlRpcFlavor.movabletype) {
       try {
         final content = _wpPostStruct(post, publish: publish);
         final result = await _client.callMethod('wp.newPost',
-            [_blogId, _client.username, _client.password, content]);
+            [_blogId, _client.username, _client.password, content],
+            timeout: saveTimeout);
         return _asId(result);
       } on XmlRpcFault catch (e) {
         if (!_isMethodMissing(e)) rethrow;
@@ -175,7 +181,8 @@ class WordPressXmlRpcClient {
     }
     final content = _metaweblogPostStruct(post);
     final result = await _client.callMethod('metaWeblog.newPost',
-        [_blogId, _client.username, _client.password, content, publish]);
+        [_blogId, _client.username, _client.password, content, publish],
+        timeout: saveTimeout);
     final id = _asId(result);
     // MetaWeblog needs out-of-band category + tag calls.
     if (post.categories.isNotEmpty) {
@@ -190,11 +197,13 @@ class WordPressXmlRpcClient {
 
   /// wp.editPost / metaWeblog.editPost.
   Future<bool> editPost(BlogPost post, {required bool publish}) async {
+    const saveTimeout = Duration(minutes: 3);
     if (flavor == XmlRpcFlavor.wordpress || flavor == XmlRpcFlavor.movabletype) {
       try {
         final content = _wpPostStruct(post, publish: publish);
         final result = await _client.callMethod('wp.editPost',
-            [_blogId, _client.username, _client.password, post.id, content]);
+            [_blogId, _client.username, _client.password, post.id, content],
+            timeout: saveTimeout);
         return result == true || result == 1 || '$result' == 'true';
       } on XmlRpcFault catch (e) {
         if (!_isMethodMissing(e)) rethrow;
@@ -202,7 +211,8 @@ class WordPressXmlRpcClient {
     }
     final content = _metaweblogPostStruct(post);
     final result = await _client.callMethod('metaWeblog.editPost',
-        [post.id, _client.username, _client.password, content, publish]);
+        [post.id, _client.username, _client.password, content, publish],
+        timeout: saveTimeout);
     if (post.categories.isNotEmpty) {
       await setPostCategories(post.id!, post.categories);
     }
