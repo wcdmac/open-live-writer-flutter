@@ -326,6 +326,12 @@ abstract class AppLocalizations {
   /// **'Upload failed: {error}'**
   String uploadFailed(Object error);
 
+  /// No description provided for @uploadTooLarge.
+  ///
+  /// In en, this message translates to:
+  /// **'File exceeds the server size limit (HTTP 413). Increase nginx client_max_body_size (100m recommended, matching the Cloudflare free tier) and PHP upload_max_filesize / post_max_size on your server, then retry.'**
+  String get uploadTooLarge;
+
   /// No description provided for @pickVideoFromDevice.
   ///
   /// In en, this message translates to:

@@ -131,6 +131,10 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get uploadTooLarge =>
+      '文件超过服务器大小限制（HTTP 413）。请在服务器上调大 nginx 的 client_max_body_size（建议 100m，与 Cloudflare 免费版一致）以及 PHP 的 upload_max_filesize 和 post_max_size，然后重试。';
+
+  @override
   String get pickVideoFromDevice => '从设备选择视频并上传';
 
   @override

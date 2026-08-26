@@ -3,7 +3,8 @@ import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart
 import 'package:image_picker/image_picker.dart' as imgpick;
 
 import '../l10n/app_localizations.dart';
-import '../views/editor/editor_toolbar.dart' show MediaUploader;
+import '../views/editor/editor_toolbar.dart'
+    show MediaUploader, mediaUploadErrorText;
 import 'block_document.dart';
 
 /// Visual (WYSIWYG) block editor.
@@ -544,7 +545,7 @@ class _ImageFieldState extends State<_ImageField> {
       if (!mounted) return;
       setState(() => _uploading = false);
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(l10n.uploadFailed(e))));
+          .showSnackBar(SnackBar(content: Text(mediaUploadErrorText(l10n, e))));
     }
   }
 
@@ -663,7 +664,7 @@ class _VideoFieldState extends State<_VideoField> {
       if (!mounted) return;
       setState(() => _uploading = false);
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(l10n.uploadFailed(e))));
+          .showSnackBar(SnackBar(content: Text(mediaUploadErrorText(l10n, e))));
     }
   }
 
@@ -1014,7 +1015,7 @@ class _InsertBar extends StatelessWidget {
         if (context.mounted) {
           Navigator.of(context).pop();
           ScaffoldMessenger.of(context)
-              .showSnackBar(SnackBar(content: Text(l10n.uploadFailed(e))));
+              .showSnackBar(SnackBar(content: Text(mediaUploadErrorText(l10n, e))));
         }
       }
       return;
@@ -1089,7 +1090,7 @@ class _InsertBar extends StatelessWidget {
         if (context.mounted) {
           Navigator.of(context).pop();
           ScaffoldMessenger.of(context)
-              .showSnackBar(SnackBar(content: Text(l10n.uploadFailed(e))));
+              .showSnackBar(SnackBar(content: Text(mediaUploadErrorText(l10n, e))));
         }
       }
       return;
