@@ -1130,6 +1130,12 @@ abstract class AppLocalizations {
   /// **'Delete local draft'**
   String get deleteDraftTitle;
 
+  /// No description provided for @deleteDraftConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Permanently delete the local draft \"{title}\"? It has not been uploaded, so it cannot be recovered from the blog\'s trash.'**
+  String deleteDraftConfirm(Object title);
+
   /// No description provided for @crashRecoveryTitle.
   ///
   /// In en, this message translates to:

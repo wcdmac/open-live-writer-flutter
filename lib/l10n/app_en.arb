@@ -275,6 +275,8 @@
     }
   },
   "deleteDraftTitle": "Delete local draft",
+  "deleteDraftConfirm": "Permanently delete the local draft \"{title}\"? It has not been uploaded, so it cannot be recovered from the blog's trash.",
+  "@deleteDraftConfirm": { "placeholders": { "title": {} } },
   "crashRecoveryTitle": "Unsaved changes found",
   "crashRecoveryBody": "An unsaved draft from {time} was recovered. Restore it?",
   "@crashRecoveryBody": {

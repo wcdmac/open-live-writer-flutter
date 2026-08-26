@@ -558,6 +558,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deleteDraftTitle => '删除本地草稿';
 
   @override
+  String deleteDraftConfirm(Object title) {
+    return '永久删除本地草稿《$title》？该草稿尚未上传，删除后无法恢复。';
+  }
+
+  @override
   String get crashRecoveryTitle => '发现未保存的内容';
 
   @override

@@ -312,7 +312,7 @@ class _LocalDraftTile extends StatelessWidget {
           context: context,
           builder: (context) => AlertDialog(
             title: Text(l10n.deleteDraftTitle),
-            content: Text(l10n.deletePostConfirm(
+            content: Text(l10n.deleteDraftConfirm(
                 draft.title.isEmpty ? l10n.untitled : draft.title)),
             actions: [
               TextButton(

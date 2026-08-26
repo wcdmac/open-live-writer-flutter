@@ -565,6 +565,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deleteDraftTitle => 'Delete local draft';
 
   @override
+  String deleteDraftConfirm(Object title) {
+    return 'Permanently delete the local draft \"$title\"? It has not been uploaded, so it cannot be recovered from the blog\'s trash.';
+  }
+
+  @override
   String get crashRecoveryTitle => 'Unsaved changes found';
 
   @override

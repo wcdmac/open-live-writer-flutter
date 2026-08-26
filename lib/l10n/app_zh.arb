@@ -219,6 +219,8 @@
     }
   },
   "deleteDraftTitle": "删除本地草稿",
+  "deleteDraftConfirm": "永久删除本地草稿《{title}》？该草稿尚未上传，删除后无法恢复。",
+  "@deleteDraftConfirm": { "placeholders": { "title": {} } },
   "crashRecoveryTitle": "发现未保存的内容",
   "crashRecoveryBody": "检测到 {time} 未保存的草稿，是否恢复？",
   "@crashRecoveryBody": {
