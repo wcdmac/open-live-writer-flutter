@@ -1,6 +1,6 @@
-# Starmaster Writer
+# Open Live Writer
 
-Starmaster Writer 是一个跨平台 WordPress 博客写作客户端（Flutter 实现），支持 Windows、Linux、macOS、iOS 和 Android。
+Open Live Writer 是一个跨平台 WordPress 博客写作客户端（Flutter 实现），支持 Windows、Linux、macOS、iOS 和 Android。
 
 基于 Open Live Writer（MIT License, .NET Foundation）的产品理念与协议行为，使用 Dart/Flutter 完全重写。
 

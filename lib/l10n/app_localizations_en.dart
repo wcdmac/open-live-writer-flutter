@@ -9,10 +9,10 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
-  String get appTitle => 'Starmaster Writer';
+  String get appTitle => 'Open Live Writer';
 
   @override
-  String get welcome => 'Welcome to Starmaster Writer';
+  String get welcome => 'Welcome to Open Live Writer';
 
   @override
   String get welcomeSubtitle =>
@@ -132,6 +132,23 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get uploadTooLarge =>
+      'File exceeds the server size limit (HTTP 413). Increase nginx client_max_body_size (100m recommended, matching the Cloudflare free tier) and PHP upload_max_filesize / post_max_size on your server, then retry.';
+
+  @override
+  String get imageLoadFailed =>
+      'Image failed to load: make sure it is a direct image URL (not a page), uses https, and the host allows hot-linking.';
+
+  @override
+  String get pickVideoFromDevice => 'Pick video from device & upload';
+
+  @override
+  String get enterVideoUrl => 'Enter video URL';
+
+  @override
+  String get uploadingVideo => 'Uploading video…';
+
+  @override
   String detectionFailed(Object error) {
     return 'Detection failed: $error';
   }
@@ -204,6 +221,31 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get publish => 'Publish';
+
+  @override
+  String get postActions => 'Post actions';
+
+  @override
+  String get editPost => 'Edit';
+
+  @override
+  String get moveToDraft => 'Move to draft';
+
+  @override
+  String get setAsPrivate => 'Set as private';
+
+  @override
+  String get moveToTrash => 'Delete (move to trash)';
+
+  @override
+  String deletePostConfirm(Object title) {
+    return 'Move \"$title\" to trash? You can restore it from Trash in the WordPress admin.';
+  }
+
+  @override
+  String operationFailed(Object error) {
+    return 'Operation failed: $error';
+  }
 
   @override
   String get postSettings => 'Post settings';
@@ -327,7 +369,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get insertImage => 'Insert image';
 
   @override
-  String get codeBlock => 'Code block';
+  String get codeBlock => 'Code';
 
   @override
   String get moreTag => 'More tag (excerpt break)';
@@ -345,10 +387,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get altText => 'Alt text (optional)';
 
   @override
-  String get copyDiagnostics => 'Copy diagnostics';
+  String get alignLeft => 'Align left';
 
   @override
-  String get diagnosticsCopied => 'Diagnostics copied to clipboard';
+  String get alignCenter => 'Align center';
+
+  @override
+  String get alignRight => 'Align right';
 
   @override
   String get cancel => 'Cancel';
@@ -432,6 +477,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get tableHeaderRow => 'First row is header';
 
   @override
+  String get tableBorder => 'Borders';
+
+  @override
   String get addRow => 'Add row';
 
   @override
@@ -457,4 +505,76 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get emptyBlockHint => 'Type here…';
+
+  @override
+  String get listBlock => 'List';
+
+  @override
+  String get quoteBlock => 'Quote';
+
+  @override
+  String get removeItem => 'Remove item';
+
+  @override
+  String get addItem => 'Add item';
+
+  @override
+  String get addParagraph => 'Add paragraph';
+
+  @override
+  String get postPassword => 'Post password';
+
+  @override
+  String get postPasswordHelp =>
+      'Readers must enter this password to view the post (empty = no protection)';
+
+  @override
+  String get newCategory => 'New category';
+
+  @override
+  String get newCategoryHint => 'Category name';
+
+  @override
+  String get undo => 'Undo';
+
+  @override
+  String get redo => 'Redo';
+
+  @override
+  String charCount(num count) {
+    return '$count characters';
+  }
+
+  @override
+  String get saveLocalDraft => 'Save local draft';
+
+  @override
+  String get saveLocalDraftHelp =>
+      'Store on this device only; publish later when online';
+
+  @override
+  String get savedOfflineDraft =>
+      'Network unavailable — draft saved locally. Publish it later from the home screen.';
+
+  @override
+  String localDraftSubtitle(String time) {
+    return 'Local draft • $time • not synced';
+  }
+
+  @override
+  String get deleteDraftTitle => 'Delete local draft';
+
+  @override
+  String get crashRecoveryTitle => 'Unsaved changes found';
+
+  @override
+  String crashRecoveryBody(String time) {
+    return 'An unsaved draft from $time was recovered. Restore it?';
+  }
+
+  @override
+  String get restore => 'Restore';
+
+  @override
+  String get delete => 'Delete';
 }

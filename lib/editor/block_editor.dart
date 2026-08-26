@@ -1,11 +1,12 @@
 ﻿import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 import 'package:image_picker/image_picker.dart' as imgpick;
 
 import '../l10n/app_localizations.dart';
-import '../views/editor/editor_toolbar.dart' show MediaUploader;
+import '../views/editor/editor_toolbar.dart'
+    show MediaUploader, mediaUploadErrorText;
 import 'block_document.dart';
+import 'video_placeholder.dart';
 
 /// Visual (WYSIWYG) block editor.
 ///
@@ -238,12 +239,23 @@ class _BlockCardState extends State<_BlockCard> {
   Widget _buildBody(BuildContext context) {
     if (!widget.focused) {
       // WYSIWYG rendering of the block as it will appear on the blog.
+      // Tables render natively (fwfh core draws no grid lines, and the
+      // user must always see the cell structure).
+      if (widget.block.type == BlockType.table) {
+        return _ReadOnlyTable(widget.block.html);
+      }
+      // Code blocks render natively: mono font, tinted background, no
+      // HTML interpretation of the source inside.
+      if (widget.block.type == BlockType.code) {
+        return _ReadOnlyCode(widget.block.html);
+      }
       return HtmlWidget(
         widget.block.serialize(),
         textStyle: Theme.of(context)
             .textTheme
             .bodyLarge
             ?.copyWith(fontSize: 15, height: 1.6),
+        customWidgetBuilder: mediaPlaceholderBuilder,
       );
     }
 
@@ -263,8 +275,16 @@ class _BlockCardState extends State<_BlockCard> {
       BlockType.table => _TableField(
           block: widget.block, onChanged: widget.onHtmlChanged),
       BlockType.video => _VideoField(
+          block: widget.block,
+          onChanged: widget.onHtmlChanged,
+          uploadMedia: widget.uploadMedia),
+      BlockType.code => _CodeField(
           block: widget.block, onChanged: widget.onHtmlChanged),
-      // Lists, quotes, code and unknown markup edit their raw HTML — the
+      BlockType.list => _ListField(
+          block: widget.block, onChanged: widget.onHtmlChanged),
+      BlockType.quote => _QuoteField(
+          block: widget.block, onChanged: widget.onHtmlChanged),
+      // Lists, quotes and unknown markup edit their raw HTML — the
       // only lossless option — while unfocused rendering stays WYSIWYG.
       _ => _TextBlockField(
           controllerSeed: widget.block.html,
@@ -507,11 +527,9 @@ class _ImageFieldState extends State<_ImageField> {
   }
 
   void _emit() {
-    final img =
-        '<img src="${_srcCtrl.text.trim()}" alt="${_altCtrl.text.trim()}" />';
-    widget.onChanged(_captionCtrl.text.trim().isEmpty
-        ? img
-        : '<figure>$img<figcaption>${_captionCtrl.text.trim()}</figcaption></figure>');
+    widget.onChanged(buildImageHtml(_srcCtrl.text.trim(),
+        _altCtrl.text.trim(),
+        caption: _captionCtrl.text));
   }
 
   Future<void> _pickAndUpload() async {
@@ -524,8 +542,9 @@ class _ImageFieldState extends State<_ImageField> {
     setState(() => _uploading = true);
     try {
       final bytes = await xfile.readAsBytes();
-      final result =
-          await uploader(xfile.name, bytes, xfile.mimeType ?? 'image/jpeg');
+      final (name, mime) = normalizeImageUpload(
+          xfile.name, xfile.mimeType ?? 'image/jpeg');
+      final result = await uploader(name, bytes, mime);
       if (!mounted) return;
       setState(() {
         _uploading = false;
@@ -537,7 +556,7 @@ class _ImageFieldState extends State<_ImageField> {
       if (!mounted) return;
       setState(() => _uploading = false);
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(l10n.uploadFailed(e))));
+          .showSnackBar(SnackBar(content: Text(mediaUploadErrorText(l10n, e))));
     }
   }
 
@@ -553,7 +572,7 @@ class _ImageFieldState extends State<_ImageField> {
             child: Image.network(_srcCtrl.text.trim(),
                 width: double.infinity,
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => const SizedBox.shrink()),
+                errorBuilder: (_, _, _) => const SizedBox.shrink()),
           ),
         const SizedBox(height: 6),
         TextField(
@@ -607,10 +626,15 @@ class _ImageFieldState extends State<_ImageField> {
 // ---------------------------------------------------------------------------
 
 class _VideoField extends StatefulWidget {
-  const _VideoField({required this.block, required this.onChanged});
+  const _VideoField({
+    required this.block,
+    required this.onChanged,
+    this.uploadMedia,
+  });
 
   final ContentBlock block;
   final ValueChanged<String> onChanged;
+  final MediaUploader? uploadMedia;
 
   @override
   State<_VideoField> createState() => _VideoFieldState();
@@ -618,11 +642,41 @@ class _VideoField extends StatefulWidget {
 
 class _VideoFieldState extends State<_VideoField> {
   late final TextEditingController _url;
+  bool _uploading = false;
 
   @override
   void initState() {
     super.initState();
     _url = TextEditingController(text: firstEmbedUrl(widget.block.html) ?? '');
+  }
+
+  Future<void> _pickAndUpload() async {
+    final l10n = AppLocalizations.of(context)!;
+    final uploader = widget.uploadMedia;
+    if (uploader == null) return;
+    final xfile = await imgpick.ImagePicker()
+        .pickVideo(source: imgpick.ImageSource.gallery);
+    if (xfile == null) return;
+    setState(() => _uploading = true);
+    try {
+      final bytes = await xfile.readAsBytes();
+      final result = await uploader(
+          xfile.name, bytes, xfile.mimeType ?? 'video/mp4');
+      if (!mounted) return;
+      setState(() {
+        _uploading = false;
+        _url.text = result.url;
+      });
+      // A locally uploaded file becomes a wp:video block.
+      widget.block.wpOpen = '<!-- wp:video -->';
+      widget.block.wpClose = '<!-- /wp:video -->';
+      widget.onChanged(buildVideoFileHtml(result.url));
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _uploading = false);
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(mediaUploadErrorText(l10n, e))));
+    }
   }
 
   @override
@@ -644,7 +698,22 @@ class _VideoFieldState extends State<_VideoField> {
               labelText: l10n.videoUrl,
               hintText: l10n.videoUrlHint,
               isDense: true,
-              border: const OutlineInputBorder()),
+              border: const OutlineInputBorder(),
+              suffixIcon: _uploading
+                  ? const Padding(
+                      padding: EdgeInsets.all(10),
+                      child: SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2)),
+                    )
+                  : (widget.uploadMedia == null
+                      ? null
+                      : IconButton(
+                          icon: const Icon(Icons.video_library),
+                          tooltip: l10n.pickVideoFromDevice,
+                          onPressed: _pickAndUpload,
+                        ))),
           onChanged: (v) {
             if (v.trim().isEmpty) return;
             widget.onChanged(buildVideoEmbed(v.trim()));
@@ -658,6 +727,482 @@ class _VideoFieldState extends State<_VideoField> {
 // ---------------------------------------------------------------------------
 // Table: editable cell grid with row/column controls.
 // ---------------------------------------------------------------------------
+
+/// Read-only bordered table used for the unfocused (WYSIWYG) rendering —
+/// the HTML renderer draws no grid lines and the cell structure must be
+/// visible at all times.
+class _ReadOnlyTable extends StatelessWidget {
+  const _ReadOnlyTable(this.html);
+
+  final String html;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final table = parseTable(html);
+    if (table.rows.isEmpty) return const SizedBox.shrink();
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Table(
+        defaultColumnWidth: const IntrinsicColumnWidth(),
+        // Always bordered in-app: the HTML source has no inline borders
+        // (they break Gutenberg validation) so cell structure must stay
+        // visible here.
+        border: TableBorder.all(color: scheme.outlineVariant),
+        children: [
+          for (var r = 0; r < table.rows.length; r++)
+            TableRow(
+              decoration: r == 0 && table.hasHeader
+                  ? BoxDecoration(
+                      color: scheme.secondaryContainer.withValues(alpha: 0.4))
+                  : null,
+              children: [
+                for (var c = 0; c < table.rows[r].length; c++)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 6),
+                    child: Text(
+                      table.rows[r][c],
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: r == 0 && table.hasHeader
+                            ? FontWeight.w700
+                            : null,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Code block: edit the plain-text payload, serialize as core/code.
+// ---------------------------------------------------------------------------
+
+/// Read-only code rendering for the unfocused (WYSIWYG) view. Rendered
+/// natively so the HTML renderer never interprets the source inside.
+class _ReadOnlyCode extends StatelessWidget {
+  const _ReadOnlyCode(this.html);
+
+  final String html;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final code = parseCodeBlock(html) ?? html;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Text(
+          code,
+          style: TextStyle(
+            fontFamily: 'monospace',
+            fontSize: 13,
+            height: 1.5,
+            color: scheme.onSurface,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Focused code editor: multi-line mono field; re-serializes to Gutenberg
+/// core/code markup on every change.
+class _CodeField extends StatefulWidget {
+  const _CodeField({required this.block, required this.onChanged});
+
+  final ContentBlock block;
+  final ValueChanged<String> onChanged;
+
+  @override
+  State<_CodeField> createState() => _CodeFieldState();
+}
+
+class _CodeFieldState extends State<_CodeField> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: parseCodeBlock(widget.block.html));
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return TextField(
+      controller: _controller,
+      maxLines: null,
+      minLines: 3,
+      keyboardType: TextInputType.multiline,
+      style: TextStyle(
+        fontFamily: 'monospace',
+        fontSize: 13,
+        height: 1.5,
+        color: scheme.onSurface,
+      ),
+      decoration: InputDecoration(
+        filled: true,
+        fillColor: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: scheme.outlineVariant),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: scheme.outlineVariant),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: scheme.primary),
+        ),
+        isDense: true,
+        contentPadding: const EdgeInsets.all(12),
+      ),
+      onChanged: (text) => widget.onChanged(buildCodeHtml(text)),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// List block: per-item fields with a shared inline-format toolbar that
+// targets the focused item.
+// ---------------------------------------------------------------------------
+
+class _ListField extends StatefulWidget {
+  const _ListField({required this.block, required this.onChanged});
+
+  final ContentBlock block;
+  final ValueChanged<String> onChanged;
+
+  @override
+  State<_ListField> createState() => _ListFieldState();
+}
+
+class _ListFieldState extends State<_ListField> {
+  late final ListData _list;
+  final List<TextEditingController> _ctrls = [];
+  int? _focusedIdx;
+
+  @override
+  void initState() {
+    super.initState();
+    _list = parseList(widget.block.html);
+    _syncCtrls();
+  }
+
+  @override
+  void dispose() {
+    for (final c in _ctrls) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  void _syncCtrls() {
+    while (_ctrls.length < _list.items.length) {
+      _ctrls.add(TextEditingController(
+          text: _ctrls.length < _list.items.length
+              ? _list.items[_ctrls.length]
+              : ''));
+    }
+    while (_ctrls.length > _list.items.length) {
+      _ctrls.removeLast().dispose();
+    }
+    // Keep controller texts in sync after add/remove reorders indices.
+    for (var i = 0; i < _ctrls.length; i++) {
+      if (_ctrls[i].text != _list.items[i]) {
+        _ctrls[i].text = _list.items[i];
+      }
+    }
+  }
+
+  void _emit() => widget.onChanged(buildListHtml(_list));
+
+  void _wrapFocused(String open, String close) {
+    final idx = _focusedIdx;
+    if (idx == null || idx >= _ctrls.length) return;
+    final c = _ctrls[idx];
+    final sel = c.selection;
+    if (!sel.isValid) return;
+    final selected = sel.textInside(c.text);
+    c.value = c.value.copyWith(
+      text: c.text.replaceRange(sel.start, sel.end, '$open$selected$close'),
+      selection: TextSelection.collapsed(
+          offset: sel.start + open.length + selected.length),
+    );
+    _list.items[idx] = c.text;
+    _emit();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final scheme = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 2,
+          children: [
+            _MiniTool(icon: Icons.format_bold, tooltip: l10n.bold, onTap: () => _wrapFocused('<strong>', '</strong>')),
+            _MiniTool(icon: Icons.format_italic, tooltip: l10n.italic, onTap: () => _wrapFocused('<em>', '</em>')),
+            _MiniTool(icon: Icons.link, tooltip: l10n.insertLink, onTap: () => _wrapFocused('<a href="https://">', '</a>')),
+            SegmentedButton<bool>(
+              showSelectedIcon: false,
+              style: const ButtonStyle(visualDensity: VisualDensity.compact),
+              segments: [
+                ButtonSegment(
+                    value: false,
+                    icon: const Icon(Icons.format_list_bulleted, size: 18)),
+                ButtonSegment(
+                    value: true,
+                    icon: const Icon(Icons.format_list_numbered, size: 18)),
+              ],
+              selected: {_list.ordered},
+              onSelectionChanged: (s) {
+                setState(() => _list.ordered = s.first);
+                _emit();
+              },
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        for (var i = 0; i < _list.items.length; i++)
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: _list.ordered
+                    ? Text('${i + 1}.',
+                        style: TextStyle(
+                            color: scheme.onSurfaceVariant, fontSize: 14))
+                    : Icon(Icons.circle,
+                        size: 6, color: scheme.onSurfaceVariant),
+              ),
+              Expanded(
+                child: TextField(
+                  controller: _ctrls[i],
+                  onTap: () => _focusedIdx = i,
+                  decoration: const InputDecoration(
+                    border: InputBorder.none,
+                    isDense: true,
+                  ),
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodyLarge
+                      ?.copyWith(fontSize: 15, height: 1.6),
+                  onChanged: (v) {
+                    _list.items[i] = v;
+                    _emit();
+                  },
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close, size: 16),
+                tooltip: l10n.removeItem,
+                visualDensity: VisualDensity.compact,
+                onPressed: () {
+                  setState(() {
+                    _list.items.removeAt(i);
+                    _syncCtrls();
+                  });
+                  _emit();
+                },
+              ),
+            ],
+          ),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            icon: const Icon(Icons.add, size: 18),
+            label: Text(l10n.addItem),
+            onPressed: () {
+              setState(() {
+                _list.items.add('');
+                _syncCtrls();
+                _focusedIdx = _list.items.length - 1;
+              });
+              _emit();
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Quote block: per-paragraph fields with the same shared toolbar pattern.
+// ---------------------------------------------------------------------------
+
+class _QuoteField extends StatefulWidget {
+  const _QuoteField({required this.block, required this.onChanged});
+
+  final ContentBlock block;
+  final ValueChanged<String> onChanged;
+
+  @override
+  State<_QuoteField> createState() => _QuoteFieldState();
+}
+
+class _QuoteFieldState extends State<_QuoteField> {
+  late final QuoteData _quote;
+  final List<TextEditingController> _ctrls = [];
+  int? _focusedIdx;
+
+  @override
+  void initState() {
+    super.initState();
+    _quote = parseQuote(widget.block.html) ?? QuoteData(paragraphs: []);
+    _syncCtrls();
+  }
+
+  @override
+  void dispose() {
+    for (final c in _ctrls) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  void _syncCtrls() {
+    while (_ctrls.length < _quote.paragraphs.length) {
+      _ctrls.add(TextEditingController(
+          text: _ctrls.length < _quote.paragraphs.length
+              ? _quote.paragraphs[_ctrls.length]
+              : ''));
+    }
+    while (_ctrls.length > _quote.paragraphs.length) {
+      _ctrls.removeLast().dispose();
+    }
+    for (var i = 0; i < _ctrls.length; i++) {
+      if (_ctrls[i].text != _quote.paragraphs[i]) {
+        _ctrls[i].text = _quote.paragraphs[i];
+      }
+    }
+  }
+
+  void _emit() => widget.onChanged(buildQuoteHtml(_quote));
+
+  void _wrapFocused(String open, String close) {
+    final idx = _focusedIdx;
+    if (idx == null || idx >= _ctrls.length) return;
+    final c = _ctrls[idx];
+    final sel = c.selection;
+    if (!sel.isValid) return;
+    final selected = sel.textInside(c.text);
+    c.value = c.value.copyWith(
+      text: c.text.replaceRange(sel.start, sel.end, '$open$selected$close'),
+      selection: TextSelection.collapsed(
+          offset: sel.start + open.length + selected.length),
+    );
+    _quote.paragraphs[idx] = c.text;
+    _emit();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 8, 8, 4),
+      decoration: BoxDecoration(
+        border: Border(
+          left: BorderSide(width: 3, color: scheme.primary.withValues(alpha: 0.6)),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 2,
+            children: [
+              _MiniTool(icon: Icons.format_bold, tooltip: l10n.bold, onTap: () => _wrapFocused('<strong>', '</strong>')),
+              _MiniTool(icon: Icons.format_italic, tooltip: l10n.italic, onTap: () => _wrapFocused('<em>', '</em>')),
+              _MiniTool(icon: Icons.link, tooltip: l10n.insertLink, onTap: () => _wrapFocused('<a href="https://">', '</a>')),
+            ],
+          ),
+          for (var i = 0; i < _quote.paragraphs.length; i++)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _ctrls[i],
+                    onTap: () => _focusedIdx = i,
+                    maxLines: null,
+                    decoration: const InputDecoration(
+                      border: InputBorder.none,
+                      isDense: true,
+                    ),
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodyLarge
+                        ?.copyWith(
+                            fontSize: 15,
+                            height: 1.6,
+                            fontStyle: FontStyle.italic),
+                    onChanged: (v) {
+                      _quote.paragraphs[i] = v;
+                      _emit();
+                    },
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, size: 16),
+                  tooltip: l10n.removeItem,
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () {
+                    setState(() {
+                      _quote.paragraphs.removeAt(i);
+                      _syncCtrls();
+                    });
+                    _emit();
+                  },
+                ),
+              ],
+            ),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              icon: const Icon(Icons.add, size: 18),
+              label: Text(l10n.addParagraph),
+              onPressed: () {
+                setState(() {
+                  _quote.paragraphs.add('');
+                  _syncCtrls();
+                  _focusedIdx = _quote.paragraphs.length - 1;
+                });
+                _emit();
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class _TableField extends StatefulWidget {
   const _TableField({required this.block, required this.onChanged});
@@ -684,7 +1229,7 @@ class _TableFieldState extends State<_TableField> {
       _table = TableData(rows: [
         ['', ''],
         ['', ''],
-      ], hasHeader: true);
+      ], hasHeader: true, hasBorder: true);
     }
     _syncControllers();
   }
@@ -720,7 +1265,9 @@ class _TableFieldState extends State<_TableField> {
     }
   }
 
-  void _emit() => widget.onChanged(serializeTable(_table, wrapFigure: false));
+  // wrapFigure: wp:table blocks must contain <figure class="wp-block-table">
+  // or Gutenberg flags the block as invalid content.
+  void _emit() => widget.onChanged(serializeTable(_table, wrapFigure: true));
 
   void _addRow() {
     setState(() {
@@ -785,6 +1332,11 @@ class _TableFieldState extends State<_TableField> {
                       TableCell(
                         child: TextField(
                           controller: _cellCtrls[r][c],
+                          textAlign: switch (_table.align) {
+                            TableCellAlign.left => TextAlign.left,
+                            TableCellAlign.center => TextAlign.center,
+                            TableCellAlign.right => TextAlign.right,
+                          },
                           decoration: const InputDecoration(
                             border: InputBorder.none,
                             isDense: true,
@@ -822,6 +1374,36 @@ class _TableFieldState extends State<_TableField> {
               selected: _table.hasHeader,
               onSelected: (v) {
                 setState(() => _table.hasHeader = v);
+                _emit();
+              },
+            ),
+            // No border toggle: inline border styles break Gutenberg block
+            // validation; frontend borders come from WordPress core styles.
+            SegmentedButton<TableCellAlign>(
+              showSelectedIcon: false,
+              style: const ButtonStyle(
+                visualDensity: VisualDensity.compact,
+              ),
+              segments: [
+                ButtonSegment(
+                  value: TableCellAlign.left,
+                  icon: const Icon(Icons.format_align_left),
+                  tooltip: l10n.alignLeft,
+                ),
+                ButtonSegment(
+                  value: TableCellAlign.center,
+                  icon: const Icon(Icons.format_align_center),
+                  tooltip: l10n.alignCenter,
+                ),
+                ButtonSegment(
+                  value: TableCellAlign.right,
+                  icon: const Icon(Icons.format_align_right),
+                  tooltip: l10n.alignRight,
+                ),
+              ],
+              selected: {_table.align},
+              onSelectionChanged: (s) {
+                setState(() => _table.align = s.first);
                 _emit();
               },
             ),
@@ -887,12 +1469,13 @@ class _InsertBar extends StatelessWidget {
       );
       try {
         final bytes = await xfile.readAsBytes();
-        final result = await uploadMedia!(
-            xfile.name, bytes, xfile.mimeType ?? 'image/jpeg');
+        final (name, mime) = normalizeImageUpload(
+            xfile.name, xfile.mimeType ?? 'image/jpeg');
+        final result = await uploadMedia!(name, bytes, mime);
         if (context.mounted) Navigator.of(context).pop();
         onInsert(ContentBlock(
           type: BlockType.image,
-          html: '<figure><img src="${result.url}" alt="${xfile.name}" /></figure>',
+          html: buildImageHtml(result.url, xfile.name),
           wpOpen: '<!-- wp:image -->',
           wpClose: '<!-- /wp:image -->',
         ));
@@ -900,7 +1483,7 @@ class _InsertBar extends StatelessWidget {
         if (context.mounted) {
           Navigator.of(context).pop();
           ScaffoldMessenger.of(context)
-              .showSnackBar(SnackBar(content: Text(l10n.uploadFailed(e))));
+              .showSnackBar(SnackBar(content: Text(mediaUploadErrorText(l10n, e))));
         }
       }
       return;
@@ -911,9 +1494,83 @@ class _InsertBar extends StatelessWidget {
     final alt = await _prompt(context, l10n.altText, '');
     onInsert(ContentBlock(
       type: BlockType.image,
-      html: '<img src="$url" alt="${alt ?? ''}" />',
+      html: buildImageHtml(url, alt ?? ''),
       wpOpen: '<!-- wp:image -->',
       wpClose: '<!-- /wp:image -->',
+    ));
+  }
+
+  /// Video insert: device pick & upload (wp:video block) or URL embed.
+  Future<void> _insertVideo(BuildContext context) async {
+    final l10n = AppLocalizations.of(context)!;
+    final fromDevice = uploadMedia == null
+        ? false
+        : await showModalBottomSheet<bool>(
+            context: context,
+            showDragHandle: true,
+            builder: (sheetContext) => SafeArea(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ListTile(
+                    leading: const Icon(Icons.video_library),
+                    title: Text(l10n.pickVideoFromDevice),
+                    onTap: () => Navigator.of(sheetContext).pop(true),
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.link),
+                    title: Text(l10n.enterVideoUrl),
+                    onTap: () => Navigator.of(sheetContext).pop(false),
+                  ),
+                ],
+              ),
+            ),
+          );
+    if (fromDevice == null || !context.mounted) return;
+
+    if (fromDevice) {
+      final xfile = await imgpick.ImagePicker()
+          .pickVideo(source: imgpick.ImageSource.gallery);
+      if (xfile == null || !context.mounted) return;
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => AlertDialog(
+          content: Row(children: [
+            const CircularProgressIndicator(),
+            const SizedBox(width: 20),
+            Expanded(child: Text(l10n.uploadingVideo)),
+          ]),
+        ),
+      );
+      try {
+        final bytes = await xfile.readAsBytes();
+        final result = await uploadMedia!(
+            xfile.name, bytes, xfile.mimeType ?? 'video/mp4');
+        if (context.mounted) Navigator.of(context).pop();
+        onInsert(ContentBlock(
+          type: BlockType.video,
+          html: buildVideoFileHtml(result.url),
+          wpOpen: '<!-- wp:video -->',
+          wpClose: '<!-- /wp:video -->',
+        ));
+      } catch (e) {
+        if (context.mounted) {
+          Navigator.of(context).pop();
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text(mediaUploadErrorText(l10n, e))));
+        }
+      }
+      return;
+    }
+
+    final url = await _prompt(context, l10n.videoUrl, 'https://');
+    if (url == null || url.trim().isEmpty || !context.mounted) return;
+    onInsert(ContentBlock(
+      type: BlockType.video,
+      html: buildVideoEmbed(url.trim()),
+      wpOpen: '<!-- wp:embed -->',
+      wpClose: '<!-- /wp:embed -->',
     ));
   }
 
@@ -989,18 +1646,42 @@ class _InsertBar extends StatelessWidget {
           ),
           const SizedBox(width: 6),
           ActionChip(
+            avatar: const Icon(Icons.code, size: 18),
+            label: Text(l10n.codeBlock),
+            onPressed: () => onInsert(ContentBlock(
+              type: BlockType.code,
+              html: buildCodeHtml(''),
+              wpOpen: '<!-- wp:code -->',
+              wpClose: '<!-- /wp:code -->',
+            )),
+          ),
+          const SizedBox(width: 6),
+          ActionChip(
+            avatar: const Icon(Icons.format_list_bulleted, size: 18),
+            label: Text(l10n.listBlock),
+            onPressed: () => onInsert(ContentBlock(
+              type: BlockType.list,
+              html: buildListHtml(ListData(items: [''])),
+              wpOpen: '<!-- wp:list -->',
+              wpClose: '<!-- /wp:list -->',
+            )),
+          ),
+          const SizedBox(width: 6),
+          ActionChip(
+            avatar: const Icon(Icons.format_quote, size: 18),
+            label: Text(l10n.quoteBlock),
+            onPressed: () => onInsert(ContentBlock(
+              type: BlockType.quote,
+              html: buildQuoteHtml(QuoteData(paragraphs: [''])),
+              wpOpen: '<!-- wp:quote -->',
+              wpClose: '<!-- /wp:quote -->',
+            )),
+          ),
+          const SizedBox(width: 6),
+          ActionChip(
             avatar: const Icon(Icons.play_circle_outline, size: 18),
             label: Text(l10n.videoBlock),
-            onPressed: () async {
-              final url = await _prompt(context, l10n.videoUrl, 'https://');
-              if (url == null || url.trim().isEmpty) return;
-              onInsert(ContentBlock(
-                type: BlockType.video,
-                html: buildVideoEmbed(url.trim()),
-                wpOpen: '<!-- wp:embed -->',
-                wpClose: '<!-- /wp:embed -->',
-              ));
-            },
+            onPressed: () => _insertVideo(context),
           ),
         ],
       ),

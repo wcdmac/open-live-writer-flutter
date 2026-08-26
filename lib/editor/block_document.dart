@@ -155,8 +155,10 @@ BlockType _classifyType(String html) {
     return BlockType.image;
   }
 
-  // Video / embeds: <video>, <iframe>, wp embed/figure-with-iframe.
-  if (RegExp(r'^(<video|<iframe|<figure[^>]*wp-block-embed)\b',
+  // Video / embeds: <video>, <iframe>, wp embed/figure-with-iframe or
+  // the Gutenberg wp-block-video figure.
+  if (RegExp(
+          r'^(<video|<iframe|<figure[^>]*(wp-block-embed|wp-block-video))\b',
           caseSensitive: false)
       .hasMatch(h)) {
     return BlockType.video;
@@ -203,6 +205,39 @@ BlockType _classifyType(String html) {
 // Field-level helpers used by the visual editor widgets.
 // ---------------------------------------------------------------------------
 
+/// Extracts the plain-text payload of a code block (`wp:code` saves as
+/// `<pre class="wp-block-code"><code>escaped</code></pre>`; bare `<pre>`
+/// content is accepted too). Returns null when [html] is not a code block.
+String? parseCodeBlock(String html) {
+  final m = RegExp(
+          r'^\s*<pre[^>]*>\s*(?:<code[^>]*>)?([\s\S]*?)(?:</code>)?\s*</pre>\s*$',
+          caseSensitive: false)
+      .firstMatch(html);
+  return m == null ? null : _decodeEntities(m.group(1)!);
+}
+
+/// Wraps code text into Gutenberg core/code markup. Entities are escaped
+/// so angle brackets and ampersands in source code survive the round trip.
+String buildCodeHtml(String code) =>
+    '<pre class="wp-block-code"><code>${_encodeEntities(code)}</code></pre>';
+
+/// Normalizes a picked image for upload.
+///
+/// WordPress rejects formats that are not in the site's allowed MIME list
+/// (HEIC from iOS cameras is the common offender). Since the image picker
+/// re-encodes to JPEG whenever imageQuality/maxWidth are set, files whose
+/// reported MIME is not whitelisted are renamed to `.jpg` and typed as
+/// `image/jpeg` before hitting `wp.uploadFile`.
+(String, String) normalizeImageUpload(String name, String mime) {
+  const allowed = {'image/jpeg', 'image/png', 'image/gif', 'image/webp'};
+  final m = mime.toLowerCase().split(';').first.trim();
+  if (allowed.contains(m)) return (name, m);
+  final base = name.contains('.')
+      ? name.substring(0, name.lastIndexOf('.'))
+      : name;
+  return ('$base.jpg', 'image/jpeg');
+}
+
 /// Extracts the src attribute of the first <img> in [html].
 String? firstImgSrc(String html) {
   final m = RegExp(r'<img[^>]*\bsrc="([^"]+)"', caseSensitive: false)
@@ -216,6 +251,24 @@ String? firstImgAlt(String html) {
       .firstMatch(html);
   return m?.group(1);
 }
+
+/// Canonical Gutenberg image-block inner HTML: the <img> must sit inside
+/// a `wp-block-image` figure or the block editor reports "invalid content"
+/// and frontend themes have no centering styles.
+String buildImageHtml(String src, String alt, {String? caption}) {
+  final img = '<img src="$src" alt="$alt" />';
+  final cap = (caption == null || caption.trim().isEmpty)
+      ? ''
+      : '<figcaption>${caption.trim()}</figcaption>';
+  return '<figure class="wp-block-image">$img$cap</figure>';
+}
+
+/// Canonical Gutenberg video-block inner HTML (uploaded media file):
+/// `wp-block-video` figure wrapper, matching the block editor's own
+/// output so frontend alignment styles apply.
+String buildVideoFileHtml(String url) =>
+    '<figure class="wp-block-video"><video controls src="$url">'
+    '</video></figure>';
 
 /// Heading level (1-6) from `<hN>` markup, defaulting to 2.
 int headingLevel(String html) {
@@ -269,18 +322,13 @@ String buildVideoEmbed(String url) {
       'allowfullscreen></iframe>';
 }
 
-/// Builds a simple 2x2 starter table (1 header row + 1 body row).
+/// Builds a simple 2x2 starter table (1 header row + 1 body row), bordered
+/// by default so the lines are visible on any theme.
 String buildTable({int rows = 2, int cols = 2}) {
-  final buf = StringBuffer('<figure class="wp-block-table"><table><tbody>');
-  for (var r = 0; r < rows; r++) {
-    buf.write('<tr>');
-    for (var c = 0; c < cols; c++) {
-      buf.write(r == 0 ? '<th></th>' : '<td></td>');
-    }
-    buf.write('</tr>');
-  }
-  buf.write('</tbody></table></figure>');
-  return buf.toString();
+  final table = TableData(rows: [
+    for (var r = 0; r < rows; r++) List.filled(cols, '', growable: true),
+  ], hasHeader: true, hasBorder: true);
+  return serializeTable(table);
 }
 
 /// Parses `<figure class="wp-block-table"><table>...` (or a bare table)
@@ -300,35 +348,195 @@ TableData parseTable(String html) {
   if (rows.isNotEmpty && RegExp(r'<th\b', caseSensitive: false).hasMatch(html)) {
     hasHeader = true;
   }
-  return TableData(rows: rows, hasHeader: hasHeader);
+  final hasBorder = RegExp(
+          r'style\s*=\s*"[^"]*border|<table[^>]*\bborder\b',
+          caseSensitive: false)
+      .hasMatch(html);
+  // Gutenberg stores alignment as has-text-align-* classes on the figure
+  // or the table; legacy content may use style="text-align:*". The figure
+  // class comes first in the markup, so scan every class/style attribute.
+  TableCellAlign? align;
+  for (final m in RegExp(r'(?:class|style)\s*=\s*"([^"]*)"',
+          caseSensitive: false)
+      .allMatches(html)) {
+    align = TableCellAlign.fromStyle(m.group(1)!);
+    if (align != null) break;
+  }
+  return TableData(
+    rows: rows,
+    hasHeader: hasHeader,
+    hasBorder: hasBorder,
+    align: align ?? TableCellAlign.left,
+  );
 }
 
-/// Encodes a cell matrix back into table HTML inside a wp-block-table
-/// figure (when the source had one).
+/// Serializes back to Gutenberg-canonical table markup:
+/// `figure.wp-block-table [has-text-align-*] > table.has-fixed-layout >
+/// thead(th) + tbody(td)`. Gutenberg puts the header row in `<thead>` —
+/// `th` cells inside `<tbody>` fail its block validation ("unexpected or
+/// invalid content") — and stores text alignment as a class on the
+/// figure, not the table.
+/// No inline border styles — they break validation and stack with theme
+/// CSS into uneven line widths. Frontend borders come from WordPress core
+/// block styles (`.wp-block-table td/th { border: 1px solid }`).
 String serializeTable(TableData table, {bool wrapFigure = true}) {
-  final buf = StringBuffer('<table><tbody>');
-  for (var r = 0; r < table.rows.length; r++) {
+  final buf = StringBuffer('<table class="has-fixed-layout">');
+  if (table.hasHeader && table.rows.isNotEmpty) {
+    buf.write('<thead><tr>');
+    for (final cell in table.rows[0]) {
+      buf.write('<th>${_encodeEntities(cell)}</th>');
+    }
+    buf.write('</tr></thead>');
+  }
+  buf.write('<tbody>');
+  for (var r = table.hasHeader ? 1 : 0; r < table.rows.length; r++) {
     buf.write('<tr>');
-    final isHeader = table.hasHeader && r == 0;
     for (final cell in table.rows[r]) {
-      final tag = isHeader ? 'th' : 'td';
-      buf.write('<$tag>${_encodeEntities(cell)}</$tag>');
+      buf.write('<td>${_encodeEntities(cell)}</td>');
     }
     buf.write('</tr>');
   }
   buf.write('</tbody></table>');
   if (!wrapFigure) return buf.toString();
-  return '<figure class="wp-block-table">${buf.toString()}</figure>';
+  final align =
+      table.align == TableCellAlign.left ? '' : ' ${table.align.cssClass}';
+  return '<figure class="wp-block-table$align">${buf.toString()}</figure>';
+}
+
+/// Horizontal text alignment inside table cells. The string values are the
+/// CSS/Gutenberg classes written into the table markup.
+enum TableCellAlign { left('has-text-align-left'), center('has-text-align-center'), right('has-text-align-right');
+
+  const TableCellAlign(this.cssClass);
+  final String cssClass;
+
+  /// Parses Gutenberg `has-text-align-*` classes (or a legacy
+  /// `text-align:*` style) from a class/style attribute value.
+  static TableCellAlign? fromStyle(String styleOrClass) {
+    if (RegExp(r'has-text-align-center|text-align:\s*center', caseSensitive: false)
+        .hasMatch(styleOrClass)) {
+      return TableCellAlign.center;
+    }
+    if (RegExp(r'has-text-align-right|text-align:\s*right', caseSensitive: false)
+        .hasMatch(styleOrClass)) {
+      return TableCellAlign.right;
+    }
+    if (RegExp(r'has-text-align-left|text-align:\s*left', caseSensitive: false)
+        .hasMatch(styleOrClass)) {
+      return TableCellAlign.left;
+    }
+    return null;
+  }
 }
 
 /// Editable table payload.
 class TableData {
-  TableData({required this.rows, this.hasHeader = false});
+  TableData({
+    required this.rows,
+    this.hasHeader = false,
+    this.hasBorder = false,
+    this.align = TableCellAlign.left,
+  });
 
   List<List<String>> rows;
   bool hasHeader;
+  bool hasBorder;
+
+  /// Table-wide horizontal alignment (Gutenberg's alignment applies to the
+  /// whole block; per-cell alignment is not part of the core table block).
+  TableCellAlign align;
 
   int get columnCount => rows.isEmpty ? 0 : rows.reduce((a, b) => a.length >= b.length ? a : b).length;
+}
+
+// ---------------------------------------------------------------------------
+// List block (core/list): items are the inner HTML of each <li> so inline
+// formatting (links, bold) survives editing verbatim.
+// ---------------------------------------------------------------------------
+
+/// Editable list payload.
+class ListData {
+  ListData({required this.items, this.ordered = false});
+
+  /// Inner HTML of each `<li>` — raw markup, edited as-is.
+  List<String> items;
+  bool ordered;
+}
+
+/// Parses `<ul>/<ol>` markup (with or without wp:list-item comments).
+ListData parseList(String html) {
+  final ordered =
+      RegExp(r'<ol\b', caseSensitive: false).hasMatch(html);
+  // Strip optional wp:list-item wrappers; both legacy (bare <li>) and
+  // modern (WP 6.7+) markup parse into the same shape.
+  final cleaned = html
+      .replaceAll(RegExp(r'<!--\s*wp:list-item\s*-->', caseSensitive: false), '')
+      .replaceAll(RegExp(r'<!--\s*/wp:list-item\s*-->', caseSensitive: false), '');
+  final items = RegExp(r'<li[^>]*>([\s\S]*?)</li>', caseSensitive: false)
+      .allMatches(cleaned)
+      .map((m) => m.group(1)!.trim())
+      .where((s) => s.isNotEmpty)
+      .toList();
+  return ListData(items: items, ordered: ordered);
+}
+
+/// Serializes to Gutenberg core/list markup with wp:list-item inner block
+/// comments (WP 6.7+ canonical; older WP versions migrate it transparently).
+String buildListHtml(ListData list) {
+  final tag = list.ordered ? 'ol' : 'ul';
+  final items = list.items
+      .map((i) => '<!-- wp:list-item -->\n<li>$i</li>\n<!-- /wp:list-item -->')
+      .join();
+  return '<$tag class="wp-block-list">$items</$tag>';
+}
+
+// ---------------------------------------------------------------------------
+// Quote block (core/quote): paragraphs are the inner HTML of each <p>.
+// ---------------------------------------------------------------------------
+
+/// Editable quote payload.
+class QuoteData {
+  QuoteData({required this.paragraphs, this.openTag});
+
+  /// Inner HTML of each `<p>` inside the blockquote.
+  List<String> paragraphs;
+
+  /// Original `<blockquote ...>` opening tag (preserves classes like
+  /// is-style-plain / has-text-align-*); null uses the default.
+  String? openTag;
+}
+
+/// Parses blockquote markup. Returns null for non-quote html.
+QuoteData? parseQuote(String html) {
+  final open =
+      RegExp(r'<blockquote[^>]*>', caseSensitive: false).firstMatch(html);
+  if (open == null) return null;
+  final openTag = open.group(0)!;
+  final paragraphs =
+      RegExp(r'<p[^>]*>([\s\S]*?)</p>', caseSensitive: false)
+          .allMatches(html)
+          .map((m) => m.group(1)!.trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+  if (paragraphs.isEmpty) {
+    // Quote without <p> wrappers: treat the raw inner text as one paragraph.
+    final inner = html
+        .replaceAll(RegExp(r'</?blockquote[^>]*>', caseSensitive: false), '')
+        .trim();
+    if (inner.isEmpty) return QuoteData(paragraphs: [], openTag: openTag);
+    return QuoteData(paragraphs: [inner], openTag: openTag);
+  }
+  return QuoteData(paragraphs: paragraphs, openTag: openTag);
+}
+
+/// Serializes to Gutenberg core/quote markup: each paragraph is an inner
+/// wp:paragraph block, matching how the block editor saves quotes.
+String buildQuoteHtml(QuoteData quote) {
+  final open = quote.openTag ?? '<blockquote class="wp-block-quote">';
+  final inner = quote.paragraphs
+      .map((p) => '<!-- wp:paragraph -->\n<p>$p</p>\n<!-- /wp:paragraph -->')
+      .join();
+  return '$open$inner</blockquote>';
 }
 
 String _decodeEntities(String s) => s

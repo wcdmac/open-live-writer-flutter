@@ -101,13 +101,13 @@ abstract class AppLocalizations {
   /// No description provided for @appTitle.
   ///
   /// In en, this message translates to:
-  /// **'Starmaster Writer'**
+  /// **'Open Live Writer'**
   String get appTitle;
 
   /// No description provided for @welcome.
   ///
   /// In en, this message translates to:
-  /// **'Welcome to Starmaster Writer'**
+  /// **'Welcome to Open Live Writer'**
   String get welcome;
 
   /// No description provided for @welcomeSubtitle.
@@ -326,6 +326,36 @@ abstract class AppLocalizations {
   /// **'Upload failed: {error}'**
   String uploadFailed(Object error);
 
+  /// No description provided for @uploadTooLarge.
+  ///
+  /// In en, this message translates to:
+  /// **'File exceeds the server size limit (HTTP 413). Increase nginx client_max_body_size (100m recommended, matching the Cloudflare free tier) and PHP upload_max_filesize / post_max_size on your server, then retry.'**
+  String get uploadTooLarge;
+
+  /// No description provided for @imageLoadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Image failed to load: make sure it is a direct image URL (not a page), uses https, and the host allows hot-linking.'**
+  String get imageLoadFailed;
+
+  /// No description provided for @pickVideoFromDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'Pick video from device & upload'**
+  String get pickVideoFromDevice;
+
+  /// No description provided for @enterVideoUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter video URL'**
+  String get enterVideoUrl;
+
+  /// No description provided for @uploadingVideo.
+  ///
+  /// In en, this message translates to:
+  /// **'Uploading video…'**
+  String get uploadingVideo;
+
   /// No description provided for @detectionFailed.
   ///
   /// In en, this message translates to:
@@ -451,6 +481,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Publish'**
   String get publish;
+
+  /// No description provided for @postActions.
+  ///
+  /// In en, this message translates to:
+  /// **'Post actions'**
+  String get postActions;
+
+  /// No description provided for @editPost.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit'**
+  String get editPost;
+
+  /// No description provided for @moveToDraft.
+  ///
+  /// In en, this message translates to:
+  /// **'Move to draft'**
+  String get moveToDraft;
+
+  /// No description provided for @setAsPrivate.
+  ///
+  /// In en, this message translates to:
+  /// **'Set as private'**
+  String get setAsPrivate;
+
+  /// No description provided for @moveToTrash.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete (move to trash)'**
+  String get moveToTrash;
+
+  /// No description provided for @deletePostConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Move \"{title}\" to trash? You can restore it from Trash in the WordPress admin.'**
+  String deletePostConfirm(Object title);
+
+  /// No description provided for @operationFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Operation failed: {error}'**
+  String operationFailed(Object error);
 
   /// No description provided for @postSettings.
   ///
@@ -683,7 +755,7 @@ abstract class AppLocalizations {
   /// No description provided for @codeBlock.
   ///
   /// In en, this message translates to:
-  /// **'Code block'**
+  /// **'Code'**
   String get codeBlock;
 
   /// No description provided for @moreTag.
@@ -716,17 +788,23 @@ abstract class AppLocalizations {
   /// **'Alt text (optional)'**
   String get altText;
 
-  /// No description provided for @copyDiagnostics.
+  /// No description provided for @alignLeft.
   ///
   /// In en, this message translates to:
-  /// **'Copy diagnostics'**
-  String get copyDiagnostics;
+  /// **'Align left'**
+  String get alignLeft;
 
-  /// No description provided for @diagnosticsCopied.
+  /// No description provided for @alignCenter.
   ///
   /// In en, this message translates to:
-  /// **'Diagnostics copied to clipboard'**
-  String get diagnosticsCopied;
+  /// **'Align center'**
+  String get alignCenter;
+
+  /// No description provided for @alignRight.
+  ///
+  /// In en, this message translates to:
+  /// **'Align right'**
+  String get alignRight;
 
   /// No description provided for @cancel.
   ///
@@ -890,6 +968,12 @@ abstract class AppLocalizations {
   /// **'First row is header'**
   String get tableHeaderRow;
 
+  /// No description provided for @tableBorder.
+  ///
+  /// In en, this message translates to:
+  /// **'Borders'**
+  String get tableBorder;
+
   /// No description provided for @addRow.
   ///
   /// In en, this message translates to:
@@ -943,6 +1027,132 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Type here…'**
   String get emptyBlockHint;
+
+  /// No description provided for @listBlock.
+  ///
+  /// In en, this message translates to:
+  /// **'List'**
+  String get listBlock;
+
+  /// No description provided for @quoteBlock.
+  ///
+  /// In en, this message translates to:
+  /// **'Quote'**
+  String get quoteBlock;
+
+  /// No description provided for @removeItem.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove item'**
+  String get removeItem;
+
+  /// No description provided for @addItem.
+  ///
+  /// In en, this message translates to:
+  /// **'Add item'**
+  String get addItem;
+
+  /// No description provided for @addParagraph.
+  ///
+  /// In en, this message translates to:
+  /// **'Add paragraph'**
+  String get addParagraph;
+
+  /// No description provided for @postPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Post password'**
+  String get postPassword;
+
+  /// No description provided for @postPasswordHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Readers must enter this password to view the post (empty = no protection)'**
+  String get postPasswordHelp;
+
+  /// No description provided for @newCategory.
+  ///
+  /// In en, this message translates to:
+  /// **'New category'**
+  String get newCategory;
+
+  /// No description provided for @newCategoryHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Category name'**
+  String get newCategoryHint;
+
+  /// No description provided for @undo.
+  ///
+  /// In en, this message translates to:
+  /// **'Undo'**
+  String get undo;
+
+  /// No description provided for @redo.
+  ///
+  /// In en, this message translates to:
+  /// **'Redo'**
+  String get redo;
+
+  /// No description provided for @charCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} characters'**
+  String charCount(num count);
+
+  /// No description provided for @saveLocalDraft.
+  ///
+  /// In en, this message translates to:
+  /// **'Save local draft'**
+  String get saveLocalDraft;
+
+  /// No description provided for @saveLocalDraftHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Store on this device only; publish later when online'**
+  String get saveLocalDraftHelp;
+
+  /// No description provided for @savedOfflineDraft.
+  ///
+  /// In en, this message translates to:
+  /// **'Network unavailable — draft saved locally. Publish it later from the home screen.'**
+  String get savedOfflineDraft;
+
+  /// No description provided for @localDraftSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Local draft • {time} • not synced'**
+  String localDraftSubtitle(String time);
+
+  /// No description provided for @deleteDraftTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete local draft'**
+  String get deleteDraftTitle;
+
+  /// No description provided for @crashRecoveryTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Unsaved changes found'**
+  String get crashRecoveryTitle;
+
+  /// No description provided for @crashRecoveryBody.
+  ///
+  /// In en, this message translates to:
+  /// **'An unsaved draft from {time} was recovered. Restore it?'**
+  String crashRecoveryBody(String time);
+
+  /// No description provided for @restore.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore'**
+  String get restore;
+
+  /// No description provided for @delete.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get delete;
 }
 
 class _AppLocalizationsDelegate

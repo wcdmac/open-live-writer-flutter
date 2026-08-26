@@ -4,10 +4,23 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../../models/blog_post.dart';
+import '../../editor/block_document.dart'
+    show buildImageHtml, normalizeImageUpload;
 
 /// Signature for the media upload callback provided by the editor page.
 typedef MediaUploader = Future<MediaUploadResult> Function(
     String filename, List<int> bytes, String mimeType);
+
+/// Localized, actionable message for a failed media upload.
+///
+/// HTTP 413 means the server (nginx client_max_body_size / PHP limits)
+/// rejected the request body as too large — no client-side retry can fix
+/// it, so surface concrete server-side instructions instead of the raw
+/// fault.
+String mediaUploadErrorText(AppLocalizations l10n, Object error) {
+  if (error.toString().contains('HTTP 413')) return l10n.uploadTooLarge;
+  return l10n.uploadFailed(error);
+}
 
 /// Formatting toolbar that wraps the selection in HTML tags — the same
 /// content model as the original OLW editor (posts are HTML).
@@ -112,7 +125,7 @@ class EditorToolbar extends StatelessWidget {
     final url = await _prompt(context, l10n.imageUrl, 'https://');
     if (url == null || url.isEmpty || !context.mounted) return;
     final alt = await _prompt(context, l10n.altText, '');
-    _insertAtCursor('<img src="$url" alt="${alt ?? ''}" />');
+    _insertAtCursor(buildImageHtml(url, alt ?? ''));
   }
 
   Future<void> _pickAndUpload(
@@ -141,8 +154,9 @@ class EditorToolbar extends StatelessWidget {
 
     try {
       final Uint8List bytes = await xfile.readAsBytes();
-      final result = await uploader(xfile.name, bytes,
-          xfile.mimeType ?? 'image/jpeg');
+      final (name, mime) = normalizeImageUpload(
+          xfile.name, xfile.mimeType ?? 'image/jpeg');
+      final result = await uploader(name, bytes, mime);
       if (!context.mounted) return;
       Navigator.of(context).pop(); // close indicator
       _insertAtCursor(result.html);
@@ -150,7 +164,7 @@ class EditorToolbar extends StatelessWidget {
       if (!context.mounted) return;
       Navigator.of(context).pop(); // close indicator
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l10n.uploadFailed(e))),
+        SnackBar(content: Text(mediaUploadErrorText(l10n, e))),
       );
     }
   }

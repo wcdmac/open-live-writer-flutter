@@ -48,10 +48,6 @@ class WordPressRestClient {
 
   static const _timeout = Duration(seconds: 30);
 
-  /// Raw body of the most recent response (truncated) — used by the
-  /// in-app diagnostics when a post opens with empty content.
-  String? lastResponseBody;
-
   // ---------------------------------------------------------------------------
   // Discovery
   // ---------------------------------------------------------------------------
@@ -98,7 +94,7 @@ class WordPressRestClient {
   Future<Map<String, String>> _headers(
       {Map<String, String> extra = const {}}) async {
     final h = <String, String>{
-      'User-Agent': 'StarmasterWriter/1.5',
+      'User-Agent': 'OpenLiveWriter/1.5',
       'Accept': 'application/json',
       ...extra,
     };
@@ -157,10 +153,6 @@ class WordPressRestClient {
     }
     final res = await _http.send(request).timeout(_timeout);
     final response = await http.Response.fromStream(res);
-
-    lastResponseBody = response.body.length > 4000
-        ? '${response.body.substring(0, 4000)}…'
-        : response.body;
 
     if (response.statusCode >= 400) {
       String code = 'http_error';
@@ -346,7 +338,11 @@ class WordPressRestClient {
       ..files.add(http.MultipartFile.fromBytes('file', bytes,
           filename: filename,
           contentType: http.MediaType.parse(mimeType)));
-    final res = await _http.send(request).timeout(_timeout);
+    // Media uploads need a much longer budget than regular API calls
+    // (cross-border transfer + server-side image re-encoding).
+    final res = await _http
+        .send(request)
+        .timeout(const Duration(minutes: 5));
     final response = await http.Response.fromStream(res);
     if (response.statusCode >= 400) {
       throw WordPressRestException(
@@ -382,9 +378,9 @@ class WordPressRestClient {
   // ---------------------------------------------------------------------------
 
   Map<String, dynamic> _postToJson(BlogPost post, {required bool publish}) {
-    final status = publish
-        ? (post.status == PostStatus.draft ? PostStatus.publish : post.status)
-        : PostStatus.draft;
+    // publish=false means "Save draft"; publish=true sends the chosen
+    // status verbatim (EditorState applies the draft → publish default).
+    final status = publish ? post.status : PostStatus.draft;
     return {
       'title': post.title,
       'content': post.content,

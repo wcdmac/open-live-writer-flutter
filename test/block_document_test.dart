@@ -62,16 +62,109 @@ void main() {
     expect(blocks[1].type, BlockType.list);
   });
 
+  test('list helpers parse legacy and modern markup, emit Gutenberg canonical',
+      () {
+    // Legacy markup (bare <li>, no wp:list-item comments).
+    final legacy = parseList('<ul class="wp-block-list"><li>a</li><li>b</li></ul>');
+    expect(legacy.items, ['a', 'b']);
+    expect(legacy.ordered, isFalse);
+    // Modern markup (WP 6.7+ wp:list-item inner blocks).
+    const modern =
+        '<ul class="wp-block-list"><!-- wp:list-item -->\n<li>x</li>\n<!-- /wp:list-item --><!-- wp:list-item -->\n<li>y</li>\n<!-- /wp:list-item --></ul>';
+    final parsed = parseList(modern);
+    expect(parsed.items, ['x', 'y']);
+    // Ordered lists are detected.
+    expect(parseList('<ol><li>1</li></ol>').ordered, isTrue);
+    // Canonical output matches what the block editor itself saves.
+    expect(
+      buildListHtml(ListData(items: ['x', 'y'])),
+      '<ul class="wp-block-list"><!-- wp:list-item -->\n<li>x</li>\n<!-- /wp:list-item --><!-- wp:list-item -->\n<li>y</li>\n<!-- /wp:list-item --></ul>',
+    );
+    expect(
+      buildListHtml(ListData(items: ['1'], ordered: true)),
+      '<ol class="wp-block-list"><!-- wp:list-item -->\n<li>1</li>\n<!-- /wp:list-item --></ol>',
+    );
+    // Inline formatting inside items survives verbatim.
+    final fmt = parseList('<ul><li><strong>bold</strong> text</li></ul>');
+    expect(fmt.items.single, '<strong>bold</strong> text');
+  });
+
+  test('quote helpers parse paragraphs and preserve the opening tag', () {
+    const src = '<blockquote class="wp-block-quote is-style-plain">'
+        '<!-- wp:paragraph -->\n<p>first</p>\n<!-- /wp:paragraph -->'
+        '<!-- wp:paragraph -->\n<p>second</p>\n<!-- /wp:paragraph -->'
+        '</blockquote>';
+    final quote = parseQuote(src);
+    expect(quote, isNotNull);
+    expect(quote!.paragraphs, ['first', 'second']);
+    expect(quote.openTag,
+        '<blockquote class="wp-block-quote is-style-plain">');
+    expect(buildQuoteHtml(quote), src);
+    // Plain blockquote without <p> wrappers falls back to one paragraph.
+    final plain = parseQuote('<blockquote>raw text</blockquote>');
+    expect(plain!.paragraphs, ['raw text']);
+    // Default serialization is Gutenberg canonical.
+    expect(
+      buildQuoteHtml(QuoteData(paragraphs: ['hi'])),
+      '<blockquote class="wp-block-quote"><!-- wp:paragraph -->\n<p>hi</p>\n<!-- /wp:paragraph --></blockquote>',
+    );
+  });
+
   test('table helpers parse and serialize cells', () {
     const src =
-        '<figure class="wp-block-table"><table><tbody><tr><th>Name</th><th>Qty</th></tr>'
-        '<tr><td>Apple &amp; Pear</td><td>2</td></tr></tbody></table></figure>';
+        '<figure class="wp-block-table"><table class="has-fixed-layout"><thead><tr><th>Name</th><th>Qty</th></tr></thead>'
+        '<tbody><tr><td>Apple &amp; Pear</td><td>2</td></tr></tbody></table></figure>';
     final table = parseTable(src);
     expect(table.rows.length, 2);
     expect(table.rows[1][0], 'Apple & Pear');
     expect(table.hasHeader, isTrue);
     final out = serializeTable(table);
     expect(out, src);
+  });
+
+  test('serializeTable emits Gutenberg-canonical markup without inline styles',
+      () {
+    // Inline border styles break Gutenberg block validation and stack
+    // with theme CSS into uneven line widths — output must be bare.
+    // The header row must live in <thead>; th inside <tbody> fails
+    // Gutenberg's block validation.
+    final out = serializeTable(TableData(rows: [
+      ['A', 'B'],
+      ['1', '2'],
+    ], hasHeader: true));
+    expect(out,
+        '<figure class="wp-block-table"><table class="has-fixed-layout">'
+        '<thead><tr><th>A</th><th>B</th></tr></thead>'
+        '<tbody><tr><td>1</td><td>2</td></tr></tbody></table></figure>');
+    expect(out, isNot(contains('style=')));
+  });
+
+  test('table alignment round-trips through has-text-align classes', () {
+    // Gutenberg stores alignment on the figure wrapper, not the table.
+    final out = serializeTable(TableData(rows: [
+      ['A']
+    ], align: TableCellAlign.center));
+    expect(out, contains('<figure class="wp-block-table has-text-align-center">'));
+    expect(out, contains('<table class="has-fixed-layout">'));
+    // Left is the default and emits no class, matching Gutenberg.
+    final left = serializeTable(TableData(rows: [
+      ['A']
+    ]));
+    expect(left, contains('<figure class="wp-block-table">'));
+    // Parsing picks the class back up.
+    expect(parseTable(out).align, TableCellAlign.center);
+  });
+
+  test('code block helpers round-trip source with special characters', () {
+    const src = 'int main() {\n  return x < y && y > z;\n}';
+    final html = buildCodeHtml(src);
+    expect(html,
+        '<pre class="wp-block-code"><code>int main() {\n  return x &lt; y &amp;&amp; y &gt; z;\n}</code></pre>');
+    expect(parseCodeBlock(html), src);
+    // Bare <pre> without the code wrapper also parses.
+    expect(parseCodeBlock('<pre>plain</pre>'), 'plain');
+    // Non-code markup returns null (caller keeps the raw html).
+    expect(parseCodeBlock('<p>not code</p>'), isNull);
   });
 
   test('buildVideoEmbed handles youtube links, media files and iframes', () {
@@ -93,6 +186,24 @@ void main() {
     const html = '<figure><img src="https://x/a.jpg" alt="描述" /></figure>';
     expect(firstImgSrc(html), 'https://x/a.jpg');
     expect(firstImgAlt(html), '描述');
+  });
+
+  test('generated media blocks match Gutenberg canonical markup', () {
+    // Image: <img> inside wp-block-image figure (with/without caption).
+    expect(buildImageHtml('https://x/a.jpg', '图'),
+        '<figure class="wp-block-image"><img src="https://x/a.jpg" alt="图" /></figure>');
+    expect(buildImageHtml('https://x/a.jpg', '', caption: '说明'),
+        '<figure class="wp-block-image"><img src="https://x/a.jpg" alt="" />'
+        '<figcaption>说明</figcaption></figure>');
+    // Uploaded video: wp-block-video figure wrapper — a bare <video>
+    // makes Gutenberg flag "invalid content" and themes left-align it.
+    final v = buildVideoFileHtml('https://x/v.mp4');
+    expect(v,
+        '<figure class="wp-block-video"><video controls src="https://x/v.mp4"></video></figure>');
+    // And both classify back into their block types.
+    expect(parseBlocks(buildImageHtml('https://x/a.jpg', '')).single.type,
+        BlockType.image);
+    expect(parseBlocks(v).single.type, BlockType.video);
   });
 
   test('self-closing wp comment is preserved as html block', () {

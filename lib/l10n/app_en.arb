@@ -1,7 +1,7 @@
 {
   "@@locale": "en",
-  "appTitle": "Starmaster Writer",
-  "welcome": "Welcome to Starmaster Writer",
+  "appTitle": "Open Live Writer",
+  "welcome": "Welcome to Open Live Writer",
   "welcomeSubtitle": "Connect to your WordPress blog to start writing.",
   "blogCredentials": "Blog & credentials",
   "connectionSettings": "Connection settings",
@@ -63,6 +63,16 @@
       }
     }
   },
+  "uploadTooLarge": "File exceeds the server size limit (HTTP 413). Increase nginx client_max_body_size (100m recommended, matching the Cloudflare free tier) and PHP upload_max_filesize / post_max_size on your server, then retry.",
+  "@uploadTooLarge": {},
+  "imageLoadFailed": "Image failed to load: make sure it is a direct image URL (not a page), uses https, and the host allows hot-linking.",
+  "@imageLoadFailed": {},
+  "pickVideoFromDevice": "Pick video from device & upload",
+  "@pickVideoFromDevice": {},
+  "enterVideoUrl": "Enter video URL",
+  "@enterVideoUrl": {},
+  "uploadingVideo": "Uploading video…",
+  "@uploadingVideo": {},
   "detectionFailed": "Detection failed: {error}",
   "@detectionFailed": {
     "placeholders": {
@@ -119,6 +129,15 @@
   },
   "saveDraft": "Save draft",
   "publish": "Publish",
+  "postActions": "Post actions",
+  "editPost": "Edit",
+  "moveToDraft": "Move to draft",
+  "setAsPrivate": "Set as private",
+  "moveToTrash": "Delete (move to trash)",
+  "deletePostConfirm": "Move \"{title}\" to trash? You can restore it from Trash in the WordPress admin.",
+  "@deletePostConfirm": { "placeholders": { "title": {} } },
+  "operationFailed": "Operation failed: {error}",
+  "@operationFailed": { "placeholders": { "error": {} } },
   "postSettings": "Post settings",
   "postTitle": "Post title",
   "writePostHint": "Write your post… (HTML)",
@@ -184,8 +203,10 @@
   "linkUrl": "Link URL",
   "imageUrl": "Image URL",
   "altText": "Alt text (optional)",
-  "copyDiagnostics": "Copy diagnostics",
-  "diagnosticsCopied": "Diagnostics copied to clipboard",
+  "alignLeft": "Align left",
+  "alignCenter": "Align center",
+  "alignRight": "Align right",
+  "codeBlock": "Code",
   "cancel": "Cancel",
   "ok": "OK",
   "postStatusDraft": "Draft",
@@ -213,6 +234,7 @@
   "videoUrl": "Video URL",
   "videoUrlHint": "YouTube link, direct .mp4, or embeddable page",
   "tableHeaderRow": "First row is header",
+  "tableBorder": "Borders",
   "addRow": "Add row",
   "addColumn": "Add column",
   "removeRow": "Remove row",
@@ -221,6 +243,48 @@
   "moveUp": "Move up",
   "moveDown": "Move down",
   "captionLabel": "Caption (optional)",
-  "emptyBlockHint": "Type here…"
+  "emptyBlockHint": "Type here…",
+  "listBlock": "List",
+  "quoteBlock": "Quote",
+  "removeItem": "Remove item",
+  "addItem": "Add item",
+  "addParagraph": "Add paragraph",
+  "postPassword": "Post password",
+  "postPasswordHelp": "Readers must enter this password to view the post (empty = no protection)",
+  "newCategory": "New category",
+  "newCategoryHint": "Category name",
+  "undo": "Undo",
+  "redo": "Redo",
+  "charCount": "{count} characters",
+  "@charCount": {
+    "placeholders": {
+      "count": {
+        "type": "num"
+      }
+    }
+  },
+  "saveLocalDraft": "Save local draft",
+  "saveLocalDraftHelp": "Store on this device only; publish later when online",
+  "savedOfflineDraft": "Network unavailable — draft saved locally. Publish it later from the home screen.",
+  "localDraftSubtitle": "Local draft • {time} • not synced",
+  "@localDraftSubtitle": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "deleteDraftTitle": "Delete local draft",
+  "crashRecoveryTitle": "Unsaved changes found",
+  "crashRecoveryBody": "An unsaved draft from {time} was recovered. Restore it?",
+  "@crashRecoveryBody": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "restore": "Restore",
+  "delete": "Delete"
 }
 

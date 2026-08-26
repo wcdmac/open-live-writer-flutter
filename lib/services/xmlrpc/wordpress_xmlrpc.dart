@@ -18,9 +18,6 @@ class WordPressXmlRpcClient {
   final XmlRpcClient _client;
   final XmlRpcFlavor flavor;
 
-  /// Raw body of the most recent XML-RPC response (diagnostics).
-  String? get lastResponseBody => _client.lastResponseBody;
-
   String get _blogId => _clientEndpointBlogId;
   String _clientEndpointBlogId = '';
 
@@ -162,12 +159,18 @@ class WordPressXmlRpcClient {
   }
 
   /// wp.newPost / metaWeblog.newPost. Returns the new post id.
+  ///
+  /// Saves use a 3-minute timeout: full-post bodies over slow cross-border
+  /// links can exceed the 30s default — the edit still lands server-side
+  /// while the client reports a bogus "transport error".
   Future<String> newPost(BlogPost post, {required bool publish}) async {
+    const saveTimeout = Duration(minutes: 3);
     if (flavor == XmlRpcFlavor.wordpress || flavor == XmlRpcFlavor.movabletype) {
       try {
         final content = _wpPostStruct(post, publish: publish);
         final result = await _client.callMethod('wp.newPost',
-            [_blogId, _client.username, _client.password, content]);
+            [_blogId, _client.username, _client.password, content],
+            timeout: saveTimeout);
         return _asId(result);
       } on XmlRpcFault catch (e) {
         if (!_isMethodMissing(e)) rethrow;
@@ -175,7 +178,8 @@ class WordPressXmlRpcClient {
     }
     final content = _metaweblogPostStruct(post);
     final result = await _client.callMethod('metaWeblog.newPost',
-        [_blogId, _client.username, _client.password, content, publish]);
+        [_blogId, _client.username, _client.password, content, publish],
+        timeout: saveTimeout);
     final id = _asId(result);
     // MetaWeblog needs out-of-band category + tag calls.
     if (post.categories.isNotEmpty) {
@@ -190,11 +194,13 @@ class WordPressXmlRpcClient {
 
   /// wp.editPost / metaWeblog.editPost.
   Future<bool> editPost(BlogPost post, {required bool publish}) async {
+    const saveTimeout = Duration(minutes: 3);
     if (flavor == XmlRpcFlavor.wordpress || flavor == XmlRpcFlavor.movabletype) {
       try {
         final content = _wpPostStruct(post, publish: publish);
         final result = await _client.callMethod('wp.editPost',
-            [_blogId, _client.username, _client.password, post.id, content]);
+            [_blogId, _client.username, _client.password, post.id, content],
+            timeout: saveTimeout);
         return result == true || result == 1 || '$result' == 'true';
       } on XmlRpcFault catch (e) {
         if (!_isMethodMissing(e)) rethrow;
@@ -202,7 +208,8 @@ class WordPressXmlRpcClient {
     }
     final content = _metaweblogPostStruct(post);
     final result = await _client.callMethod('metaWeblog.editPost',
-        [post.id, _client.username, _client.password, content, publish]);
+        [post.id, _client.username, _client.password, content, publish],
+        timeout: saveTimeout);
     if (post.categories.isNotEmpty) {
       await setPostCategories(post.id!, post.categories);
     }
@@ -352,8 +359,13 @@ class WordPressXmlRpcClient {
   // ---------------------------------------------------------------------------
 
   /// wp.uploadFile / metaWeblog.newMediaObject.
+  ///
+  /// Uses a dedicated 5-minute timeout: media uploads travel cross-border,
+  /// base64-encoded (~33% larger), and the server re-encodes images — the
+  /// default 30s call timeout aborts them mid-flight (transport error -32300).
   Future<MediaUploadResult> uploadMedia(
       String filename, List<int> bytes, String mimeType) async {
+    const uploadTimeout = Duration(minutes: 5);
     final data = <String, dynamic>{
       'name': filename,
       'type': mimeType,
@@ -362,13 +374,16 @@ class WordPressXmlRpcClient {
     };
     try {
       final result = await _client.callMethod(
-          'wp.uploadFile', [_blogId, _client.username, _client.password, data]);
+          'wp.uploadFile', [_blogId, _client.username, _client.password, data],
+          timeout: uploadTimeout);
       if (result is Map) return _mediaFromStruct(result);
     } on XmlRpcFault catch (e) {
       if (!_isMethodMissing(e)) rethrow;
     }
-    final result = await _client.callMethod('metaWeblog.newMediaObject',
-        [_blogId, _client.username, _client.password, data]);
+    final result = await _client.callMethod(
+        'metaWeblog.newMediaObject',
+        [_blogId, _client.username, _client.password, data],
+        timeout: uploadTimeout);
     return _mediaFromStruct(result as Map);
   }
 
@@ -435,9 +450,11 @@ class WordPressXmlRpcClient {
 
   /// WordPress content struct (wp.newPost / wp.editPost).
   Map<String, dynamic> _wpPostStruct(BlogPost post, {required bool publish}) {
-    final status = publish
-        ? (post.status == PostStatus.draft ? PostStatus.publish : post.status)
-        : PostStatus.draft;
+    // publish=false means "Save draft"; publish=true sends the status
+    // exactly as the editor chose it (EditorState handles the untouched
+    // draft → publish default) — converting here would silently revert
+    // explicit choices like published → draft.
+    final status = publish ? post.status : PostStatus.draft;
     return {
       'post_type': post.isPage ? 'page' : 'post',
       'post_status': status.wpValue,

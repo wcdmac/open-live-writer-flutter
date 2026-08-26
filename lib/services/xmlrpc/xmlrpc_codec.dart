@@ -56,6 +56,11 @@ class XmlRpcCodec {
       b.element('double', nest: value.toString());
     } else if (value is DateTime) {
       b.element('dateTime.iso8601', nest: _encodeDateTime(value));
+    } else if (value is List<int>) {
+      // Binary payload (media upload bits) — XML-RPC base64, NOT an
+      // int array: encoding 260k bytes as <int> nodes produces an ~8MB
+      // document that servers reject with parse errors / 413.
+      b.element('base64', nest: base64Encode(value));
     } else if (value is List) {
       b.element('array', nest: () {
         b.element('data', nest: () {

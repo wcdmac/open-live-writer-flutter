@@ -81,11 +81,26 @@ class EditorState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void updateStatus(PostStatus status) {
-    post.status = status;
+  /// Sets/clears the post password. An empty string clears protection —
+  /// both protocols already serialize `post.password`.
+  void updatePassword(String password) {
+    post.password = password.trim().isEmpty ? null : password.trim();
     _dirty = true;
     notifyListeners();
   }
+
+  void updateStatus(PostStatus status) {
+    post.status = status;
+    _statusTouched = true;
+    _dirty = true;
+    notifyListeners();
+  }
+
+  /// Whether the user explicitly picked a status in the editor. Only an
+  /// untouched draft is auto-promoted to publish on the publish path —
+  /// an explicit selection (e.g. published → draft → publish) must be
+  /// honored verbatim, or status changes would silently revert.
+  bool _statusTouched = false;
 
   void toggleCategory(String categoryId) {
     if (post.categories.contains(categoryId)) {
@@ -142,6 +157,14 @@ class EditorState extends ChangeNotifier {
     saveError = null;
     notifyListeners();
     try {
+      // Auto-promote an untouched draft to published on the publish path
+      // (writing a new post and hitting Publish must publish it). An
+      // explicit status selection is sent exactly as chosen.
+      if (publish &&
+          !_statusTouched &&
+          post.status == PostStatus.draft) {
+        post.status = PostStatus.publish;
+      }
       if (post.isNew) {
         final id = await svc.newPost(post, publish: publish);
         post.id = id;
@@ -149,9 +172,6 @@ class EditorState extends ChangeNotifier {
       } else {
         await svc.editPost(post, publish: publish);
         lastSavedId = post.id;
-      }
-      if (publish && post.status == PostStatus.draft) {
-        post.status = PostStatus.publish;
       }
       _dirty = false;
       return true;

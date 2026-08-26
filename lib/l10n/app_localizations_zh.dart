@@ -9,10 +9,10 @@ class AppLocalizationsZh extends AppLocalizations {
   AppLocalizationsZh([String locale = 'zh']) : super(locale);
 
   @override
-  String get appTitle => 'Starmaster Writer';
+  String get appTitle => 'Open Live Writer';
 
   @override
-  String get welcome => '欢迎使用 Starmaster Writer';
+  String get welcome => '欢迎使用 Open Live Writer';
 
   @override
   String get welcomeSubtitle => '连接到你的 WordPress 博客开始写作。';
@@ -131,6 +131,22 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get uploadTooLarge =>
+      '文件超过服务器大小限制（HTTP 413）。请在服务器上调大 nginx 的 client_max_body_size（建议 100m，与 Cloudflare 免费版一致）以及 PHP 的 upload_max_filesize 和 post_max_size，然后重试。';
+
+  @override
+  String get imageLoadFailed => '图片无法加载：请确认是图片直链（不是网页地址）、使用 https，且图床未设置防盗链。';
+
+  @override
+  String get pickVideoFromDevice => '从设备选择视频并上传';
+
+  @override
+  String get enterVideoUrl => '输入视频地址';
+
+  @override
+  String get uploadingVideo => '正在上传视频…';
+
+  @override
   String detectionFailed(Object error) {
     return '检测失败：$error';
   }
@@ -202,6 +218,31 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get publish => '发布';
+
+  @override
+  String get postActions => '文章操作';
+
+  @override
+  String get editPost => '编辑';
+
+  @override
+  String get moveToDraft => '转为草稿';
+
+  @override
+  String get setAsPrivate => '设为私有';
+
+  @override
+  String get moveToTrash => '删除（移入回收站）';
+
+  @override
+  String deletePostConfirm(Object title) {
+    return '将《$title》移入回收站？可在 WordPress 后台的回收站中恢复。';
+  }
+
+  @override
+  String operationFailed(Object error) {
+    return '操作失败：$error';
+  }
 
   @override
   String get postSettings => '文章设置';
@@ -324,7 +365,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get insertImage => '插入图片';
 
   @override
-  String get codeBlock => '代码块';
+  String get codeBlock => '代码';
 
   @override
   String get moreTag => '更多标签（摘要分隔）';
@@ -342,10 +383,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get altText => '替代文本（可选）';
 
   @override
-  String get copyDiagnostics => '复制诊断';
+  String get alignLeft => '左对齐';
 
   @override
-  String get diagnosticsCopied => '诊断信息已复制';
+  String get alignCenter => '居中';
+
+  @override
+  String get alignRight => '右对齐';
 
   @override
   String get cancel => '取消';
@@ -429,6 +473,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get tableHeaderRow => '首行为表头';
 
   @override
+  String get tableBorder => '边框';
+
+  @override
   String get addRow => '加一行';
 
   @override
@@ -454,4 +501,73 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get emptyBlockHint => '在此输入…';
+
+  @override
+  String get listBlock => '列表';
+
+  @override
+  String get quoteBlock => '引用';
+
+  @override
+  String get removeItem => '删除此项';
+
+  @override
+  String get addItem => '添加一项';
+
+  @override
+  String get addParagraph => '添加段落';
+
+  @override
+  String get postPassword => '文章密码';
+
+  @override
+  String get postPasswordHelp => '读者需输入此密码才能查看文章（留空 = 不加保护）';
+
+  @override
+  String get newCategory => '新建分类';
+
+  @override
+  String get newCategoryHint => '分类名称';
+
+  @override
+  String get undo => '撤销';
+
+  @override
+  String get redo => '重做';
+
+  @override
+  String charCount(num count) {
+    return '$count 字';
+  }
+
+  @override
+  String get saveLocalDraft => '保存到本地草稿';
+
+  @override
+  String get saveLocalDraftHelp => '仅保存在本机，联网后再发布';
+
+  @override
+  String get savedOfflineDraft => '网络不可用——草稿已保存到本地，稍后可从首页发布。';
+
+  @override
+  String localDraftSubtitle(String time) {
+    return '本地草稿 · $time · 未同步';
+  }
+
+  @override
+  String get deleteDraftTitle => '删除本地草稿';
+
+  @override
+  String get crashRecoveryTitle => '发现未保存的内容';
+
+  @override
+  String crashRecoveryBody(String time) {
+    return '检测到 $time 未保存的草稿，是否恢复？';
+  }
+
+  @override
+  String get restore => '恢复';
+
+  @override
+  String get delete => '删除';
 }

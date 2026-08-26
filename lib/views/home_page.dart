@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
 import '../models/blog.dart';
 import '../models/blog_post.dart';
+import '../services/local_draft_store.dart';
 import '../state/app_state.dart';
 import 'add_account_page.dart';
 import 'post_editor_page.dart';
@@ -76,7 +77,8 @@ class _HomePageState extends State<HomePage> {
 
   Widget _buildBody(BuildContext context, AppState app) {
     final l10n = AppLocalizations.of(context)!;
-    if (app.error != null && app.posts.isEmpty) {
+    final hasDrafts = app.localDrafts.isNotEmpty;
+    if (app.error != null && app.posts.isEmpty && !hasDrafts) {
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -101,11 +103,11 @@ class _HomePageState extends State<HomePage> {
       );
     }
 
-    if (app.loading && app.posts.isEmpty) {
+    if (app.loading && app.posts.isEmpty && !hasDrafts) {
       return const Center(child: CircularProgressIndicator());
     }
 
-    if (app.posts.isEmpty) {
+    if (app.posts.isEmpty && !hasDrafts) {
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -122,13 +124,18 @@ class _HomePageState extends State<HomePage> {
       );
     }
 
+    // Local drafts pin to the top: offline work stays reachable even when
+    // the blog is unreachable.
     return RefreshIndicator(
       onRefresh: () => app.refresh(),
       child: ListView.separated(
-        itemCount: app.posts.length,
+        itemCount: app.localDrafts.length + app.posts.length,
         separatorBuilder: (_, _) => const Divider(height: 1),
         itemBuilder: (context, index) {
-          final post = app.posts[index];
+          if (index < app.localDrafts.length) {
+            return _LocalDraftTile(draft: app.localDrafts[index], app: app);
+          }
+          final post = app.posts[index - app.localDrafts.length];
           return _PostTile(post: post, app: app);
         },
       ),
@@ -276,6 +283,53 @@ class _BlogSwitcher extends StatelessWidget {
   }
 }
 
+/// A locally stored draft (offline writing). Tapping opens it in the
+/// editor; long-press deletes it after confirmation.
+class _LocalDraftTile extends StatelessWidget {
+  const _LocalDraftTile({required this.draft, required this.app});
+
+  final LocalDraft draft;
+  final AppState app;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final dateFmt = DateFormat.yMMMd().add_jm();
+    return ListTile(
+      leading: const Icon(Icons.cloud_off_outlined),
+      title: Text(
+        draft.title.trim().isEmpty ? l10n.untitled : draft.title,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      subtitle: Text(l10n.localDraftSubtitle(dateFmt.format(draft.updatedAt))),
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(
+            builder: (_) => PostEditorPage(localDraft: draft)),
+      ),
+      onLongPress: () async {
+        final ok = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text(l10n.deleteDraftTitle),
+            content: Text(l10n.deletePostConfirm(
+                draft.title.isEmpty ? l10n.untitled : draft.title)),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: Text(l10n.cancel)),
+              FilledButton(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  child: Text(l10n.delete)),
+            ],
+          ),
+        );
+        if (ok == true) app.deleteLocalDraft(draft.id);
+      },
+    );
+  }
+}
+
 class _PostTile extends StatelessWidget {
   const _PostTile({required this.post, required this.app});
 
@@ -335,7 +389,137 @@ class _PostTile extends StatelessWidget {
           builder: (_) => PostEditorPage(existingPost: post),
         ),
       ),
+      onLongPress: () => _showActions(context, post),
     );
+  }
+
+  /// Long-press management sheet: quick status transitions and delete,
+  /// all backed by the same editPost/deletePost calls the editor uses.
+  void _showActions(BuildContext context, BlogPost post) {
+    final l10n = AppLocalizations.of(context)!;
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                post.title.isEmpty ? l10n.untitled : post.title,
+                style: const TextStyle(fontWeight: FontWeight.bold),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.edit_outlined),
+              title: Text(l10n.editPost),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => PostEditorPage(existingPost: post),
+                  ),
+                );
+              },
+            ),
+            if (post.status != PostStatus.publish)
+              ListTile(
+                leading: const Icon(Icons.publish_outlined),
+                title: Text(l10n.publish),
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _changeStatus(context, post, PostStatus.publish);
+                },
+              ),
+            if (post.status != PostStatus.draft)
+              ListTile(
+                leading: const Icon(Icons.edit_note_outlined),
+                title: Text(l10n.moveToDraft),
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _changeStatus(context, post, PostStatus.draft);
+                },
+              ),
+            if (post.status != PostStatus.private)
+              ListTile(
+                leading: const Icon(Icons.lock_outline),
+                title: Text(l10n.setAsPrivate),
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _changeStatus(context, post, PostStatus.private);
+                },
+              ),
+            ListTile(
+              leading: Icon(Icons.delete_outline,
+                  color: Theme.of(context).colorScheme.error),
+              title: Text(l10n.moveToTrash,
+                  style:
+                      TextStyle(color: Theme.of(context).colorScheme.error)),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                _deletePost(context, post);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _changeStatus(
+      BuildContext context, BlogPost post, PostStatus target) async {
+    final l10n = AppLocalizations.of(context)!;
+    final svc = app.service;
+    if (svc == null) return;
+    post.status = target;
+    try {
+      // editPost(publish: false) always saves as draft — exactly what a
+      // "move to draft" needs; other targets ride the publish path.
+      await svc.editPost(post, publish: target != PostStatus.draft);
+      await app.refresh();
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(l10n.operationFailed('$e'))));
+      }
+    }
+  }
+
+  Future<void> _deletePost(BuildContext context, BlogPost post) async {
+    final l10n = AppLocalizations.of(context)!;
+    final svc = app.service;
+    if (svc == null || post.id == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(l10n.moveToTrash),
+        content: Text(l10n
+            .deletePostConfirm(post.title.isEmpty ? l10n.untitled : post.title)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(l10n.cancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(l10n.moveToTrash),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await svc.deletePost(post.id!, isPage: post.isPage);
+      await app.refresh();
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(l10n.operationFailed('$e'))));
+      }
+    }
   }
 }
 
