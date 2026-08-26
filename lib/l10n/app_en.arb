@@ -63,6 +63,12 @@
       }
     }
   },
+  "pickVideoFromDevice": "Pick video from device & upload",
+  "@pickVideoFromDevice": {},
+  "enterVideoUrl": "Enter video URL",
+  "@enterVideoUrl": {},
+  "uploadingVideo": "Uploading video…",
+  "@uploadingVideo": {},
   "detectionFailed": "Detection failed: {error}",
   "@detectionFailed": {
     "placeholders": {
@@ -213,6 +219,7 @@
   "videoUrl": "Video URL",
   "videoUrlHint": "YouTube link, direct .mp4, or embeddable page",
   "tableHeaderRow": "First row is header",
+  "tableBorder": "Borders",
   "addRow": "Add row",
   "addColumn": "Add column",
   "removeRow": "Remove row",

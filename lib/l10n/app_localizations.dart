@@ -326,6 +326,24 @@ abstract class AppLocalizations {
   /// **'Upload failed: {error}'**
   String uploadFailed(Object error);
 
+  /// No description provided for @pickVideoFromDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'Pick video from device & upload'**
+  String get pickVideoFromDevice;
+
+  /// No description provided for @enterVideoUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter video URL'**
+  String get enterVideoUrl;
+
+  /// No description provided for @uploadingVideo.
+  ///
+  /// In en, this message translates to:
+  /// **'Uploading video…'**
+  String get uploadingVideo;
+
   /// No description provided for @detectionFailed.
   ///
   /// In en, this message translates to:
@@ -889,6 +907,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'First row is header'**
   String get tableHeaderRow;
+
+  /// No description provided for @tableBorder.
+  ///
+  /// In en, this message translates to:
+  /// **'Borders'**
+  String get tableBorder;
 
   /// No description provided for @addRow.
   ///

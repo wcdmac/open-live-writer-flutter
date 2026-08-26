@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../../models/blog_post.dart';
+import '../../editor/block_document.dart' show normalizeImageUpload;
 
 /// Signature for the media upload callback provided by the editor page.
 typedef MediaUploader = Future<MediaUploadResult> Function(
@@ -141,8 +142,9 @@ class EditorToolbar extends StatelessWidget {
 
     try {
       final Uint8List bytes = await xfile.readAsBytes();
-      final result = await uploader(xfile.name, bytes,
-          xfile.mimeType ?? 'image/jpeg');
+      final (name, mime) = normalizeImageUpload(
+          xfile.name, xfile.mimeType ?? 'image/jpeg');
+      final result = await uploader(name, bytes, mime);
       if (!context.mounted) return;
       Navigator.of(context).pop(); // close indicator
       _insertAtCursor(result.html);

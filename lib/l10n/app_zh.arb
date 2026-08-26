@@ -63,6 +63,12 @@
       }
     }
   },
+  "pickVideoFromDevice": "从设备选择视频并上传",
+  "@pickVideoFromDevice": {},
+  "enterVideoUrl": "输入视频地址",
+  "@enterVideoUrl": {},
+  "uploadingVideo": "正在上传视频…",
+  "@uploadingVideo": {},
   "detectionFailed": "检测失败：{error}",
   "connectionFailed": "连接失败：{error}",
   "connectedNoBlogs": "已连接，但这些凭据没有返回任何博客。",
@@ -157,6 +163,7 @@
   "videoUrl": "视频地址",
   "videoUrlHint": "YouTube 链接、MP4 直链或可嵌入页面",
   "tableHeaderRow": "首行为表头",
+  "tableBorder": "边框",
   "addRow": "加一行",
   "addColumn": "加一列",
   "removeRow": "删一行",

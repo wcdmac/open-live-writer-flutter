@@ -132,6 +132,15 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get pickVideoFromDevice => 'Pick video from device & upload';
+
+  @override
+  String get enterVideoUrl => 'Enter video URL';
+
+  @override
+  String get uploadingVideo => 'Uploading video…';
+
+  @override
   String detectionFailed(Object error) {
     return 'Detection failed: $error';
   }
@@ -430,6 +439,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get tableHeaderRow => 'First row is header';
+
+  @override
+  String get tableBorder => 'Borders';
 
   @override
   String get addRow => 'Add row';

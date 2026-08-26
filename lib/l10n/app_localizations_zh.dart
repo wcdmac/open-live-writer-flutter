@@ -131,6 +131,15 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get pickVideoFromDevice => '从设备选择视频并上传';
+
+  @override
+  String get enterVideoUrl => '输入视频地址';
+
+  @override
+  String get uploadingVideo => '正在上传视频…';
+
+  @override
   String detectionFailed(Object error) {
     return '检测失败：$error';
   }
@@ -427,6 +436,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get tableHeaderRow => '首行为表头';
+
+  @override
+  String get tableBorder => '边框';
 
   @override
   String get addRow => '加一行';

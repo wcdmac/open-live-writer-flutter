@@ -203,6 +203,23 @@ BlockType _classifyType(String html) {
 // Field-level helpers used by the visual editor widgets.
 // ---------------------------------------------------------------------------
 
+/// Normalizes a picked image for upload.
+///
+/// WordPress rejects formats that are not in the site's allowed MIME list
+/// (HEIC from iOS cameras is the common offender). Since the image picker
+/// re-encodes to JPEG whenever imageQuality/maxWidth are set, files whose
+/// reported MIME is not whitelisted are renamed to `.jpg` and typed as
+/// `image/jpeg` before hitting `wp.uploadFile`.
+(String, String) normalizeImageUpload(String name, String mime) {
+  const allowed = {'image/jpeg', 'image/png', 'image/gif', 'image/webp'};
+  final m = mime.toLowerCase().split(';').first.trim();
+  if (allowed.contains(m)) return (name, m);
+  final base = name.contains('.')
+      ? name.substring(0, name.lastIndexOf('.'))
+      : name;
+  return ('$base.jpg', 'image/jpeg');
+}
+
 /// Extracts the src attribute of the first <img> in [html].
 String? firstImgSrc(String html) {
   final m = RegExp(r'<img[^>]*\bsrc="([^"]+)"', caseSensitive: false)
@@ -269,18 +286,13 @@ String buildVideoEmbed(String url) {
       'allowfullscreen></iframe>';
 }
 
-/// Builds a simple 2x2 starter table (1 header row + 1 body row).
+/// Builds a simple 2x2 starter table (1 header row + 1 body row), bordered
+/// by default so the lines are visible on any theme.
 String buildTable({int rows = 2, int cols = 2}) {
-  final buf = StringBuffer('<figure class="wp-block-table"><table><tbody>');
-  for (var r = 0; r < rows; r++) {
-    buf.write('<tr>');
-    for (var c = 0; c < cols; c++) {
-      buf.write(r == 0 ? '<th></th>' : '<td></td>');
-    }
-    buf.write('</tr>');
-  }
-  buf.write('</tbody></table></figure>');
-  return buf.toString();
+  final table = TableData(rows: [
+    for (var r = 0; r < rows; r++) List.filled(cols, '', growable: true),
+  ], hasHeader: true, hasBorder: true);
+  return serializeTable(table);
 }
 
 /// Parses `<figure class="wp-block-table"><table>...` (or a bare table)
@@ -300,19 +312,29 @@ TableData parseTable(String html) {
   if (rows.isNotEmpty && RegExp(r'<th\b', caseSensitive: false).hasMatch(html)) {
     hasHeader = true;
   }
-  return TableData(rows: rows, hasHeader: hasHeader);
+  final hasBorder = RegExp(
+          r'style\s*=\s*"[^"]*border|<table[^>]*\bborder\b',
+          caseSensitive: false)
+      .hasMatch(html);
+  return TableData(rows: rows, hasHeader: hasHeader, hasBorder: hasBorder);
 }
 
 /// Encodes a cell matrix back into table HTML inside a wp-block-table
-/// figure (when the source had one).
+/// figure (when the source had one). When [TableData.hasBorder] is set the
+/// table and every cell get inline border styles so the lines survive on
+/// blog themes that don't style `wp-block-table` themselves.
 String serializeTable(TableData table, {bool wrapFigure = true}) {
-  final buf = StringBuffer('<table><tbody>');
+  const tableStyle = ' style="border: 1px solid; border-collapse: collapse;"';
+  const cellStyle = ' style="border: 1px solid;"';
+  final buf = StringBuffer(
+      '<table${table.hasBorder ? tableStyle : ''}><tbody>');
   for (var r = 0; r < table.rows.length; r++) {
     buf.write('<tr>');
     final isHeader = table.hasHeader && r == 0;
     for (final cell in table.rows[r]) {
       final tag = isHeader ? 'th' : 'td';
-      buf.write('<$tag>${_encodeEntities(cell)}</$tag>');
+      buf.write('<$tag${table.hasBorder ? cellStyle : ''}>'
+          '${_encodeEntities(cell)}</$tag>');
     }
     buf.write('</tr>');
   }
@@ -323,10 +345,11 @@ String serializeTable(TableData table, {bool wrapFigure = true}) {
 
 /// Editable table payload.
 class TableData {
-  TableData({required this.rows, this.hasHeader = false});
+  TableData({required this.rows, this.hasHeader = false, this.hasBorder = false});
 
   List<List<String>> rows;
   bool hasHeader;
+  bool hasBorder;
 
   int get columnCount => rows.isEmpty ? 0 : rows.reduce((a, b) => a.length >= b.length ? a : b).length;
 }
