@@ -293,6 +293,9 @@
   "exportAllWxr": "Export all posts (WXR)",
   "exportAllWxrHelp": "Builds a standard WordPress export file re-importable in the admin",
   "exportingPosts": "Fetching all posts…",
+  "exportingPostsProgress": "Fetching all posts… {count} fetched",
+  "@exportingPostsProgress": { "placeholders": { "count": { "type": "num" } } },
+  "exportCancelled": "Export cancelled",
   "crashRecoveryTitle": "Unsaved changes found",
   "crashRecoveryBody": "An unsaved draft from {time} was recovered. Restore it?",
   "@crashRecoveryBody": {

@@ -621,6 +621,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get exportingPosts => 'Fetching all posts…';
 
   @override
+  String exportingPostsProgress(num count) {
+    return 'Fetching all posts… $count fetched';
+  }
+
+  @override
+  String get exportCancelled => 'Export cancelled';
+
+  @override
   String get crashRecoveryTitle => 'Unsaved changes found';
 
   @override
