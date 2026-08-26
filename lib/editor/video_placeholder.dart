@@ -2,6 +2,26 @@ import 'package:flutter/material.dart';
 import 'package:html/dom.dart' as dom;
 import 'package:url_launcher/url_launcher.dart';
 
+import '../l10n/app_localizations.dart';
+
+/// Combined builder for media the stock HTML renderer renders poorly:
+/// video/iframe/embed placeholders plus images with visible loading
+/// and error states (a hot-link-blocked or non-image URL otherwise
+/// fails silently as blank space).
+Widget? mediaPlaceholderBuilder(dom.Element element) {
+  final video = videoPlaceholderBuilder(element);
+  if (video != null) return video;
+  if (element.localName == 'img') {
+    final src = element.attributes['src'];
+    if (src == null || src.isEmpty) return null;
+    return ImagePlaceholder(
+      src: src,
+      alt: element.attributes['alt'] ?? '',
+    );
+  }
+  return null;
+}
+
 /// Tappable placeholder card for media the HTML renderer cannot play
 /// (`<video>`, `<iframe>`, video embeds). Native playback is not viable
 /// on all five target platforms, so previews show a poster card and the
@@ -112,6 +132,73 @@ class VideoPlaceholder extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Image with a visible loading spinner and a descriptive error card —
+/// a failed URL (hot-link protection, non-image page URL, http:// on
+/// iOS, unreachable host) must not collapse into silent blank space.
+class ImagePlaceholder extends StatelessWidget {
+  const ImagePlaceholder({super.key, required this.src, this.alt = ''});
+
+  final String src;
+  final String alt;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final l10n = AppLocalizations.of(context)!;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Image.network(
+        src,
+        width: double.infinity,
+        fit: BoxFit.scaleDown,
+        loadingBuilder: (context, child, progress) => progress == null
+            ? child
+            : Container(
+                height: 160,
+                alignment: Alignment.center,
+                child: progress.expectedTotalBytes == null
+                    ? const CircularProgressIndicator(strokeWidth: 2)
+                    : CircularProgressIndicator(
+                        strokeWidth: 2,
+                        value: progress.cumulativeBytesLoaded /
+                            progress.expectedTotalBytes!,
+                      ),
+              ),
+        errorBuilder: (_, _, _) => Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            border: Border.all(color: scheme.errorContainer),
+            borderRadius: BorderRadius.circular(8),
+            color: scheme.errorContainer.withValues(alpha: 0.25),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                Icon(Icons.broken_image_outlined,
+                    color: scheme.error, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                    child: Text(l10n.imageLoadFailed,
+                        style: TextStyle(
+                            color: scheme.error,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13))),
+              ]),
+              const SizedBox(height: 6),
+              Text(src,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 11, color: scheme.outline)),
+            ],
+          ),
         ),
       ),
     );

@@ -129,9 +129,10 @@ class _LivePreviewState extends State<LivePreview> {
                           ? '<p style="opacity:0.5">${l10n.startWritingHint}</p>'
                           : _content,
                       textStyle: bodyStyle,
-                      // <video>/<iframe>/embeds cannot be played by the
-                      // HTML renderer — swap in tappable placeholder cards.
-                      customWidgetBuilder: videoPlaceholderBuilder,
+                      // <video>/<iframe>/embeds cannot be played and failed
+                      // image URLs must not be silent — swap in placeholder
+                      // widgets with visible loading/error states.
+                      customWidgetBuilder: mediaPlaceholderBuilder,
                       customStylesBuilder: (element) {
                         switch (element.localName) {
                           case 'a':

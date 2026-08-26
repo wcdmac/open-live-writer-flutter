@@ -250,7 +250,7 @@ class _BlockCardState extends State<_BlockCard> {
             .textTheme
             .bodyLarge
             ?.copyWith(fontSize: 15, height: 1.6),
-        customWidgetBuilder: videoPlaceholderBuilder,
+        customWidgetBuilder: mediaPlaceholderBuilder,
       );
     }
 

@@ -136,6 +136,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'File exceeds the server size limit (HTTP 413). Increase nginx client_max_body_size (100m recommended, matching the Cloudflare free tier) and PHP upload_max_filesize / post_max_size on your server, then retry.';
 
   @override
+  String get imageLoadFailed =>
+      'Image failed to load: make sure it is a direct image URL (not a page), uses https, and the host allows hot-linking.';
+
+  @override
   String get pickVideoFromDevice => 'Pick video from device & upload';
 
   @override
