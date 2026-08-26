@@ -618,6 +618,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get exportCancelled => '已取消导出';
 
   @override
+  String get shareFile => '分享';
+
+  @override
+  String get exportLocationHintIOS =>
+      '文件已保存，可在“文件”App → 我的 iPhone → Open Live Writer 中查看，卸载应用时将随之删除。';
+
+  @override
   String get crashRecoveryTitle => '发现未保存的内容';
 
   @override

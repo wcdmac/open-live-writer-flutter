@@ -1,6 +1,9 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../l10n/app_localizations.dart';
 import '../models/blog.dart';
@@ -292,8 +295,8 @@ class _HomePageState extends State<HomePage> {
           await PostExporter.write('wordpress-export-$stamp.wxr', wxr);
       if (context.mounted && dialogOpen) {
         Navigator.of(context).pop();
-        showExportedPath(
-            context, '${file.path} (${posts.length} posts)');
+        showExportedPath(context, file.path,
+            detail: '${posts.length} posts');
       }
     } catch (e) {
       if (context.mounted && dialogOpen) {
@@ -792,18 +795,51 @@ class _PostTile extends StatelessWidget {
   }
 }
 
-/// Shows where an export landed so the file is easy to find.
-void showExportedPath(BuildContext context, String path) {
+/// Export-success dialog: shows where the file was written and offers
+/// the system share sheet (AirDrop/WeChat/Mail…) so the file can be
+/// sent to other people directly.
+void showExportedPath(BuildContext context, String path, {String? detail}) {
   final l10n = AppLocalizations.of(context)!;
   showDialog<void>(
     context: context,
     builder: (context) => AlertDialog(
       title: Text(l10n.exportDoneTitle),
-      content: SelectableText(path),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SelectableText(path),
+          if (detail != null) ...[
+            const SizedBox(height: 4),
+            Text(detail,
+                style: TextStyle(
+                    fontSize: 13, color: Theme.of(context).hintColor)),
+          ],
+          if (Platform.isIOS) ...[
+            const SizedBox(height: 8),
+            Text(l10n.exportLocationHintIOS,
+                style: TextStyle(
+                    fontSize: 13, color: Theme.of(context).hintColor)),
+          ],
+        ],
+      ),
       actions: [
         TextButton(
             onPressed: () => Navigator.of(context).pop(),
             child: Text(l10n.ok)),
+        FilledButton.icon(
+          icon: const Icon(Icons.ios_share, size: 18),
+          label: Text(l10n.shareFile),
+          onPressed: () {
+            Navigator.of(context).pop();
+            SharePlus.instance.share(
+              ShareParams(
+                files: [XFile(path)],
+                previewThumbnail: null,
+              ),
+            );
+          },
+        ),
       ],
     ),
   );

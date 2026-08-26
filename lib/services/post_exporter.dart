@@ -12,11 +12,20 @@ import '../models/blog_post.dart';
 /// file, the whole blog as a WordPress WXR (eXtended RSS) file that the
 /// WP admin can re-import (Tools → Import → WordPress).
 class PostExporter {
-  /// Downloads folder when the platform has one, otherwise the app's
-  /// documents folder (mobile). On iOS path_provider reports a
-  /// Downloads path inside the app container that does not exist yet —
-  /// create it, and fall back to the documents folder if that fails.
+  /// Where exported files land.
+  ///
+  /// iOS: the app's Documents folder. With UIFileSharingEnabled in
+  /// Info.plist it appears in the Files app under "On My iPhone" →
+  /// Open Live Writer, is reachable from the share sheet, and is
+  /// deleted together with the app on uninstall (no orphaned files).
+  /// The container's Downloads folder is NOT visible in the Files app,
+  /// so it must not be used there.
+  ///
+  /// Other platforms: the user's Downloads folder, created on demand.
   static Future<String> exportDir() async {
+    if (Platform.isIOS) {
+      return (await getApplicationDocumentsDirectory()).path;
+    }
     try {
       final downloads = await getDownloadsDirectory();
       if (downloads != null) {

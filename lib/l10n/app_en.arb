@@ -296,6 +296,8 @@
   "exportingPostsProgress": "Fetching all posts… {count} fetched",
   "@exportingPostsProgress": { "placeholders": { "count": { "type": "num" } } },
   "exportCancelled": "Export cancelled",
+  "shareFile": "Share",
+  "exportLocationHintIOS": "Saved. Find it in the Files app under On My iPhone → Open Live Writer; it is removed when the app is uninstalled.",
   "crashRecoveryTitle": "Unsaved changes found",
   "crashRecoveryBody": "An unsaved draft from {time} was recovered. Restore it?",
   "@crashRecoveryBody": {

@@ -629,6 +629,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get exportCancelled => 'Export cancelled';
 
   @override
+  String get shareFile => 'Share';
+
+  @override
+  String get exportLocationHintIOS =>
+      'Saved. Find it in the Files app under On My iPhone → Open Live Writer; it is removed when the app is uninstalled.';
+
+  @override
   String get crashRecoveryTitle => 'Unsaved changes found';
 
   @override
