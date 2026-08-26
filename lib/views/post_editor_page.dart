@@ -10,7 +10,7 @@ import 'editor/editor_toolbar.dart';
 import 'editor/live_preview.dart';
 
 /// App version.
-const String kAppVersion = 'v1.5.11';
+const String kAppVersion = 'v1.5.12';
 
 /// Localized display label for a [PostStatus] (dashboard chips + editor).
 String statusLabel(AppLocalizations l10n, PostStatus status) =>

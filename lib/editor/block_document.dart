@@ -355,26 +355,36 @@ TableData parseTable(String html) {
 }
 
 /// Serializes back to Gutenberg-canonical table markup:
-/// `figure.wp-block-table > table.has-fixed-layout > tbody`.
-/// No inline border styles — they break Gutenberg block validation
-/// ("unexpected or invalid content") and stack with theme CSS into
-/// uneven line widths. Frontend borders come from WordPress core
+/// `figure.wp-block-table [has-text-align-*] > table.has-fixed-layout >
+/// thead(th) + tbody(td)`. Gutenberg puts the header row in `<thead>` —
+/// `th` cells inside `<tbody>` fail its block validation ("unexpected or
+/// invalid content") — and stores text alignment as a class on the
+/// figure, not the table.
+/// No inline border styles — they break validation and stack with theme
+/// CSS into uneven line widths. Frontend borders come from WordPress core
 /// block styles (`.wp-block-table td/th { border: 1px solid }`).
 String serializeTable(TableData table, {bool wrapFigure = true}) {
-  final align = table.align == TableCellAlign.left ? '' : ' ${table.align.cssClass}';
-  final buf = StringBuffer('<table class="has-fixed-layout$align"><tbody>');
-  for (var r = 0; r < table.rows.length; r++) {
+  final buf = StringBuffer('<table class="has-fixed-layout">');
+  if (table.hasHeader && table.rows.isNotEmpty) {
+    buf.write('<thead><tr>');
+    for (final cell in table.rows[0]) {
+      buf.write('<th>${_encodeEntities(cell)}</th>');
+    }
+    buf.write('</tr></thead>');
+  }
+  buf.write('<tbody>');
+  for (var r = table.hasHeader ? 1 : 0; r < table.rows.length; r++) {
     buf.write('<tr>');
-    final isHeader = table.hasHeader && r == 0;
     for (final cell in table.rows[r]) {
-      final tag = isHeader ? 'th' : 'td';
-      buf.write('<$tag>${_encodeEntities(cell)}</$tag>');
+      buf.write('<td>${_encodeEntities(cell)}</td>');
     }
     buf.write('</tr>');
   }
   buf.write('</tbody></table>');
   if (!wrapFigure) return buf.toString();
-  return '<figure class="wp-block-table">${buf.toString()}</figure>';
+  final align =
+      table.align == TableCellAlign.left ? '' : ' ${table.align.cssClass}';
+  return '<figure class="wp-block-table$align">${buf.toString()}</figure>';
 }
 
 /// Horizontal text alignment inside table cells. The string values are the

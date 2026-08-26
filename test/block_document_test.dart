@@ -64,8 +64,8 @@ void main() {
 
   test('table helpers parse and serialize cells', () {
     const src =
-        '<figure class="wp-block-table"><table class="has-fixed-layout"><tbody><tr><th>Name</th><th>Qty</th></tr>'
-        '<tr><td>Apple &amp; Pear</td><td>2</td></tr></tbody></table></figure>';
+        '<figure class="wp-block-table"><table class="has-fixed-layout"><thead><tr><th>Name</th><th>Qty</th></tr></thead>'
+        '<tbody><tr><td>Apple &amp; Pear</td><td>2</td></tr></tbody></table></figure>';
     final table = parseTable(src);
     expect(table.rows.length, 2);
     expect(table.rows[1][0], 'Apple & Pear');
@@ -78,28 +78,31 @@ void main() {
       () {
     // Inline border styles break Gutenberg block validation and stack
     // with theme CSS into uneven line widths — output must be bare.
+    // The header row must live in <thead>; th inside <tbody> fails
+    // Gutenberg's block validation.
     final out = serializeTable(TableData(rows: [
       ['A', 'B'],
       ['1', '2'],
     ], hasHeader: true));
     expect(out,
         '<figure class="wp-block-table"><table class="has-fixed-layout">'
-        '<tbody><tr><th>A</th><th>B</th></tr>'
-        '<tr><td>1</td><td>2</td></tr></tbody></table></figure>');
+        '<thead><tr><th>A</th><th>B</th></tr></thead>'
+        '<tbody><tr><td>1</td><td>2</td></tr></tbody></table></figure>');
     expect(out, isNot(contains('style=')));
   });
 
   test('table alignment round-trips through has-text-align classes', () {
+    // Gutenberg stores alignment on the figure wrapper, not the table.
     final out = serializeTable(TableData(rows: [
       ['A']
     ], align: TableCellAlign.center));
-    expect(
-        out, contains('<table class="has-fixed-layout has-text-align-center">'));
+    expect(out, contains('<figure class="wp-block-table has-text-align-center">'));
+    expect(out, contains('<table class="has-fixed-layout">'));
     // Left is the default and emits no class, matching Gutenberg.
     final left = serializeTable(TableData(rows: [
       ['A']
     ]));
-    expect(left, contains('<table class="has-fixed-layout">'));
+    expect(left, contains('<figure class="wp-block-table">'));
     // Parsing picks the class back up.
     expect(parseTable(out).align, TableCellAlign.center);
   });
