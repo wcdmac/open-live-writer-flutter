@@ -32,6 +32,14 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<!-- Expose the app's Documents folder in the iOS Files app
+	     ("On My iPhone" → Open Live Writer) so exported posts can be
+	     browsed and shared; the folder is removed with the app on
+	     uninstall, leaving no orphaned files. -->
+	<key>UIFileSharingEnabled</key>
+	<true/>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Allows picking images to insert into your blog post.</string>
 	<key>UIApplicationSceneManifest</key>

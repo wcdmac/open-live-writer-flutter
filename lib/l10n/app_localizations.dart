@@ -1238,6 +1238,18 @@ abstract class AppLocalizations {
   /// **'Export cancelled'**
   String get exportCancelled;
 
+  /// No description provided for @shareFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Share'**
+  String get shareFile;
+
+  /// No description provided for @exportLocationHintIOS.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved. Find it in the Files app under On My iPhone → Open Live Writer; it is removed when the app is uninstalled.'**
+  String get exportLocationHintIOS;
+
   /// No description provided for @crashRecoveryTitle.
   ///
   /// In en, this message translates to:
