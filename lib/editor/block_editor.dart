@@ -6,6 +6,7 @@ import '../l10n/app_localizations.dart';
 import '../views/editor/editor_toolbar.dart'
     show MediaUploader, mediaUploadErrorText;
 import 'block_document.dart';
+import 'video_placeholder.dart';
 
 /// Visual (WYSIWYG) block editor.
 ///
@@ -249,6 +250,7 @@ class _BlockCardState extends State<_BlockCard> {
             .textTheme
             .bodyLarge
             ?.copyWith(fontSize: 15, height: 1.6),
+        customWidgetBuilder: videoPlaceholderBuilder,
       );
     }
 

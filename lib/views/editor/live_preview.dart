@@ -5,6 +5,7 @@ import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart
 
 import '../../l10n/app_localizations.dart';
 import '../../services/theme_detector.dart';
+import '../../editor/video_placeholder.dart';
 
 /// Real-time preview: renders the post with Flutter's own engine
 /// (no embedded browser, works identically on all five platforms),
@@ -128,6 +129,9 @@ class _LivePreviewState extends State<LivePreview> {
                           ? '<p style="opacity:0.5">${l10n.startWritingHint}</p>'
                           : _content,
                       textStyle: bodyStyle,
+                      // <video>/<iframe>/embeds cannot be played by the
+                      // HTML renderer — swap in tappable placeholder cards.
+                      customWidgetBuilder: videoPlaceholderBuilder,
                       customStylesBuilder: (element) {
                         switch (element.localName) {
                           case 'a':
