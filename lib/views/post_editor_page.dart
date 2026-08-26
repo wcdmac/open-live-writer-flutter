@@ -13,7 +13,7 @@ import 'editor/editor_toolbar.dart';
 import 'editor/live_preview.dart';
 
 /// App version.
-const String kAppVersion = 'v1.6.0';
+const String kAppVersion = 'v1.7.0';
 
 /// Localized display label for a [PostStatus] (dashboard chips + editor).
 String statusLabel(AppLocalizations l10n, PostStatus status) =>
@@ -86,20 +86,27 @@ class _PostEditorPageState extends State<PostEditorPage>
     final draft = widget.localDraft;
     _editor = EditorState(
       service: app.service,
-      initialPost: widget.existingPost?.copy(),
+      // An offline copy carries its server post id: opening it must edit
+      // that post (editPost), not publish a duplicate (newPost).
+      initialPost: widget.existingPost?.copy() ??
+          (draft != null && draft.isOfflineCopy ? draft.toBlogPost() : null),
       theme: app.theme,
     );
     _titleController = TextEditingController(
         text: widget.existingPost?.title ?? draft?.title ?? '');
     _contentController = TextEditingController(
         text: widget.existingPost?.content ?? draft?.content ?? '');
-    _tagController =
-        TextEditingController(text: widget.existingPost?.tags.join(', ') ?? '');
+    _tagController = TextEditingController(
+        text: widget.existingPost?.tags.join(', ') ??
+            draft?.tags.join(', ') ??
+            '');
     if (draft != null) {
-      _editor.updateTitle(draft.title);
-      _editor.updateContent(draft.content);
-      if (draft.excerpt.isNotEmpty) _editor.updateExcerpt(draft.excerpt);
-      if (draft.slug?.isNotEmpty == true) _editor.updateSlug(draft.slug!);
+      if (!draft.isOfflineCopy) {
+        _editor.updateTitle(draft.title);
+        _editor.updateContent(draft.content);
+        if (draft.excerpt.isNotEmpty) _editor.updateExcerpt(draft.excerpt);
+        if (draft.slug?.isNotEmpty == true) _editor.updateSlug(draft.slug!);
+      }
       _sourceDraftId = draft.id;
     }
     // Baseline snapshot: undo can never go past the state the page opened
@@ -334,10 +341,19 @@ class _PostEditorPageState extends State<PostEditorPage>
       final account = app.currentAccount;
       if (account != null) {
         // The draft made it to the server: crash snapshot and source
-        // local draft are both obsolete.
+        // local draft are both obsolete. An offline COPY stays around —
+        // refreshed from what was just pushed — so it remains available
+        // for the next offline session.
         app.drafts.clearSnapshot(account.id);
         if (_sourceDraftId != null) {
-          await app.deleteLocalDraft(_sourceDraftId!);
+          final source = app.localDrafts
+              .where((d) => d.id == _sourceDraftId)
+              .firstOrNull;
+          if (source != null && source.isOfflineCopy) {
+            await app.saveOfflinePost(_editor.post);
+          } else {
+            await app.deleteLocalDraft(_sourceDraftId!);
+          }
           _sourceDraftId = null;
         }
       }
@@ -360,9 +376,14 @@ class _PostEditorPageState extends State<PostEditorPage>
           caseSensitive: false).hasMatch(message);
 
   /// Saves the current editor content as a local (offline) draft.
+  /// Offline-copy metadata (server post id, status, taxonomy) rides
+  /// along so a parked copy still syncs back with editPost later.
   Future<void> _saveLocalDraft(AppState app) async {
     final account = app.currentAccount;
     if (account == null) return;
+    final source = _sourceDraftId == null
+        ? null
+        : app.localDrafts.where((d) => d.id == _sourceDraftId).firstOrNull;
     await app.saveLocalDraft(LocalDraft(
       id: _sourceDraftId ?? app.newDraftId(),
       accountId: account.id,
@@ -371,6 +392,11 @@ class _PostEditorPageState extends State<PostEditorPage>
       excerpt: _editor.post.excerpt,
       slug: _editor.post.slug,
       updatedAt: DateTime.now(),
+      postId: source?.postId,
+      postStatus: source?.postStatus ?? _editor.post.status.wpValue,
+      isPage: source?.isPage ?? _editor.post.isPage,
+      categories: source?.categories,
+      tags: source?.tags,
     ));
     _sourceDraftId ??= app.localDrafts
         .where((d) => d.accountId == account.id &&
@@ -841,15 +867,21 @@ class _PostSettingsSheet extends StatelessWidget {
               final account = app.currentAccount;
               if (account == null) return;
               final messenger = ScaffoldMessenger.of(context);
-              await app.saveLocalDraft(LocalDraft(
-                id: app.newDraftId(),
-                accountId: account.id,
-                title: editor.post.title,
-                content: editor.post.content,
-                excerpt: editor.post.excerpt,
-                slug: editor.post.slug,
-                updatedAt: DateTime.now(),
-              ));
+              if (editor.post.id != null) {
+                // Existing post: store as an offline copy (keeps server
+                // id so a later save edits instead of duplicating).
+                await app.saveOfflinePost(editor.post);
+              } else {
+                await app.saveLocalDraft(LocalDraft(
+                  id: app.newDraftId(),
+                  accountId: account.id,
+                  title: editor.post.title,
+                  content: editor.post.content,
+                  excerpt: editor.post.excerpt,
+                  slug: editor.post.slug,
+                  updatedAt: DateTime.now(),
+                ));
+              }
               messenger.showSnackBar(
                   SnackBar(content: Text(l10n.savedOfflineDraft)));
               if (context.mounted) Navigator.of(context).pop();

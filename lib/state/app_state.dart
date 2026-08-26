@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
@@ -7,6 +8,7 @@ import '../models/blog_post.dart';
 import '../services/account_store.dart';
 import '../services/blog_service.dart';
 import '../services/local_draft_store.dart';
+import '../services/media_cache.dart';
 import '../services/theme_detector.dart';
 
 /// Root application state: accounts, the active account, its taxonomies
@@ -184,6 +186,55 @@ class AppState extends ChangeNotifier {
     await drafts.deleteDraft(id, draftId);
     await _loadLocalDrafts();
     notifyListeners();
+  }
+
+  // --- Offline copies of server posts ---------------------------------------
+
+  /// The local offline copy of a server post, if one exists.
+  LocalDraft? offlineCopyOf(String? postId) => postId == null
+      ? null
+      : localDrafts.where((d) => d.postId == postId).firstOrNull;
+
+  /// Downloads the full post and stores/refreshes it as an offline copy
+  /// (editable while offline, pushable back with editPost). Also warms
+  /// the image cache so the copy opens with working images offline.
+  Future<bool> saveOfflinePost(BlogPost post) async {
+    final account = currentAccount;
+    if (account == null || post.id == null) return false;
+    final existing = offlineCopyOf(post.id);
+    await drafts.saveDraft(LocalDraft(
+      id: existing?.id ?? newDraftId(),
+      accountId: account.id,
+      title: post.title,
+      content: post.content,
+      excerpt: post.excerpt,
+      slug: post.slug,
+      updatedAt: DateTime.now(),
+      postId: post.id,
+      postStatus: post.status.wpValue,
+      isPage: post.isPage,
+      categories: List.of(post.categories),
+      tags: List.of(post.tags),
+      remoteModified: DateTime.now(),
+    ));
+    await _loadLocalDrafts();
+    notifyListeners();
+    unawaited(MediaCache.instance.prefetchImages(post.content));
+    return true;
+  }
+
+  /// Pushes an edited offline copy back to the server (last-write-wins).
+  /// On success the copy is refreshed so it stays in sync.
+  Future<bool> syncOfflineCopy(LocalDraft draft) async {
+    final svc = _service;
+    final account = currentAccount;
+    if (svc == null || account == null || !draft.isOfflineCopy) return false;
+    final post = draft.toBlogPost();
+    final ok = await svc.editPost(post,
+        publish: post.status != PostStatus.draft);
+    if (!ok) return false;
+    await saveOfflinePost(post);
+    return true;
   }
 
   String newDraftId() =>

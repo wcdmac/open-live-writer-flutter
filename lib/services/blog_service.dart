@@ -76,6 +76,32 @@ class BlogService {
           ? rest.getPost(id, isPage: isPage)
           : xmlrpc.getPost(id, isPage: isPage);
 
+  /// Fetches every editable post (paged, protocol-specific). Used by the
+  /// whole-blog WXR export.
+  Future<List<BlogPost>> getAllPosts() async {
+    final all = <BlogPost>[];
+    const pageSize = 100;
+    if (account.protocol == BlogProtocol.rest) {
+      var page = 1;
+      while (true) {
+        final batch = await rest.getPosts(perPage: pageSize, page: page);
+        all.addAll(batch);
+        if (batch.length < pageSize) break;
+        page++;
+      }
+    } else {
+      var offset = 0;
+      while (true) {
+        final batch =
+            await xmlrpc.getPosts(count: pageSize, offset: offset);
+        all.addAll(batch);
+        if (batch.length < pageSize) break;
+        offset += pageSize;
+      }
+    }
+    return all;
+  }
+
   /// Creates a new post. Returns the post id (XML-RPC) or the created
   /// post (REST gives us the full object back).
   Future<String> newPost(BlogPost post, {required bool publish}) async {
