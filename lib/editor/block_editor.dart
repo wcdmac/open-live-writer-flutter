@@ -734,6 +734,9 @@ class _ReadOnlyTable extends StatelessWidget {
       scrollDirection: Axis.horizontal,
       child: Table(
         defaultColumnWidth: const IntrinsicColumnWidth(),
+        // Always bordered in-app: the HTML source has no inline borders
+        // (they break Gutenberg validation) so cell structure must stay
+        // visible here.
         border: TableBorder.all(color: scheme.outlineVariant),
         children: [
           for (var r = 0; r < table.rows.length; r++)
@@ -933,14 +936,8 @@ class _TableFieldState extends State<_TableField> {
                 _emit();
               },
             ),
-            FilterChip(
-              label: Text(l10n.tableBorder),
-              selected: _table.hasBorder,
-              onSelected: (v) {
-                setState(() => _table.hasBorder = v);
-                _emit();
-              },
-            ),
+            // No border toggle: inline border styles break Gutenberg block
+            // validation; frontend borders come from WordPress core styles.
           ],
         ),
       ],

@@ -43,9 +43,9 @@ class _PreviewTable extends StatelessWidget {
       scrollDirection: Axis.horizontal,
       child: Table(
         defaultColumnWidth: const IntrinsicColumnWidth(),
-        border: table.hasBorder
-            ? TableBorder.all(color: scheme.outlineVariant)
-            : null,
+        // Always bordered: the HTML carries no inline borders (they break
+        // Gutenberg validation), so the grid must be visible in-app.
+        border: TableBorder.all(color: scheme.outlineVariant),
         children: [
           for (var r = 0; r < table.rows.length; r++)
             TableRow(

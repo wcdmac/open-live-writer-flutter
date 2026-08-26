@@ -386,9 +386,9 @@ class WordPressRestClient {
   // ---------------------------------------------------------------------------
 
   Map<String, dynamic> _postToJson(BlogPost post, {required bool publish}) {
-    final status = publish
-        ? (post.status == PostStatus.draft ? PostStatus.publish : post.status)
-        : PostStatus.draft;
+    // publish=false means "Save draft"; publish=true sends the chosen
+    // status verbatim (EditorState applies the draft → publish default).
+    final status = publish ? post.status : PostStatus.draft;
     return {
       'title': post.title,
       'content': post.content,

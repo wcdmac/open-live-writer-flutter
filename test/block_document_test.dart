@@ -64,7 +64,7 @@ void main() {
 
   test('table helpers parse and serialize cells', () {
     const src =
-        '<figure class="wp-block-table"><table><tbody><tr><th>Name</th><th>Qty</th></tr>'
+        '<figure class="wp-block-table"><table class="has-fixed-layout"><tbody><tr><th>Name</th><th>Qty</th></tr>'
         '<tr><td>Apple &amp; Pear</td><td>2</td></tr></tbody></table></figure>';
     final table = parseTable(src);
     expect(table.rows.length, 2);
@@ -72,6 +72,21 @@ void main() {
     expect(table.hasHeader, isTrue);
     final out = serializeTable(table);
     expect(out, src);
+  });
+
+  test('serializeTable emits Gutenberg-canonical markup without inline styles',
+      () {
+    // Inline border styles break Gutenberg block validation and stack
+    // with theme CSS into uneven line widths — output must be bare.
+    final out = serializeTable(TableData(rows: [
+      ['A', 'B'],
+      ['1', '2'],
+    ], hasHeader: true));
+    expect(out,
+        '<figure class="wp-block-table"><table class="has-fixed-layout">'
+        '<tbody><tr><th>A</th><th>B</th></tr>'
+        '<tr><td>1</td><td>2</td></tr></tbody></table></figure>');
+    expect(out, isNot(contains('style=')));
   });
 
   test('buildVideoEmbed handles youtube links, media files and iframes', () {

@@ -453,9 +453,11 @@ class WordPressXmlRpcClient {
 
   /// WordPress content struct (wp.newPost / wp.editPost).
   Map<String, dynamic> _wpPostStruct(BlogPost post, {required bool publish}) {
-    final status = publish
-        ? (post.status == PostStatus.draft ? PostStatus.publish : post.status)
-        : PostStatus.draft;
+    // publish=false means "Save draft"; publish=true sends the status
+    // exactly as the editor chose it (EditorState handles the untouched
+    // draft → publish default) — converting here would silently revert
+    // explicit choices like published → draft.
+    final status = publish ? post.status : PostStatus.draft;
     return {
       'post_type': post.isPage ? 'page' : 'post',
       'post_status': status.wpValue,

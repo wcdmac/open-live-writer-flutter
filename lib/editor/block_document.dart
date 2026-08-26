@@ -339,22 +339,20 @@ TableData parseTable(String html) {
   return TableData(rows: rows, hasHeader: hasHeader, hasBorder: hasBorder);
 }
 
-/// Encodes a cell matrix back into table HTML inside a wp-block-table
-/// figure (when the source had one). When [TableData.hasBorder] is set the
-/// table and every cell get inline border styles so the lines survive on
-/// blog themes that don't style `wp-block-table` themselves.
+/// Serializes back to Gutenberg-canonical table markup:
+/// `figure.wp-block-table > table.has-fixed-layout > tbody`.
+/// No inline border styles — they break Gutenberg block validation
+/// ("unexpected or invalid content") and stack with theme CSS into
+/// uneven line widths. Frontend borders come from WordPress core
+/// block styles (`.wp-block-table td/th { border: 1px solid }`).
 String serializeTable(TableData table, {bool wrapFigure = true}) {
-  const tableStyle = ' style="border: 1px solid; border-collapse: collapse;"';
-  const cellStyle = ' style="border: 1px solid;"';
-  final buf = StringBuffer(
-      '<table${table.hasBorder ? tableStyle : ''}><tbody>');
+  final buf = StringBuffer('<table class="has-fixed-layout"><tbody>');
   for (var r = 0; r < table.rows.length; r++) {
     buf.write('<tr>');
     final isHeader = table.hasHeader && r == 0;
     for (final cell in table.rows[r]) {
       final tag = isHeader ? 'th' : 'td';
-      buf.write('<$tag${table.hasBorder ? cellStyle : ''}>'
-          '${_encodeEntities(cell)}</$tag>');
+      buf.write('<$tag>${_encodeEntities(cell)}</$tag>');
     }
     buf.write('</tr>');
   }
