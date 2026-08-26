@@ -516,11 +516,9 @@ class _ImageFieldState extends State<_ImageField> {
   }
 
   void _emit() {
-    final img =
-        '<img src="${_srcCtrl.text.trim()}" alt="${_altCtrl.text.trim()}" />';
-    widget.onChanged(_captionCtrl.text.trim().isEmpty
-        ? img
-        : '<figure>$img<figcaption>${_captionCtrl.text.trim()}</figcaption></figure>');
+    widget.onChanged(buildImageHtml(_srcCtrl.text.trim(),
+        _altCtrl.text.trim(),
+        caption: _captionCtrl.text));
   }
 
   Future<void> _pickAndUpload() async {
@@ -661,7 +659,7 @@ class _VideoFieldState extends State<_VideoField> {
       // A locally uploaded file becomes a wp:video block.
       widget.block.wpOpen = '<!-- wp:video -->';
       widget.block.wpClose = '<!-- /wp:video -->';
-      widget.onChanged('<video controls src="${result.url}"></video>');
+      widget.onChanged(buildVideoFileHtml(result.url));
     } catch (e) {
       if (!mounted) return;
       setState(() => _uploading = false);
@@ -1009,7 +1007,7 @@ class _InsertBar extends StatelessWidget {
         if (context.mounted) Navigator.of(context).pop();
         onInsert(ContentBlock(
           type: BlockType.image,
-          html: '<figure><img src="${result.url}" alt="${xfile.name}" /></figure>',
+          html: buildImageHtml(result.url, xfile.name),
           wpOpen: '<!-- wp:image -->',
           wpClose: '<!-- /wp:image -->',
         ));
@@ -1028,7 +1026,7 @@ class _InsertBar extends StatelessWidget {
     final alt = await _prompt(context, l10n.altText, '');
     onInsert(ContentBlock(
       type: BlockType.image,
-      html: '<img src="$url" alt="${alt ?? ''}" />',
+      html: buildImageHtml(url, alt ?? ''),
       wpOpen: '<!-- wp:image -->',
       wpClose: '<!-- /wp:image -->',
     ));
@@ -1084,7 +1082,7 @@ class _InsertBar extends StatelessWidget {
         if (context.mounted) Navigator.of(context).pop();
         onInsert(ContentBlock(
           type: BlockType.video,
-          html: '<video controls src="${result.url}"></video>',
+          html: buildVideoFileHtml(result.url),
           wpOpen: '<!-- wp:video -->',
           wpClose: '<!-- /wp:video -->',
         ));

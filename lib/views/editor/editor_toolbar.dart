@@ -4,7 +4,8 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../../models/blog_post.dart';
-import '../../editor/block_document.dart' show normalizeImageUpload;
+import '../../editor/block_document.dart'
+    show buildImageHtml, normalizeImageUpload;
 
 /// Signature for the media upload callback provided by the editor page.
 typedef MediaUploader = Future<MediaUploadResult> Function(
@@ -124,7 +125,7 @@ class EditorToolbar extends StatelessWidget {
     final url = await _prompt(context, l10n.imageUrl, 'https://');
     if (url == null || url.isEmpty || !context.mounted) return;
     final alt = await _prompt(context, l10n.altText, '');
-    _insertAtCursor('<img src="$url" alt="${alt ?? ''}" />');
+    _insertAtCursor(buildImageHtml(url, alt ?? ''));
   }
 
   Future<void> _pickAndUpload(

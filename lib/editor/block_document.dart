@@ -155,8 +155,10 @@ BlockType _classifyType(String html) {
     return BlockType.image;
   }
 
-  // Video / embeds: <video>, <iframe>, wp embed/figure-with-iframe.
-  if (RegExp(r'^(<video|<iframe|<figure[^>]*wp-block-embed)\b',
+  // Video / embeds: <video>, <iframe>, wp embed/figure-with-iframe or
+  // the Gutenberg wp-block-video figure.
+  if (RegExp(
+          r'^(<video|<iframe|<figure[^>]*(wp-block-embed|wp-block-video))\b',
           caseSensitive: false)
       .hasMatch(h)) {
     return BlockType.video;
@@ -233,6 +235,24 @@ String? firstImgAlt(String html) {
       .firstMatch(html);
   return m?.group(1);
 }
+
+/// Canonical Gutenberg image-block inner HTML: the <img> must sit inside
+/// a `wp-block-image` figure or the block editor reports "invalid content"
+/// and frontend themes have no centering styles.
+String buildImageHtml(String src, String alt, {String? caption}) {
+  final img = '<img src="$src" alt="$alt" />';
+  final cap = (caption == null || caption.trim().isEmpty)
+      ? ''
+      : '<figcaption>${caption.trim()}</figcaption>';
+  return '<figure class="wp-block-image">$img$cap</figure>';
+}
+
+/// Canonical Gutenberg video-block inner HTML (uploaded media file):
+/// `wp-block-video` figure wrapper, matching the block editor's own
+/// output so frontend alignment styles apply.
+String buildVideoFileHtml(String url) =>
+    '<figure class="wp-block-video"><video controls src="$url">'
+    '</video></figure>';
 
 /// Heading level (1-6) from `<hN>` markup, defaulting to 2.
 int headingLevel(String html) {

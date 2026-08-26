@@ -13,7 +13,7 @@ import 'editor/live_preview.dart';
 
 /// App version stamped into the copy-diagnostics report so user-submitted
 /// diagnostics always identify which build they came from.
-const String kAppVersion = 'v1.5.6';
+const String kAppVersion = 'v1.5.7';
 
 /// Localized display label for a [PostStatus] (dashboard chips + editor).
 String statusLabel(AppLocalizations l10n, PostStatus status) =>

@@ -95,6 +95,24 @@ void main() {
     expect(firstImgAlt(html), '描述');
   });
 
+  test('generated media blocks match Gutenberg canonical markup', () {
+    // Image: <img> inside wp-block-image figure (with/without caption).
+    expect(buildImageHtml('https://x/a.jpg', '图'),
+        '<figure class="wp-block-image"><img src="https://x/a.jpg" alt="图" /></figure>');
+    expect(buildImageHtml('https://x/a.jpg', '', caption: '说明'),
+        '<figure class="wp-block-image"><img src="https://x/a.jpg" alt="" />'
+        '<figcaption>说明</figcaption></figure>');
+    // Uploaded video: wp-block-video figure wrapper — a bare <video>
+    // makes Gutenberg flag "invalid content" and themes left-align it.
+    final v = buildVideoFileHtml('https://x/v.mp4');
+    expect(v,
+        '<figure class="wp-block-video"><video controls src="https://x/v.mp4"></video></figure>');
+    // And both classify back into their block types.
+    expect(parseBlocks(buildImageHtml('https://x/a.jpg', '')).single.type,
+        BlockType.image);
+    expect(parseBlocks(v).single.type, BlockType.video);
+  });
+
   test('self-closing wp comment is preserved as html block', () {
     const src = '<!-- wp:latest-posts /-->';
     final blocks = parseBlocks(src);
