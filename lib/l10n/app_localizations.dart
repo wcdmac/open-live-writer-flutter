@@ -1208,36 +1208,6 @@ abstract class AppLocalizations {
   /// **'Export complete'**
   String get exportDoneTitle;
 
-  /// No description provided for @exportAllWxr.
-  ///
-  /// In en, this message translates to:
-  /// **'Export all posts (WXR)'**
-  String get exportAllWxr;
-
-  /// No description provided for @exportAllWxrHelp.
-  ///
-  /// In en, this message translates to:
-  /// **'Builds a standard WordPress export file re-importable in the admin'**
-  String get exportAllWxrHelp;
-
-  /// No description provided for @exportingPosts.
-  ///
-  /// In en, this message translates to:
-  /// **'Fetching all posts…'**
-  String get exportingPosts;
-
-  /// No description provided for @exportingPostsProgress.
-  ///
-  /// In en, this message translates to:
-  /// **'Fetching all posts… {count} fetched'**
-  String exportingPostsProgress(num count);
-
-  /// No description provided for @exportCancelled.
-  ///
-  /// In en, this message translates to:
-  /// **'Export cancelled'**
-  String get exportCancelled;
-
   /// No description provided for @shareFile.
   ///
   /// In en, this message translates to:

@@ -611,24 +611,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get exportDoneTitle => 'Export complete';
 
   @override
-  String get exportAllWxr => 'Export all posts (WXR)';
-
-  @override
-  String get exportAllWxrHelp =>
-      'Builds a standard WordPress export file re-importable in the admin';
-
-  @override
-  String get exportingPosts => 'Fetching all posts…';
-
-  @override
-  String exportingPostsProgress(num count) {
-    return 'Fetching all posts… $count fetched';
-  }
-
-  @override
-  String get exportCancelled => 'Export cancelled';
-
-  @override
   String get shareFile => 'Share';
 
   @override
