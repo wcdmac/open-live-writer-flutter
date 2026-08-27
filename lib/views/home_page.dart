@@ -161,7 +161,13 @@ class _HomePageState extends State<HomePage> {
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
-      builder: (context) => SafeArea(
+      // Sheet entries must pop `sheetContext` but run follow-up actions
+      // with the OUTER `context`: the sheet's own context dies with its
+      // exit animation, and an async continuation using it (export) saw
+      // context.mounted == false and silently returned, leaving the
+      // progress dialog spinning forever even though the fetch had
+      // already finished.
+      builder: (sheetContext) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -186,7 +192,7 @@ class _HomePageState extends State<HomePage> {
                       : null,
                   onTap: () {
                     app.selectAccount(account);
-                    Navigator.of(context).pop();
+                    Navigator.of(sheetContext).pop();
                   },
                 )),
             const Divider(),
@@ -194,7 +200,7 @@ class _HomePageState extends State<HomePage> {
               leading: const Icon(Icons.add),
               title: Text(l10n.addBlogAccount),
               onTap: () {
-                Navigator.of(context).pop();
+                Navigator.of(sheetContext).pop();
                 Navigator.of(context).push(
                   MaterialPageRoute(
                       builder: (_) => const AddAccountPage(embedded: false)),
@@ -206,7 +212,7 @@ class _HomePageState extends State<HomePage> {
               title: Text(l10n.exportAllWxr),
               subtitle: Text(l10n.exportAllWxrHelp),
               onTap: () {
-                Navigator.of(context).pop();
+                Navigator.of(sheetContext).pop();
                 _exportAllWxr(context, app);
               },
             ),
@@ -216,7 +222,7 @@ class _HomePageState extends State<HomePage> {
                   .removeAccount(app.currentAccount?.name ?? '')),
               onTap: () {
                 final id = app.currentAccount?.id;
-                Navigator.of(context).pop();
+                Navigator.of(sheetContext).pop();
                 if (id != null) app.removeAccount(id);
               },
             ),
@@ -234,6 +240,10 @@ class _HomePageState extends State<HomePage> {
     final account = app.currentAccount;
     final svc = app.service;
     if (account == null || svc == null) return;
+    // Captured BEFORE any await: async continuations below must not
+    // touch a context that may have been unmounted in the meantime.
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
     var cancelled = false;
     var dialogOpen = true;
     var fetched = 0;
@@ -280,9 +290,8 @@ class _HomePageState extends State<HomePage> {
         },
         shouldCancel: () => cancelled,
       );
-      if (!context.mounted) return;
       if (cancelled) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
             SnackBar(content: Text(l10n.exportCancelled)));
         return;
       }
@@ -293,15 +302,17 @@ class _HomePageState extends State<HomePage> {
       final stamp = DateFormat('yyyyMMdd-HHmm').format(DateTime.now());
       final file =
           await PostExporter.write('wordpress-export-$stamp.wxr', wxr);
-      if (context.mounted && dialogOpen) {
-        Navigator.of(context).pop();
+      // Close the progress dialog no matter what happened to the
+      // owning page, then show the result only if the page is alive.
+      if (dialogOpen) navigator.pop();
+      if (context.mounted) {
         showExportedPath(context, file.path,
             detail: '${posts.length} posts');
       }
     } catch (e) {
-      if (context.mounted && dialogOpen) {
-        Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
+      if (dialogOpen) navigator.pop();
+      if (context.mounted) {
+        messenger.showSnackBar(
             SnackBar(content: Text(l10n.operationFailed('$e'))));
       }
     }
