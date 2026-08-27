@@ -96,10 +96,17 @@ class _PostEditorPageState extends State<PostEditorPage>
         text: widget.existingPost?.title ?? draft?.title ?? '');
     _contentController = TextEditingController(
         text: widget.existingPost?.content ?? draft?.content ?? '');
-    _tagController = TextEditingController(
-        text: widget.existingPost?.tags.join(', ') ??
-            draft?.tags.join(', ') ??
-            '');
+    // Show tag NAMES: REST posts carry numeric ids; tagName() maps them
+    // back (falling back to the raw value, which also covers XML-RPC
+    // name-style tags).
+    String? initialTags;
+    if (widget.existingPost != null) {
+      initialTags =
+          widget.existingPost!.tags.map(app.tagName).join(', ');
+    } else if (draft != null) {
+      initialTags = draft.tags.map(app.tagName).join(', ');
+    }
+    _tagController = TextEditingController(text: initialTags ?? '');
     if (draft != null) {
       if (!draft.isOfflineCopy) {
         _editor.updateTitle(draft.title);
@@ -151,6 +158,12 @@ class _PostEditorPageState extends State<PostEditorPage>
           .getPost(existing.id!, isPage: existing.isPage)
           .timeout(const Duration(seconds: 20));
       if (!mounted) return;
+      // The editor is interactive while this fetch runs; silently
+      // overwriting what the user already typed would eat their work.
+      if (_editor.isDirty) {
+        setState(() => _fetchingFull = false);
+        return;
+      }
       setState(() {
         _fetchingFull = false;
         _loadError = null;
@@ -171,7 +184,8 @@ class _PostEditorPageState extends State<PostEditorPage>
           _emptyContent = _contentController.text.trim().isEmpty;
         }
         if (fresh.tags.isNotEmpty) {
-          _tagController.text = fresh.tags.join(', ');
+          _tagController.text =
+              fresh.tags.map(app.tagName).join(', ');
         }
         // Fresh server copy = new baseline; user edits start from here.
         _applyingHistory = true;
@@ -357,7 +371,7 @@ class _PostEditorPageState extends State<PostEditorPage>
           _sourceDraftId = null;
         }
       }
-      app.refresh();
+      unawaited(app.refresh()); // Intentionally fire-and-forget.
     } else if (_isNetworkError(_editor.saveError)) {
       // Offline fallback: park the draft locally so nothing is lost; the
       // home screen lists it under local drafts for later publishing.
@@ -831,7 +845,11 @@ class _PostEditorPageState extends State<PostEditorPage>
 
 /// Post settings: status, schedule, categories, tags, excerpt, slug,
 /// discussion flags — the Flutter counterpart of OLW's sidebar.
-class _PostSettingsSheet extends StatelessWidget {
+///
+/// Stateful so the excerpt/slug/password fields own persistent
+/// controllers — building them inline allocated (and leaked) a new
+/// TextEditingController on every rebuild of the sheet.
+class _PostSettingsSheet extends StatefulWidget {
   const _PostSettingsSheet({
     required this.editor,
     required this.app,
@@ -845,12 +863,41 @@ class _PostSettingsSheet extends StatelessWidget {
   final ScrollController scrollController;
 
   @override
+  State<_PostSettingsSheet> createState() => _PostSettingsSheetState();
+}
+
+class _PostSettingsSheetState extends State<_PostSettingsSheet> {
+  late final TextEditingController _excerptCtrl;
+  late final TextEditingController _slugCtrl;
+  late final TextEditingController _passwordCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _excerptCtrl = TextEditingController(text: widget.editor.post.excerpt);
+    _slugCtrl =
+        TextEditingController(text: widget.editor.post.slug ?? '');
+    _passwordCtrl =
+        TextEditingController(text: widget.editor.post.password ?? '');
+  }
+
+  @override
+  void dispose() {
+    _excerptCtrl.dispose();
+    _slugCtrl.dispose();
+    _passwordCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final editor = widget.editor;
+    final app = widget.app;
     final l10n = AppLocalizations.of(context)!;
     return ListenableBuilder(
       listenable: editor,
       builder: (context, _) => ListView(
-        controller: scrollController,
+        controller: widget.scrollController,
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
         children: [
           Text(l10n.postSettings,
@@ -972,14 +1019,14 @@ class _PostSettingsSheet extends StatelessWidget {
 
           // --- Tags --------------------------------------------------------
           TextField(
-            controller: tagController,
+            controller: widget.tagController,
             decoration: InputDecoration(
               labelText: l10n.tagsLabel,
               suffixIcon: IconButton(
                 icon: const Icon(Icons.check),
                 tooltip: l10n.applyTags,
                 onPressed: () => editor.setTags(
-                  tagController.text
+                  widget.tagController.text
                       .split(',')
                       .map((t) => t.trim())
                       .where((t) => t.isNotEmpty)
@@ -1005,7 +1052,7 @@ class _PostSettingsSheet extends StatelessWidget {
                             final tags = List.of(editor.post.tags);
                             if (!tags.contains(name)) tags.add(name);
                             editor.setTags(tags);
-                            tagController.text = tags.join(', ');
+                            widget.tagController.text = tags.join(', ');
                           },
                         ))
                     .toList(),
@@ -1015,9 +1062,7 @@ class _PostSettingsSheet extends StatelessWidget {
 
           // --- Excerpt & slug ----------------------------------------------
           TextField(
-            controller: TextEditingController(text: editor.post.excerpt)
-              ..selection = TextSelection.fromPosition(
-                  TextPosition(offset: editor.post.excerpt.length)),
+            controller: _excerptCtrl,
             maxLines: 3,
             decoration: InputDecoration(
               labelText: l10n.excerpt,
@@ -1027,9 +1072,7 @@ class _PostSettingsSheet extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           TextField(
-            controller: TextEditingController(text: editor.post.slug ?? '')
-              ..selection = TextSelection.fromPosition(
-                  TextPosition(offset: (editor.post.slug ?? '').length)),
+            controller: _slugCtrl,
             decoration: InputDecoration(
               labelText: l10n.urlSlug,
               prefixText: '/?',
@@ -1041,9 +1084,7 @@ class _PostSettingsSheet extends StatelessWidget {
           // the post (public + password; distinct from the private status,
           // which hides the post from everyone but the owner).
           TextField(
-            controller: TextEditingController(text: editor.post.password ?? '')
-              ..selection = TextSelection.fromPosition(
-                  TextPosition(offset: (editor.post.password ?? '').length)),
+            controller: _passwordCtrl,
             decoration: InputDecoration(
               labelText: l10n.postPassword,
               helperText: l10n.postPasswordHelp,
@@ -1101,7 +1142,7 @@ class _PostSettingsSheet extends StatelessWidget {
               child: Text(l10n.ok)),
         ],
       ),
-    );
+    ).whenComplete(controller.dispose);
     if (name == null || name.isEmpty) return;
     final ok = await app.createCategory(name);
     if (!ok || !context.mounted) return;

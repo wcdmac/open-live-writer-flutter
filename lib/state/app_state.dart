@@ -34,6 +34,11 @@ class AppState extends ChangeNotifier {
   bool loading = false;
   String? error;
 
+  /// Account whose theme was already probed in this session — theme
+  /// detection is one HTTP round-trip per homepage; retrying it on every
+  /// refresh when the cached theme is "Default" just burns traffic.
+  String? _themeProbedFor;
+
   bool get hasAccount => currentAccount != null;
 
   BlogService? get service => _service;
@@ -64,10 +69,19 @@ class AppState extends ChangeNotifier {
     await _connectCurrent();
     await _loadLocalDrafts();
     notifyListeners();
+    // Reload the dashboard: the previously visible posts/categories/tags
+    // belong to the account that was just switched away from.
+    await refresh();
   }
 
   Future<void> _connectCurrent() async {
     final account = currentAccount;
+    // Replace the service cleanly: disposing releases the old HTTP
+    // connection pool instead of leaking one per switch.
+    _service?.dispose();
+    _service = null;
+    _themeProbedFor = null;
+    theme = null;
     if (account == null) return;
     _currentPassword = await store.loadPassword(account.id);
     if (_currentPassword == null || _currentPassword!.isEmpty) {
@@ -91,6 +105,15 @@ class AppState extends ChangeNotifier {
     if (currentAccount?.id == accountId) {
       currentAccount = accounts.isEmpty ? null : accounts.first;
       await _connectCurrent();
+      // The on-screen lists belong to the removed account — drop them
+      // and reload for whichever account (if any) becomes current.
+      posts = [];
+      categories = [];
+      tags = [];
+      error = null;
+      await _loadLocalDrafts();
+      notifyListeners();
+      if (currentAccount != null) await refresh();
     }
     notifyListeners();
   }
@@ -114,7 +137,10 @@ class AppState extends ChangeNotifier {
   /// Future.wait made the whole dashboard appear permanently empty.
   Future<void> refresh() async {
     final svc = _service;
-    if (svc == null) return;
+    final account = currentAccount;
+    // The account can be removed mid-flight (this method awaits several
+    // network calls); snapshot it instead of assuming currentAccount!.
+    if (svc == null || account == null) return;
     loading = true;
     error = null;
     notifyListeners();
@@ -141,9 +167,12 @@ class AppState extends ChangeNotifier {
     tags = await tagsFuture;
 
     try {
-      // Detect theme once, then cache it.
-      final account = currentAccount!;
-      if (theme == null || theme!.name == null || theme!.name == 'Default') {
+      // Probe the theme at most once per account connection; a failed
+      // probe returning "Default" must not re-fetch the homepage on
+      // every subsequent refresh.
+      if (_themeProbedFor != account.id &&
+          (theme == null || theme!.name == null || theme!.name == 'Default')) {
+        _themeProbedFor = account.id;
         theme = await svc.detectTheme();
         await store.saveTheme(account.id, theme!);
         await store.updateAccount(

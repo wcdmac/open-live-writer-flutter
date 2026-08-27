@@ -255,12 +255,13 @@ String? firstImgAlt(String html) {
 /// Canonical Gutenberg image-block inner HTML: the <img> must sit inside
 /// a `wp-block-image` figure or the block editor reports "invalid content"
 /// and frontend themes have no centering styles.
-String buildImageHtml(String src, String alt, {String? caption}) {
-  final img = '<img src="$src" alt="$alt" />';
+String buildImageHtml(String src, String alt,
+    {String? caption, String? figureClass, String? imgAttrs}) {
+  final img = '<img src="$src" alt="$alt"${imgAttrs == null ? '' : ' $imgAttrs'} />';
   final cap = (caption == null || caption.trim().isEmpty)
       ? ''
       : '<figcaption>${caption.trim()}</figcaption>';
-  return '<figure class="wp-block-image">$img$cap</figure>';
+  return '<figure class="${figureClass ?? 'wp-block-image'}">$img$cap</figure>';
 }
 
 /// Canonical Gutenberg video-block inner HTML (uploaded media file):
@@ -276,14 +277,16 @@ int headingLevel(String html) {
   return m == null ? 2 : int.parse(m.group(1)!);
 }
 
-/// Rewrites the heading level, keeping inner content.
+/// Rewrites the heading level, keeping inner content AND the original
+/// attributes (custom classes, ids) — a bare `<hN>` round-trip used to
+/// strip them on every edit.
 String setHeadingLevel(String html, int level) {
-  final inner = RegExp(r'^<h[1-6][^>]*>([\s\S]*)</h[1-6]>\s*$',
+  final trimmed = html.trim();
+  final m = RegExp(r'^<h[1-6]([^>]*)>([\s\S]*)</h[1-6]>\s*$',
           caseSensitive: false)
-      .firstMatch(html
-          .trim());
-  final content = inner?.group(1) ?? html;
-  return '<h$level>$content</h$level>';
+      .firstMatch(trimmed);
+  if (m == null) return trimmed;
+  return '<h$level${m.group(1)}>${m.group(2)}</h$level>';
 }
 
 /// The first URL inside an embed/video block (iframe src, video src or the
@@ -305,6 +308,13 @@ String? firstEmbedUrl(String html) {
 /// when they look like a media file, else an iframe.
 String buildVideoEmbed(String url) {
   final u = url.trim();
+  // Canonicalize youtu.be short links to the watch form so they take the
+  // wp:embed path instead of degrading to a bare iframe.
+  final short = RegExp(r'^(?:https?://)?youtu\.be/([\w-]{6,})').firstMatch(u);
+  if (short != null) {
+    return buildVideoEmbed(
+        'https://www.youtube.com/watch?v=${short.group(1)}');
+  }
   final yt = RegExp(
           r'^(?:https?://)?(?:www\.|m\.)?youtube\.com/watch\?v=([\w-]{6,})')
       .firstMatch(u);
@@ -332,12 +342,22 @@ String buildTable({int rows = 2, int cols = 2}) {
 }
 
 /// Parses `<figure class="wp-block-table"><table>...` (or a bare table)
-/// into a cell matrix. The first row is the header (th).
+/// into a cell matrix. The first row is the header only when IT uses <th>
+/// cells — a th anywhere else (mid-table) must not flip the whole table
+/// into thead/tbody mode, which would restructure the markup on save.
 TableData parseTable(String html) {
   final rowRe = RegExp(r'<tr[^>]*>([\s\S]*?)</tr>', caseSensitive: false);
   final cellRe = RegExp(r'<t[hd][^>]*>([\s\S]*?)</t[hd]>', caseSensitive: false);
   final rows = <List<String>>[];
   var hasHeader = false;
+  String? caption;
+  final capMatch = RegExp(r'<figcaption[^>]*>([\s\S]*?)</figcaption>',
+          caseSensitive: false)
+      .firstMatch(html);
+  if (capMatch != null) {
+    caption = _decodeEntities(capMatch.group(1)!.trim());
+    if (caption.isEmpty) caption = null;
+  }
   for (final rowMatch in rowRe.allMatches(html)) {
     final cells = <String>[];
     for (final cell in cellRe.allMatches(rowMatch.group(1)!)) {
@@ -345,8 +365,11 @@ TableData parseTable(String html) {
     }
     if (cells.isNotEmpty) rows.add(cells);
   }
-  if (rows.isNotEmpty && RegExp(r'<th\b', caseSensitive: false).hasMatch(html)) {
-    hasHeader = true;
+  // Header = <th> cells in the FIRST row only.
+  if (rows.isNotEmpty) {
+    final firstRow = rowRe.firstMatch(html);
+    hasHeader = firstRow != null &&
+        RegExp(r'<th\b', caseSensitive: false).hasMatch(firstRow.group(0)!);
   }
   final hasBorder = RegExp(
           r'style\s*=\s*"[^"]*border|<table[^>]*\bborder\b',
@@ -367,6 +390,7 @@ TableData parseTable(String html) {
     hasHeader: hasHeader,
     hasBorder: hasBorder,
     align: align ?? TableCellAlign.left,
+    caption: caption,
   );
 }
 
@@ -400,7 +424,10 @@ String serializeTable(TableData table, {bool wrapFigure = true}) {
   if (!wrapFigure) return buf.toString();
   final align =
       table.align == TableCellAlign.left ? '' : ' ${table.align.cssClass}';
-  return '<figure class="wp-block-table$align">${buf.toString()}</figure>';
+  final cap = (table.caption == null || table.caption!.trim().isEmpty)
+      ? ''
+      : '<figcaption>${_encodeEntities(table.caption!)}</figcaption>';
+  return '<figure class="wp-block-table$align">${buf.toString()}$cap</figure>';
 }
 
 /// Horizontal text alignment inside table cells. The string values are the
@@ -436,11 +463,16 @@ class TableData {
     this.hasHeader = false,
     this.hasBorder = false,
     this.align = TableCellAlign.left,
+    this.caption,
   });
 
   List<List<String>> rows;
   bool hasHeader;
   bool hasBorder;
+
+  /// Optional <figcaption> text; preserved across edits (it used to be
+  /// dropped, silently deleting the user's caption).
+  String? caption;
 
   /// Table-wide horizontal alignment (Gutenberg's alignment applies to the
   /// whole block; per-cell alignment is not part of the core table block).
@@ -456,11 +488,43 @@ class TableData {
 
 /// Editable list payload.
 class ListData {
-  ListData({required this.items, this.ordered = false});
+  ListData({required this.items, this.ordered = false, this.openTag});
 
   /// Inner HTML of each `<li>` — raw markup, edited as-is.
   List<String> items;
   bool ordered;
+
+  /// Original `<ul>/<ol ...>` opening tag (classes like wp-block-list with
+  /// extra styles); null uses the canonical default.
+  String? openTag;
+}
+
+/// Top-level `<li>` items of a list, skipping items of NESTED lists: the
+/// naive `<li>(.*?)</li>` regex closes the outer item at the first inner
+/// `</li>`, corrupting nested-list markup on round-trip.
+List<String> _topLevelListItems(String html) {
+  final items = <String>[];
+  final tagRe = RegExp(r'<(/?)(ul|ol|li)\b[^>]*>', caseSensitive: false);
+  var listDepth = 0; // open <ul>/<ol> not yet closed
+  var liStart = -1;
+  var liDepth = 0;
+  for (final m in tagRe.allMatches(html)) {
+    final closing = m.group(1) == '/';
+    final tag = m.group(2)!.toLowerCase();
+    if (tag == 'li') {
+      if (!closing && liStart == -1) {
+        liStart = m.end;
+        liDepth = listDepth;
+      } else if (closing && liStart != -1 && listDepth == liDepth) {
+        final inner = html.substring(liStart, m.start).trim();
+        if (inner.isNotEmpty) items.add(inner);
+        liStart = -1;
+      }
+    } else {
+      listDepth += closing ? -1 : 1;
+    }
+  }
+  return items;
 }
 
 /// Parses `<ul>/<ol>` markup (with or without wp:list-item comments).
@@ -472,22 +536,25 @@ ListData parseList(String html) {
   final cleaned = html
       .replaceAll(RegExp(r'<!--\s*wp:list-item\s*-->', caseSensitive: false), '')
       .replaceAll(RegExp(r'<!--\s*/wp:list-item\s*-->', caseSensitive: false), '');
-  final items = RegExp(r'<li[^>]*>([\s\S]*?)</li>', caseSensitive: false)
-      .allMatches(cleaned)
-      .map((m) => m.group(1)!.trim())
-      .where((s) => s.isNotEmpty)
-      .toList();
-  return ListData(items: items, ordered: ordered);
+  // Preserve the original opening tag (extra classes/attrs) on round-trip.
+  final openMatch = RegExp(r'<(ul|ol)\b[^>]*>', caseSensitive: false)
+      .firstMatch(cleaned);
+  final items = _topLevelListItems(cleaned);
+  return ListData(
+      items: items,
+      ordered: ordered,
+      openTag: openMatch?.group(0));
 }
 
 /// Serializes to Gutenberg core/list markup with wp:list-item inner block
 /// comments (WP 6.7+ canonical; older WP versions migrate it transparently).
 String buildListHtml(ListData list) {
   final tag = list.ordered ? 'ol' : 'ul';
+  final open = list.openTag ?? '<$tag class="wp-block-list">';
   final items = list.items
       .map((i) => '<!-- wp:list-item -->\n<li>$i</li>\n<!-- /wp:list-item -->')
       .join();
-  return '<$tag class="wp-block-list">$items</$tag>';
+  return '$open$items</$tag>';
 }
 
 // ---------------------------------------------------------------------------
@@ -543,7 +610,18 @@ String _decodeEntities(String s) => s
     .replaceAll('&amp;', '&')
     .replaceAll('&lt;', '<')
     .replaceAll('&gt;', '>')
-    .replaceAll('&quot;', '"');
+    .replaceAll('&quot;', '"')
+    .replaceAll(RegExp(r'&#0?39;|&apos;'), "'")
+    .replaceAll('&nbsp;', '\u00A0')
+    // Numeric entities (decimal and hex).
+    .replaceAllMapped(RegExp(r'&#(\d+);'), (m) {
+      final code = int.tryParse(m.group(1)!);
+      return code == null ? m.group(0)! : String.fromCharCode(code);
+    })
+    .replaceAllMapped(RegExp(r'&#x([0-9a-fA-F]+);'), (m) {
+      final code = int.tryParse(m.group(1)!, radix: 16);
+      return code == null ? m.group(0)! : String.fromCharCode(code);
+    });
 
 String _encodeEntities(String s) => s
     .replaceAll('&', '&amp;')

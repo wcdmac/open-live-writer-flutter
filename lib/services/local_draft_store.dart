@@ -144,6 +144,19 @@ class LocalDraftStore {
 
   Future<SharedPreferences> get _prefs => SharedPreferences.getInstance();
 
+  /// Serializes draft mutations: saveDraft/deleteDraft are read-modify-write
+  /// over the same SharedPreferences key, and two interleaved calls (e.g.
+  /// auto-parking a draft while the user deletes another) silently lose
+  /// one change. Every mutation chains onto the previous one.
+  Future<void> _mutationLock = Future.value();
+
+  Future<T> _synchronized<T>(Future<T> Function() action) {
+    final result = _mutationLock.then((_) => action());
+    // Keep the chain alive regardless of the action's outcome.
+    _mutationLock = result.then((_) {}, onError: (_) {});
+    return result;
+  }
+
   // --- Drafts --------------------------------------------------------------
 
   Future<List<LocalDraft>> loadDrafts(String accountId) async {
@@ -159,24 +172,25 @@ class LocalDraftStore {
     }
   }
 
-  Future<void> saveDraft(LocalDraft draft) async {
-    final drafts = await loadDrafts(draft.accountId);
-    final idx = drafts.indexWhere((d) => d.id == draft.id);
-    if (idx >= 0) {
-      drafts[idx] = draft;
-    } else {
-      drafts.insert(0, draft);
-    }
-    await (await _prefs).setString('$_draftsPrefix${draft.accountId}',
-        jsonEncode(drafts.map((d) => d.toJson()).toList()));
-  }
+  Future<void> saveDraft(LocalDraft draft) => _synchronized(() async {
+        final drafts = await loadDrafts(draft.accountId);
+        final idx = drafts.indexWhere((d) => d.id == draft.id);
+        if (idx >= 0) {
+          drafts[idx] = draft;
+        } else {
+          drafts.insert(0, draft);
+        }
+        await (await _prefs).setString('$_draftsPrefix${draft.accountId}',
+            jsonEncode(drafts.map((d) => d.toJson()).toList()));
+      });
 
-  Future<void> deleteDraft(String accountId, String draftId) async {
-    final drafts = await loadDrafts(accountId);
-    drafts.removeWhere((d) => d.id == draftId);
-    await (await _prefs).setString('$_draftsPrefix$accountId',
-        jsonEncode(drafts.map((d) => d.toJson()).toList()));
-  }
+  Future<void> deleteDraft(String accountId, String draftId) =>
+      _synchronized(() async {
+        final drafts = await loadDrafts(accountId);
+        drafts.removeWhere((d) => d.id == draftId);
+        await (await _prefs).setString('$_draftsPrefix$accountId',
+            jsonEncode(drafts.map((d) => d.toJson()).toList()));
+      });
 
   // --- Crash snapshot --------------------------------------------------------
 

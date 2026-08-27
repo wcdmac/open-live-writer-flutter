@@ -13,9 +13,17 @@ class MediaCache {
 
   static final MediaCache instance = MediaCache._();
 
+  /// A failed URL is quarantined only for this long — a momentary network
+  /// hiccup must not blacklist an image until app restart.
+  static const _failureTtl = Duration(minutes: 5);
+
+  /// Rough ceiling for the whole cache; the oldest files are evicted when
+  /// exceeded so offline copies can't grow the disk usage without bound.
+  static const _maxCacheBytes = 200 * 1024 * 1024;
+
   Directory? _base;
   final Set<String> _downloading = {};
-  final Set<String> _failed = {};
+  final Map<String, DateTime> _failedAt = {};
 
   Future<Directory> _baseDir() async {
     if (_base != null) return _base!;
@@ -28,11 +36,20 @@ class MediaCache {
 
   /// Stable file name for a URL: a hash prefix (short) plus a readable
   /// tail of the URL path so cached files stay identifiable.
+  ///
+  /// FNV-1a instead of String.hashCode: Dart makes no cross-platform
+  /// stability guarantee for hashCode, and an unstable name silently
+  /// orphans previously cached files.
   String _fileNameFor(String url) {
-    final hash = (url.hashCode & 0x7fffffff).toRadixString(16);
+    var hash = 0x811c9dc5;
+    for (final byte in url.codeUnits) {
+      hash ^= byte;
+      hash = (hash * 0x01000193) & 0xFFFFFFFF;
+    }
+    final hashHex = hash.toRadixString(16);
     final tail = url.split('/').lastOrNull ?? '';
     final safe = tail.split('?').first.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '');
-    return '$hash-${safe.length > 48 ? safe.substring(safe.length - 48) : safe}';
+    return '$hashHex-${safe.length > 48 ? safe.substring(safe.length - 48) : safe}';
   }
 
   /// Returns the cached file for [url], or null when not (yet) cached.
@@ -50,14 +67,17 @@ class MediaCache {
   }
 
   /// Downloads [url] into the cache if missing; returns the file, or
-  /// null on failure. Failures are remembered so a dead URL is not
-  /// retried on every build.
+  /// null on failure. Failures are remembered for [_failureTtl] so a dead
+  /// URL is not retried on every build, but a transient network error
+  /// heals itself after the TTL instead of blacklisting until restart.
   Future<File?> fetch(String url) async {
-    if (!url.startsWith('http') ||
-        _failed.contains(url) ||
-        _downloading.contains(url)) {
+    final failedAt = _failedAt[url];
+    final quarantined = failedAt != null &&
+        DateTime.now().difference(failedAt) < _failureTtl;
+    if (!url.startsWith('http') || quarantined || _downloading.contains(url)) {
       return existingFile(url);
     }
+    _failedAt.remove(url);
     _downloading.add(url);
     try {
       final dir = await _baseDir();
@@ -69,17 +89,52 @@ class MediaCache {
             .timeout(const Duration(seconds: 60));
         if (res.statusCode != 200 || res.bodyBytes.isEmpty) {
           debugPrint('MediaCache: ${res.statusCode} for $url');
-          _failed.add(url);
+          _failedAt[url] = DateTime.now();
           return null;
         }
         await file.writeAsBytes(res.bodyBytes, flush: true);
+        unawaited(_evictIfNeeded());
       }
       return file;
     } catch (_) {
-      _failed.add(url);
+      _failedAt[url] = DateTime.now();
       return null;
     } finally {
       _downloading.remove(url);
+    }
+  }
+
+  /// Enforces [_maxCacheBytes] by deleting the least recently written
+  /// files first. Best effort: IO errors are ignored.
+  Future<void> _evictIfNeeded() async {
+    try {
+      final dir = await _baseDir();
+      final files = <File>[];
+      var total = 0;
+      await for (final entity in dir.list()) {
+        if (entity is File) {
+          files.add(entity);
+          total += await entity.length();
+        }
+      }
+      if (total <= _maxCacheBytes) return;
+      final stamped = <(File, DateTime)>[];
+      for (final f in files) {
+        try {
+          stamped.add((f, await f.lastModified()));
+        } catch (_) {
+          stamped.add((f, DateTime.now()));
+        }
+      }
+      stamped.sort((a, b) => a.$2.compareTo(b.$2));
+      for (final (file, _) in stamped) {
+        if (total <= _maxCacheBytes) break;
+        final len = await file.length();
+        await file.delete();
+        total -= len;
+      }
+    } catch (_) {
+      // Eviction is best effort.
     }
   }
 

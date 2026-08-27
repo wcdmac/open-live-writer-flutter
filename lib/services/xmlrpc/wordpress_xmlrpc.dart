@@ -216,6 +216,20 @@ class WordPressXmlRpcClient {
     return result == true || result == 1 || '$result' == 'true';
   }
 
+  /// Changes ONLY the post status via wp.editPost — used by dashboard quick
+  /// actions so a status change never re-sends (and overwrites) the whole
+  /// post content.
+  Future<bool> setPostStatus(String postId, PostStatus status) async {
+    final result = await _client.callMethod('wp.editPost', [
+      _blogId,
+      _client.username,
+      _client.password,
+      int.tryParse(postId) ?? postId,
+      {'post_status': status.wpValue},
+    ]);
+    return result == true || result == 1 || '$result' == 'true';
+  }
+
   /// blogger.deletePost / wp.deletePost.
   Future<bool> deletePost(String postId) async {
     if (flavor == XmlRpcFlavor.wordpress) {
@@ -301,7 +315,7 @@ class WordPressXmlRpcClient {
   Future<String> newCategory(String name, {String? parentId, String? slug}) async {
     final struct = <String, dynamic>{
       'name': name,
-      if (slug != null) 'slug': slug,
+      'slug': ?slug,
       if (parentId != null && parentId.isNotEmpty)
         'parent_id': int.tryParse(parentId) ?? parentId,
     };
@@ -469,12 +483,25 @@ class WordPressXmlRpcClient {
           'wp_page_parent_id': int.tryParse(post.pageParentId!) ?? post.pageParentId,
         if (post.pageOrder != null) 'wp_page_order': post.pageOrder,
       } else ...{
-        'terms': {
-          'category': post.categories
-              .map((c) => int.tryParse(c) ?? c)
-              .toList(),
-          'post_tag': post.tags,
-        },
+        // Tags: numeric values are term ids; names must ride terms_names
+        // (wp.newPost creates them server-side) — the plain terms field
+        // accepts ids only, so names there are silently dropped.
+        ...() {
+          final tagIds =
+              post.tags.where((t) => int.tryParse(t) != null).toList();
+          final tagNames =
+              post.tags.where((t) => int.tryParse(t) == null).toList();
+          return {
+            'terms': {
+              'category': post.categories
+                  .map((c) => int.tryParse(c) ?? c)
+                  .toList(),
+              if (tagIds.isNotEmpty) 'post_tag': tagIds,
+            },
+            if (tagNames.isNotEmpty)
+              'terms_names': {'post_tag': tagNames},
+          };
+        }(),
         'comment_status': post.commentsEnabled ? 'open' : 'closed',
         'ping_status': post.pingsEnabled ? 'open' : 'closed',
       },
@@ -602,4 +629,7 @@ class WordPressXmlRpcClient {
     if (value is Map) return '${value['postid'] ?? value['postId'] ?? ''}';
     return '$value';
   }
+
+  /// Releases the underlying HTTP client (called by BlogService.dispose).
+  void close() => _client.close();
 }

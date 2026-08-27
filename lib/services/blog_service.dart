@@ -91,6 +91,13 @@ class BlogService {
           ? rest.editPost(post, publish: publish).then((_) => true)
           : xmlrpc.editPost(post, publish: publish);
 
+  /// Changes ONLY the post status (dashboard quick actions) — avoids the
+  /// full editPost payload, which is last-write-wins over title/content.
+  Future<bool> setPostStatus(String postId, PostStatus status) =>
+      account.protocol == BlogProtocol.rest
+          ? rest.editPostStatus(postId, status)
+          : xmlrpc.setPostStatus(postId, status);
+
   Future<bool> deletePost(String id, {bool isPage = false}) =>
       account.protocol == BlogProtocol.rest
           ? rest.deletePost(id, isPage: isPage)
@@ -136,9 +143,23 @@ class BlogService {
     return xmlrpc.getOptions();
   }
 
-  Future<BlogTheme> detectTheme() => ThemeDetector().detect(account.homepageUrl);
+  /// One theme probe per service instance: the detector allocates its own
+  /// HTTP client, so it must be closed — a fresh ThemeDetector per call
+  /// leaked a client (and re-fetched the homepage) on every refresh.
+  Future<BlogTheme> detectTheme() async {
+    final detector = ThemeDetector();
+    try {
+      return await detector.detect(account.homepageUrl);
+    } finally {
+      detector.close();
+    }
+  }
 
+  /// Closes the underlying HTTP clients. Must run when the service is
+  /// discarded (account switch/removal) or the connection pool leaks.
   void dispose() {
+    _xmlrpc?.close();
+    _rest?.close();
     _xmlrpc = null;
     _rest = null;
   }
