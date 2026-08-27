@@ -26,13 +26,17 @@ enum PostStatus {
         PostStatus.trash => 'trash',
       };
 
+  /// Unknown values (auto-draft, inherit, new statuses…) map to draft:
+  /// defaulting to publish would let a status round-trip accidentally
+  /// publish content that was never meant to be public.
   static PostStatus fromWp(String? value) => switch (value) {
         'draft' => PostStatus.draft,
         'pending' => PostStatus.pending,
         'private' => PostStatus.private,
         'future' || 'scheduled' => PostStatus.scheduled,
+        'publish' => PostStatus.publish,
         'trash' => PostStatus.trash,
-        _ => PostStatus.publish,
+        _ => PostStatus.draft,
       };
 }
 
@@ -150,14 +154,27 @@ class BlogPost {
       status == PostStatus.scheduled ||
       status == PostStatus.private;
 
+  /// Cached result for [displayExcerpt]: the list view calls it on every
+  /// tile build, and running two regexes over full post content per frame
+  /// janks scrolling on long posts.
+  String? _excerptCache;
+  String? _excerptCacheSrc;
+
   /// Excerpt with a sane fallback (first 160 chars of plain text content).
   String get displayExcerpt {
     if (excerpt.trim().isNotEmpty) return excerpt;
+    if (_excerptCache != null && _excerptCacheSrc == content) {
+      return _excerptCache!;
+    }
     final plain = content
         .replaceAll(RegExp(r'<[^>]+>'), ' ')
         .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
-    return plain.length > 160 ? '${plain.substring(0, 160)}…' : plain;
+    final result =
+        plain.length > 160 ? '${plain.substring(0, 160)}…' : plain;
+    _excerptCacheSrc = content;
+    _excerptCache = result;
+    return result;
   }
 
   BlogPost copy() => BlogPost(

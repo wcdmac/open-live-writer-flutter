@@ -18,7 +18,11 @@ typedef MediaUploader = Future<MediaUploadResult> Function(
 /// it, so surface concrete server-side instructions instead of the raw
 /// fault.
 String mediaUploadErrorText(AppLocalizations l10n, Object error) {
-  if (error.toString().contains('HTTP 413')) return l10n.uploadTooLarge;
+  // REST throws "WordPress REST error 413 (...)" while XML-RPC surfaces
+  // "HTTP 413" from the transport — match the bare status code.
+  if (RegExp(r'\b413\b').hasMatch(error.toString())) {
+    return l10n.uploadTooLarge;
+  }
   return l10n.uploadFailed(error);
 }
 
@@ -192,7 +196,7 @@ class EditorToolbar extends StatelessWidget {
           ),
         ],
       ),
-    );
+    ).whenComplete(controller.dispose);
   }
 
   @override

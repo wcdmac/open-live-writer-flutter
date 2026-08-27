@@ -3,6 +3,7 @@ import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart
 import 'package:image_picker/image_picker.dart' as imgpick;
 
 import '../l10n/app_localizations.dart';
+import '../services/media_cache.dart';
 import '../views/editor/editor_toolbar.dart'
     show MediaUploader, mediaUploadErrorText;
 import 'block_document.dart';
@@ -435,17 +436,24 @@ class _HeadingFieldState extends State<_HeadingField> {
   late int _level;
   late final TextEditingController _controller;
 
+  /// Original `<hN ...>` attributes (class/id) — preserved on emit so
+  /// editing text doesn't strip them.
+  String _attrs = '';
+
   @override
   void initState() {
     super.initState();
     _level = headingLevel(widget.block.html);
-    final m = RegExp(r'^\s*<h[1-6][^>]*>([\s\S]*)</h[1-6]>\s*$',
+    final m = RegExp(r'^\s*<h[1-6]([^>]*)>([\s\S]*)</h[1-6]>\s*$',
             caseSensitive: false)
         .firstMatch(widget.block.html);
-    _controller = TextEditingController(text: m?.group(1) ?? widget.block.html);
+    _attrs = m?.group(1)?.trim() ?? '';
+    _controller = TextEditingController(text: m?.group(2) ?? widget.block.html);
   }
 
-  void _emit() => widget.onChanged('<h$_level>${_controller.text}</h$_level>');
+  void _emit() => widget.onChanged(
+      '<h$_level${_attrs.isEmpty ? '' : ' $_attrs'}>'
+      '${_controller.text}</h$_level>');
 
   @override
   Widget build(BuildContext context) {
@@ -507,6 +515,12 @@ class _ImageFieldState extends State<_ImageField> {
   late final TextEditingController _captionCtrl;
   bool _uploading = false;
 
+  /// Original figure class (is-resized, alignwide…) and img attributes
+  /// (width/height/id/class) — preserved on emit so editing alt text or
+  /// caption doesn't reset the image's layout settings.
+  String? _figureClass;
+  String? _imgAttrs;
+
   @override
   void initState() {
     super.initState();
@@ -516,6 +530,25 @@ class _ImageFieldState extends State<_ImageField> {
             caseSensitive: false)
         .firstMatch(widget.block.html);
     _captionCtrl = TextEditingController(text: cap?.group(1)?.trim() ?? '');
+
+    final figureClass = RegExp(r'<figure[^>]*\bclass="([^"]*)"',
+            caseSensitive: false)
+        .firstMatch(widget.block.html);
+    _figureClass = figureClass?.group(1)?.trim();
+
+    // Keep every img attribute except src/alt for round-trip.
+    final img = RegExp(r'<img([^>]*?)/?>', caseSensitive: false)
+        .firstMatch(widget.block.html);
+    if (img != null) {
+      final kept = <String>[];
+      for (final attr in RegExp(r'([\w-]+)\s*=\s*"([^"]*)"')
+          .allMatches(img.group(1) ?? '')) {
+        final name = attr.group(1)!.toLowerCase();
+        if (name == 'src' || name == 'alt') continue;
+        kept.add('${attr.group(1)}="${attr.group(2)}"');
+      }
+      if (kept.isNotEmpty) _imgAttrs = kept.join(' ');
+    }
   }
 
   @override
@@ -529,7 +562,9 @@ class _ImageFieldState extends State<_ImageField> {
   void _emit() {
     widget.onChanged(buildImageHtml(_srcCtrl.text.trim(),
         _altCtrl.text.trim(),
-        caption: _captionCtrl.text));
+        caption: _captionCtrl.text,
+        figureClass: _figureClass,
+        imgAttrs: _imgAttrs));
   }
 
   Future<void> _pickAndUpload() async {
@@ -569,10 +604,14 @@ class _ImageFieldState extends State<_ImageField> {
         if (_srcCtrl.text.trim().isNotEmpty)
           ClipRRect(
             borderRadius: BorderRadius.circular(8),
-            child: Image.network(_srcCtrl.text.trim(),
+            // CachedImage: consistent with the preview/editor offline
+            // strategy — a previously downloaded copy renders even when
+            // the network is down.
+            child: CachedImage(
+                url: _srcCtrl.text.trim(),
                 width: double.infinity,
                 fit: BoxFit.cover,
-                errorBuilder: (_, _, _) => const SizedBox.shrink()),
+                errorBuilder: (_) => const SizedBox.shrink()),
           ),
         const SizedBox(height: 6),
         TextField(
@@ -1595,7 +1634,7 @@ class _InsertBar extends StatelessWidget {
               child: Text(l10n.ok)),
         ],
       ),
-    );
+    ).whenComplete(controller.dispose);
   }
 
   @override

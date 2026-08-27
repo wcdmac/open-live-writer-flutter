@@ -582,17 +582,19 @@ class _PostTile extends StatelessWidget {
   Future<void> _changeStatus(
       BuildContext context, BlogPost post, PostStatus target) async {
     final l10n = AppLocalizations.of(context)!;
+    final messenger = ScaffoldMessenger.of(context);
     final svc = app.service;
-    if (svc == null) return;
-    post.status = target;
+    final postId = post.id;
+    if (svc == null || postId == null) return;
     try {
-      // editPost(publish: false) always saves as draft — exactly what a
-      // "move to draft" needs; other targets ride the publish path.
-      await svc.editPost(post, publish: target != PostStatus.draft);
+      // Send ONLY the status change: the full editPost payload is
+      // last-write-wins and would clobber concurrent edits of the post
+      // body made elsewhere. The refreshed list brings the new status.
+      await svc.setPostStatus(postId, target);
       await app.refresh();
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
             SnackBar(content: Text(l10n.operationFailed('$e'))));
       }
     }

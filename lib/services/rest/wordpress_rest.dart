@@ -46,6 +46,17 @@ class WordPressRestClient {
 
   String? _jwtToken;
 
+  /// In-flight JWT fetch, shared by concurrent requests so a burst of
+  /// calls doesn't fire N token authentications at once.
+  Future<String?>? _jwtFuture;
+
+  /// Cached tag list for name→id resolution on save (see [_resolveTagIds]).
+  List<PostTag>? _tagCache;
+
+  /// Last status query the server accepted for getPosts — skips the
+  /// 3-request degrade chain on every refresh (see [getPosts]).
+  String? _workingStatusQuery;
+
   static const _timeout = Duration(seconds: 30);
 
   // ---------------------------------------------------------------------------
@@ -103,7 +114,8 @@ class WordPressRestClient {
         final token = base64Encode(utf8.encode('$username:$password'));
         h['Authorization'] = 'Basic $token';
       case RestAuthMethod.jwt:
-        _jwtToken ??= await _fetchJwtToken();
+        _jwtToken ??= await (_jwtFuture ??= _fetchJwtToken()
+            .whenComplete(() => _jwtFuture = null));
         if (_jwtToken != null) h['Authorization'] = 'Bearer $_jwtToken';
     }
     return h;
@@ -219,20 +231,36 @@ class WordPressRestClient {
     // which used to leave the dashboard permanently empty.
     final explicit = status?.wpValue;
     if (explicit != null) return fetch(explicit);
-    try {
-      return await fetch('publish,draft,future,pending,private');
-    } on WordPressRestException catch (e) {
-      if (e.statusCode != 400 && e.statusCode != 401 && e.statusCode != 403) {
-        rethrow;
+
+    // Remember the last query the server accepted; retry it first on the
+    // next call instead of walking the whole degrade chain again.
+    final cached = _workingStatusQuery;
+    if (cached != null) {
+      try {
+        return await fetch(cached);
+      } on WordPressRestException catch (e) {
+        if (e.statusCode != 400 && e.statusCode != 401 && e.statusCode != 403) {
+          rethrow;
+        }
+        _workingStatusQuery = null;
       }
     }
-    try {
-      return await fetch('publish,draft,pending');
-    } on WordPressRestException catch (e) {
-      if (e.statusCode != 400 && e.statusCode != 401 && e.statusCode != 403) {
-        rethrow;
+    for (final query in const [
+      'publish,draft,future,pending,private',
+      'publish,draft,pending',
+      'publish',
+    ]) {
+      try {
+        final result = await fetch(query);
+        _workingStatusQuery = query;
+        return result;
+      } on WordPressRestException catch (e) {
+        if (e.statusCode != 400 && e.statusCode != 401 && e.statusCode != 403) {
+          rethrow;
+        }
       }
     }
+    // Unreachable: the last query ('publish') is always accepted.
     return fetch('publish');
   }
 
@@ -259,7 +287,8 @@ class WordPressRestClient {
   }
 
   Future<BlogPost> newPost(BlogPost post, {required bool publish}) async {
-    final body = _postToJson(post, publish: publish);
+    final body = _postToJson(post,
+        publish: publish, tagIds: await _resolveTagIds(post.tags));
     final data = await _request(
         'POST', '/wp/v2/${post.isPage ? 'pages' : 'posts'}',
         body: body);
@@ -267,11 +296,72 @@ class WordPressRestClient {
   }
 
   Future<BlogPost> editPost(BlogPost post, {required bool publish}) async {
-    final body = _postToJson(post, publish: publish);
+    final body = _postToJson(post,
+        publish: publish, tagIds: await _resolveTagIds(post.tags));
     final data = await _request(
         'POST', '/wp/v2/${post.isPage ? 'pages' : 'posts'}/${post.id}',
         body: body);
     return _postFromJson(data as Map, isPage: post.isPage);
+  }
+
+  /// Changes ONLY the post status — used by dashboard quick actions so a
+  /// "publish" / "move to draft" tap can't clobber concurrent edits made
+  /// elsewhere (the full editPost payload is last-write-wins).
+  Future<bool> editPostStatus(String id, PostStatus status,
+      {bool isPage = false}) async {
+    await _request('POST', '/wp/v2/${isPage ? 'pages' : 'posts'}/$id',
+        body: {'status': status.wpValue});
+    return true;
+  }
+
+  /// Resolves the editor's mixed tag input (numeric ids from loaded posts,
+  /// plain names typed by the user) into tag ids. Unknown names are created
+  /// via POST /wp/v2/tags; creation failures (permissions) degrade by
+  /// dropping that tag instead of failing the whole save.
+  Future<List<int>> _resolveTagIds(List<String> tags) async {
+    if (tags.isEmpty) return const [];
+    final ids = <int>[];
+    final names = <String>[];
+    for (final tag in tags) {
+      final asInt = int.tryParse(tag);
+      if (asInt != null) {
+        ids.add(asInt);
+      } else {
+        names.add(tag);
+      }
+    }
+    if (names.isEmpty) return ids;
+
+    if (_tagCache == null) {
+      try {
+        _tagCache = await getTags();
+      } catch (_) {
+        _tagCache = const [];
+      }
+    }
+    final byName = <String, int>{
+      for (final t in _tagCache!)
+        if (int.tryParse(t.id) != null) t.name.toLowerCase(): int.parse(t.id),
+    };
+    for (final name in names) {
+      final existing = byName[name.toLowerCase()];
+      if (existing != null) {
+        ids.add(existing);
+        continue;
+      }
+      try {
+        final created =
+            await _request('POST', '/wp/v2/tags', body: {'name': name});
+        final id = int.tryParse('${created['id']}');
+        if (id != null) {
+          ids.add(id);
+          _tagCache = [..._tagCache!, PostTag(id: '$id', name: name)];
+        }
+      } catch (_) {
+        // Cannot create this tag (role limits) — skip it.
+      }
+    }
+    return ids;
   }
 
   Future<bool> deletePost(String id, {bool isPage = false}) async {
@@ -373,11 +463,17 @@ class WordPressRestClient {
     return data is Map<String, dynamic> ? data : const {};
   }
 
+  /// Releases the underlying HTTP client. Must be called when the owning
+  /// BlogService is discarded (account switch/removal), or every switch
+  /// leaks a connection pool.
+  void close() => _http.close();
+
   // ---------------------------------------------------------------------------
   // JSON <-> model mapping
   // ---------------------------------------------------------------------------
 
-  Map<String, dynamic> _postToJson(BlogPost post, {required bool publish}) {
+  Map<String, dynamic> _postToJson(BlogPost post,
+      {required bool publish, List<int>? tagIds}) {
     // publish=false means "Save draft"; publish=true sends the chosen
     // status verbatim (EditorState applies the draft → publish default).
     final status = publish ? post.status : PostStatus.draft;
@@ -386,11 +482,17 @@ class WordPressRestClient {
       'content': post.content,
       'excerpt': post.excerpt,
       'status': status.wpValue,
+      // Scheduled publishing rides the date field; without it WordPress
+      // ignores the future date and publishes immediately.
+      if (post.datePublished != null)
+        'date': post.datePublished!.toUtc().toIso8601String(),
       if (post.slug?.isNotEmpty == true) 'slug': post.slug,
       if (post.password?.isNotEmpty == true) 'password': post.password,
       if (!post.isPage) ...{
         'categories': post.categories.map(int.tryParse).whereType<int>().toList(),
-        'tags': post.tags.map(int.tryParse).whereType<int>().toList(),
+        // tagIds comes from _resolveTagIds (names created/looked up);
+        // fall back to numeric-only when resolution was skipped.
+        'tags': tagIds ?? post.tags.map(int.tryParse).whereType<int>().toList(),
       },
       if (post.isPage) ...{
         if (post.pageParentId?.isNotEmpty == true)
@@ -414,9 +516,12 @@ class WordPressRestClient {
   }
 
   BlogPost _postFromJson(Map raw, {bool isPage = false}) {
+    // date_gmt carries no timezone suffix — DateTime.parse would read it
+    // as LOCAL time and shift every displayed date by the UTC offset.
     DateTime? parseDate(dynamic raw) {
       if (raw is! String || raw.isEmpty) return null;
-      return DateTime.tryParse(raw);
+      final hasTz = raw.endsWith('Z') || RegExp(r'[+-]\d{2}:?\d{2}$').hasMatch(raw);
+      return DateTime.tryParse(hasTz ? raw : '${raw}Z');
     }
 
     final status = PostStatus.fromWp('${raw['status'] ?? 'draft'}');
