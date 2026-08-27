@@ -135,7 +135,6 @@ class WordPressRestClient {
     Map<String, String>? query,
     Object? body,
     Map<String, String> extraHeaders = const {},
-    Duration timeout = _timeout,
   }) async {
     final uri = Uri.parse('$baseUrl$path').replace(
       queryParameters: query == null || query.isEmpty ? null : query,
@@ -152,7 +151,7 @@ class WordPressRestClient {
     if (body != null && method.toUpperCase() != 'GET') {
       request.body = jsonEncode(body);
     }
-    final res = await _http.send(request).timeout(timeout);
+    final res = await _http.send(request).timeout(_timeout);
     final response = await http.Response.fromStream(res);
 
     if (response.statusCode >= 400) {
@@ -197,7 +196,6 @@ class WordPressRestClient {
     bool pages = false,
     PostStatus? status,
     String search = '',
-    Duration timeout = _timeout,
   }) async {
     Future<List<BlogPost>> fetch(String statuses) async {
       final data = await _request('GET', '/wp/v2/${pages ? 'pages' : 'posts'}',
@@ -207,8 +205,7 @@ class WordPressRestClient {
             'page': '$page',
             'status': statuses,
             if (search.isNotEmpty) 'search': search,
-          },
-          timeout: timeout);
+          });
       if (data is! List) return const [];
       return data
           .map((raw) => _postFromJson(raw as Map, isPage: pages))

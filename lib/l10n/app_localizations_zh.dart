@@ -601,23 +601,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get exportDoneTitle => '导出完成';
 
   @override
-  String get exportAllWxr => '导出全部文章（WXR）';
-
-  @override
-  String get exportAllWxrHelp => '生成 WordPress 标准导出文件，可在后台重新导入';
-
-  @override
-  String get exportingPosts => '正在拉取全部文章…';
-
-  @override
-  String exportingPostsProgress(num count) {
-    return '正在拉取全部文章… 已获取 $count 篇';
-  }
-
-  @override
-  String get exportCancelled => '已取消导出';
-
-  @override
   String get shareFile => '分享';
 
   @override

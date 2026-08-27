@@ -5,12 +5,6 @@ import 'theme_detector.dart';
 import 'xmlrpc/wordpress_xmlrpc.dart';
 import 'xmlrpc/xmlrpc_client.dart';
 
-/// Internal control-flow signal: the server returned a page we have
-/// already seen (offset-ignoring metaWeblog fallback) — stop paging.
-class _RepeatedPageSignal implements Exception {
-  const _RepeatedPageSignal();
-}
-
 /// Unified blog operations facade, hiding whether the account talks
 /// XML-RPC (WordPress/MetaWeblog/MT/Blogger) or REST API v2.
 ///
@@ -81,73 +75,6 @@ class BlogService {
       account.protocol == BlogProtocol.rest
           ? rest.getPost(id, isPage: isPage)
           : xmlrpc.getPost(id, isPage: isPage);
-
-  /// Fetches every editable post (paged, protocol-specific). Used by the
-  /// whole-blog WXR export.
-  ///
-  /// [onProgress] reports the running total after each page so the UI
-  /// can show progress. [shouldCancel] is polled between pages; when it
-  /// returns true the fetch stops and the posts fetched so far are
-  /// returned. A batch that contains no new posts (servers whose
-  /// metaWeblog fallback ignores the offset) also stops the loop —
-  /// without this guard the fetch never terminates.
-  Future<List<BlogPost>> getAllPosts({
-    void Function(int fetched)? onProgress,
-    bool Function()? shouldCancel,
-  }) async {
-    final all = <BlogPost>[];
-    final seen = <String>{};
-    const pageSize = 100;
-    // Cross-border latency: a full page of 100 posts with content can
-    // easily exceed the 30s default timeout.
-    const timeout = Duration(minutes: 3);
-
-    Future<void> append(List<BlogPost> batch) async {
-      var added = 0;
-      for (final post in batch) {
-        final key = post.id ?? '${post.title}|${post.datePublished}';
-        if (seen.add(key)) {
-          all.add(post);
-          added++;
-        }
-      }
-      // Every post already seen: the server is repeating a page
-      // (offset-ignoring metaWeblog fallback) — stop instead of
-      // looping forever.
-      if (batch.isNotEmpty && added == 0) {
-        throw const _RepeatedPageSignal();
-      }
-    }
-
-    try {
-      if (account.protocol == BlogProtocol.rest) {
-        var page = 1;
-        while (true) {
-          if (shouldCancel?.call() ?? false) return all;
-          final batch = await rest
-              .getPosts(perPage: pageSize, page: page, timeout: timeout);
-          await append(batch);
-          onProgress?.call(all.length);
-          if (batch.length < pageSize) break;
-          page++;
-        }
-      } else {
-        var offset = 0;
-        while (true) {
-          if (shouldCancel?.call() ?? false) return all;
-          final batch = await xmlrpc
-              .getPosts(count: pageSize, offset: offset, timeout: timeout);
-          await append(batch);
-          onProgress?.call(all.length);
-          if (batch.length < pageSize) break;
-          offset += pageSize;
-        }
-      }
-    } on _RepeatedPageSignal {
-      // Repeated page: keep what we have, stop fetching.
-    }
-    return all;
-  }
 
   /// Creates a new post. Returns the post id (XML-RPC) or the created
   /// post (REST gives us the full object back).

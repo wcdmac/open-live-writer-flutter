@@ -23,16 +23,6 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  /// Notifier bumped after each fetched page so the WXR export dialog
-  /// re-renders its progress text.
-  final _exportProgress = ValueNotifier<int>(0);
-
-  @override
-  void dispose() {
-    _exportProgress.dispose();
-    super.dispose();
-  }
-
   @override
   void initState() {
     super.initState();
@@ -208,15 +198,6 @@ class _HomePageState extends State<HomePage> {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.file_upload_outlined),
-              title: Text(l10n.exportAllWxr),
-              subtitle: Text(l10n.exportAllWxrHelp),
-              onTap: () {
-                Navigator.of(sheetContext).pop();
-                _exportAllWxr(context, app);
-              },
-            ),
-            ListTile(
               leading: const Icon(Icons.delete_outline),
               title: Text(l10n
                   .removeAccount(app.currentAccount?.name ?? '')),
@@ -230,92 +211,6 @@ class _HomePageState extends State<HomePage> {
         ),
       ),
     );
-  }
-
-  /// Whole-blog export: fetches every post (paged) and writes a WXR
-  /// file the WordPress admin can re-import. Progress is shown per
-  /// page; the dialog can be cancelled mid-fetch.
-  Future<void> _exportAllWxr(BuildContext context, AppState app) async {
-    final l10n = AppLocalizations.of(context)!;
-    final account = app.currentAccount;
-    final svc = app.service;
-    if (account == null || svc == null) return;
-    // Captured BEFORE any await: async continuations below must not
-    // touch a context that may have been unmounted in the meantime.
-    final navigator = Navigator.of(context);
-    final messenger = ScaffoldMessenger.of(context);
-    var cancelled = false;
-    var dialogOpen = true;
-    var fetched = 0;
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => PopScope(
-        canPop: false,
-        child: AlertDialog(
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const CircularProgressIndicator(),
-              const SizedBox(height: 16),
-              ListenableBuilder(
-                listenable: _exportProgress,
-                builder: (_, _) => Text(
-                  fetched == 0
-                      ? l10n.exportingPosts
-                      : l10n.exportingPostsProgress(fetched),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                cancelled = true;
-                dialogOpen = false;
-                Navigator.of(dialogContext).pop();
-              },
-              child: Text(l10n.cancel),
-            ),
-          ],
-        ),
-      ),
-    );
-    try {
-      final posts = await svc.getAllPosts(
-        onProgress: (n) {
-          fetched = n;
-          _exportProgress.value++;
-        },
-        shouldCancel: () => cancelled,
-      );
-      if (cancelled) {
-        messenger.showSnackBar(
-            SnackBar(content: Text(l10n.exportCancelled)));
-        return;
-      }
-      final wxr = PostExporter.buildWxr(posts,
-          account: account,
-          categories: app.categories,
-          tags: app.tags);
-      final stamp = DateFormat('yyyyMMdd-HHmm').format(DateTime.now());
-      final file =
-          await PostExporter.write('wordpress-export-$stamp.wxr', wxr);
-      // Close the progress dialog no matter what happened to the
-      // owning page, then show the result only if the page is alive.
-      if (dialogOpen) navigator.pop();
-      if (context.mounted) {
-        showExportedPath(context, file.path,
-            detail: '${posts.length} posts');
-      }
-    } catch (e) {
-      if (dialogOpen) navigator.pop();
-      if (context.mounted) {
-        messenger.showSnackBar(
-            SnackBar(content: Text(l10n.operationFailed('$e'))));
-      }
-    }
   }
 }
 

@@ -1,20 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:html/parser.dart' as htmlparser;
 
-import 'package:open_live_writer/models/blog.dart';
 import 'package:open_live_writer/models/blog_post.dart';
 import 'package:open_live_writer/services/local_draft_store.dart';
 import 'package:open_live_writer/services/post_exporter.dart';
-
-BlogAccount _account() => BlogAccount(
-      id: 'a1',
-      blogId: '1',
-      name: 'Test Blog',
-      homepageUrl: 'https://example.com',
-      apiUrl: 'https://example.com/xmlrpc.php',
-      protocol: BlogProtocol.xmlrpc,
-      username: 'admin',
-    );
 
 void main() {
   group('LocalDraft offline copy', () {
@@ -98,40 +86,6 @@ void main() {
       expect(md, contains('categories: ["3"]'));
       expect(md, contains('## Head'));
       expect(md, contains('**bold**'));
-    });
-
-    test('WXR is parseable XML with post item and taxonomies', () {
-      final wxr = PostExporter.buildWxr(
-        [post],
-        account: _account(),
-        categories: [const PostCategory(id: '3', name: 'News', slug: 'news')],
-        tags: [const PostTag(id: '9', name: 'wp', slug: 'wp')],
-      );
-      final doc = htmlparser.parse(wxr);
-      final items = doc.querySelectorAll('item');
-      expect(items, hasLength(1));
-      final item = items.first;
-      expect(item.querySelector('title')?.text, contains('Title <b>bold</b>'));
-      expect(item.querySelector('content\\:encoded')?.text, contains('Head'));
-      expect(item.querySelectorAll('category'), hasLength(2));
-      expect(
-        wxr,
-        contains('<category domain="category" nicename="news">'),
-      );
-    });
-
-    test('WXR splits an embedded CDATA terminator', () {
-      final evil = BlogPost(
-        id: '8',
-        title: 'Evil',
-        content: '<p>]]></p>',
-        status: PostStatus.draft,
-      );
-      final wxr = PostExporter.buildWxr([evil], account: _account());
-      // The raw "]]>" inside the content must be split across two CDATA
-      // sections instead of terminating the first one early.
-      expect(wxr, contains(']]]]><![CDATA[>'));
-      expect(wxr, isNot(contains('<p>]]></p>')));
     });
 
     test('safeName strips path separators and keeps CJK titles', () {
