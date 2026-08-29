@@ -121,10 +121,15 @@ class WordPressXmlRpcClient {
         }
         try {
           return await wpGetPosts(
-              ['publish', 'draft', 'future', 'pending', 'private']);
+              ['publish', 'draft', 'future', 'pending', 'private', 'trash']);
         } on XmlRpcFault {
           // Degrade: some servers / roles reject the status array.
-          return await wpGetPosts('publish,draft,future,pending,private');
+          try {
+            return await wpGetPosts(
+                'publish,draft,future,pending,private,trash');
+          } on XmlRpcFault {
+            return await wpGetPosts('publish,draft,future,pending,private');
+          }
         }
       } on XmlRpcFault catch (e) {
         if (!_isMethodMissing(e)) rethrow;
@@ -165,6 +170,9 @@ class WordPressXmlRpcClient {
   /// while the client reports a bogus "transport error".
   Future<String> newPost(BlogPost post, {required bool publish}) async {
     const saveTimeout = Duration(minutes: 3);
+    // WordPress rejects status=trash on creation (same as REST); degrade
+    // to draft instead of failing the whole save.
+    if (post.status == PostStatus.trash) post.status = PostStatus.draft;
     if (flavor == XmlRpcFlavor.wordpress || flavor == XmlRpcFlavor.movabletype) {
       try {
         final content = _wpPostStruct(post, publish: publish);
@@ -218,14 +226,20 @@ class WordPressXmlRpcClient {
 
   /// Changes ONLY the post status via wp.editPost — used by dashboard quick
   /// actions so a status change never re-sends (and overwrites) the whole
-  /// post content.
-  Future<bool> setPostStatus(String postId, PostStatus status) async {
+  /// post content. [date] accompanies scheduled transitions (WordPress
+  /// needs a future date to keep status=future).
+  Future<bool> setPostStatus(String postId, PostStatus status,
+      {DateTime? date}) async {
     final result = await _client.callMethod('wp.editPost', [
       _blogId,
       _client.username,
       _client.password,
       int.tryParse(postId) ?? postId,
-      {'post_status': status.wpValue},
+      {
+        'post_status': status.wpValue,
+        if (date != null)
+          'post_date_gmt': date.toUtc().toIso8601String(),
+      },
     ]);
     return result == true || result == 1 || '$result' == 'true';
   }

@@ -13,7 +13,7 @@ import 'editor/editor_toolbar.dart';
 import 'editor/live_preview.dart';
 
 /// App version.
-const String kAppVersion = 'v1.7.6';
+const String kAppVersion = 'v1.7.7';
 
 /// Localized display label for a [PostStatus] (dashboard chips + editor).
 String statusLabel(AppLocalizations l10n, PostStatus status) =>
@@ -992,11 +992,17 @@ class _PostSettingsSheetState extends State<_PostSettingsSheet> {
           const SizedBox(height: 12),
 
           // --- Status ------------------------------------------------------
+          // New posts can't be created AS trash — WordPress rejects the
+          // status with rest_invalid_param (400). Trash stays available
+          // for existing posts via the dashboard's "move to trash".
           DropdownButtonFormField<PostStatus>(
             value: editor.post.status,
             decoration: InputDecoration(
                 labelText: l10n.statusApplied),
-            items: PostStatus.values
+            items: (editor.post.isNew
+                    ? PostStatus.values
+                        .where((s) => s != PostStatus.trash)
+                    : PostStatus.values)
                 .map((s) =>
                     DropdownMenuItem(value: s, child: Text(statusLabel(l10n, s))))
                 .toList(),

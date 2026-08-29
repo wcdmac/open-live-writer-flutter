@@ -23,6 +23,9 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
+  /// Status filter for the dashboard list; null shows everything.
+  PostStatus? _statusFilter;
+
   @override
   void initState() {
     super.initState();
@@ -130,18 +133,62 @@ class _HomePageState extends State<HomePage> {
 
     // Local drafts pin to the top: offline work stays reachable even when
     // the blog is unreachable.
+    final visiblePosts = _statusFilter == null
+        ? app.posts
+        : app.posts.where((p) => p.status == _statusFilter).toList();
     return RefreshIndicator(
       onRefresh: () => app.refresh(),
-      child: ListView.separated(
-        itemCount: app.localDrafts.length + app.posts.length,
-        separatorBuilder: (_, _) => const Divider(height: 1),
-        itemBuilder: (context, index) {
-          if (index < app.localDrafts.length) {
-            return _LocalDraftTile(draft: app.localDrafts[index], app: app);
-          }
-          final post = app.posts[index - app.localDrafts.length];
-          return _PostTile(post: post, app: app);
-        },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Status filter chips: scheduled/trash posts only surface here —
+          // they used to be invisible because the list query stopped at
+          // publish/draft/pending/private.
+          SizedBox(
+            height: 44,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              children: [
+                for (final entry in [
+                  (null as PostStatus?, l10n.filterAll),
+                  (PostStatus.publish, statusLabel(l10n, PostStatus.publish)),
+                  (PostStatus.draft, statusLabel(l10n, PostStatus.draft)),
+                  (PostStatus.pending, statusLabel(l10n, PostStatus.pending)),
+                  (PostStatus.scheduled,
+                      statusLabel(l10n, PostStatus.scheduled)),
+                  (PostStatus.private, statusLabel(l10n, PostStatus.private)),
+                  (PostStatus.trash, statusLabel(l10n, PostStatus.trash)),
+                ])
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: FilterChip(
+                      label: Text(entry.$2),
+                      selected: _statusFilter == entry.$1,
+                      onSelected: (_) => setState(() => _statusFilter = entry.$1),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: visiblePosts.isEmpty && app.localDrafts.isEmpty
+                ? Center(child: Text(l10n.noPostsYet))
+                : ListView.separated(
+                    itemCount: app.localDrafts.length + visiblePosts.length,
+                    separatorBuilder: (_, _) => const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      if (index < app.localDrafts.length) {
+                        return _LocalDraftTile(
+                            draft: app.localDrafts[index], app: app);
+                      }
+                      final post =
+                          visiblePosts[index - app.localDrafts.length];
+                      return _PostTile(post: post, app: app);
+                    },
+                  ),
+          ),
+        ],
       ),
     );
   }
@@ -562,6 +609,25 @@ class _PostTile extends StatelessWidget {
                   _changeStatus(context, post, PostStatus.draft);
                 },
               ),
+            if (post.status != PostStatus.pending)
+              ListTile(
+                leading: const Icon(Icons.rate_review_outlined),
+                title: Text(l10n.markAsPending),
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _changeStatus(context, post, PostStatus.pending);
+                },
+              ),
+            if (post.status != PostStatus.scheduled)
+              ListTile(
+                leading: const Icon(Icons.schedule_outlined),
+                title: Text(l10n.schedulePost),
+                subtitle: Text(l10n.schedulePostHelp),
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _schedulePost(context, post);
+                },
+              ),
             if (post.status != PostStatus.private)
               ListTile(
                 leading: const Icon(Icons.lock_outline),
@@ -586,6 +652,49 @@ class _PostTile extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// Schedules a post: pick a future date/time, then send status=future
+  /// WITH the date (status alone would publish immediately).
+  Future<void> _schedulePost(BuildContext context, BlogPost post) async {
+    final l10n = AppLocalizations.of(context)!;
+    final messenger = ScaffoldMessenger.of(context);
+    final svc = app.service;
+    final postId = post.id;
+    if (svc == null || postId == null) return;
+
+    final picked = await showDatePicker(
+      context: context,
+      initialDate:
+          post.datePublished?.isAfter(DateTime.now()) == true
+              ? post.datePublished!
+              : DateTime.now().add(const Duration(hours: 1)),
+      firstDate: DateTime.now(),
+      lastDate: DateTime(2100),
+    );
+    if (picked == null || !context.mounted) return;
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(
+          post.datePublished ?? DateTime.now().add(const Duration(hours: 1))),
+    );
+    if (time == null) return;
+    final date = DateTime(
+        picked.year, picked.month, picked.day, time.hour, time.minute);
+
+    try {
+      await svc.setPostStatus(postId, PostStatus.scheduled, date: date);
+      await app.refresh();
+      if (context.mounted) {
+        messenger.showSnackBar(
+            SnackBar(content: Text(l10n.postScheduled)));
+      }
+    } catch (e) {
+      if (context.mounted) {
+        messenger.showSnackBar(
+            SnackBar(content: Text(l10n.operationFailed('$e'))));
+      }
+    }
   }
 
   Future<void> _changeStatus(

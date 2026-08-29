@@ -577,6 +577,21 @@ class AppLocalizationsZh extends AppLocalizations {
   String get publishDraftToBlog => '发布到博客';
 
   @override
+  String get filterAll => '全部';
+
+  @override
+  String get markAsPending => '设为待审';
+
+  @override
+  String get schedulePost => '排期发布';
+
+  @override
+  String get schedulePostHelp => '选择未来的日期和时间';
+
+  @override
+  String get postScheduled => '文章已排期';
+
+  @override
   String get syncedToBlog => '已同步到博客';
 
   @override

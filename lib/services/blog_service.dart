@@ -93,10 +93,13 @@ class BlogService {
 
   /// Changes ONLY the post status (dashboard quick actions) — avoids the
   /// full editPost payload, which is last-write-wins over title/content.
-  Future<bool> setPostStatus(String postId, PostStatus status) =>
+  /// [date] accompanies scheduled transitions (status=future needs a
+  /// future date or WordPress publishes immediately).
+  Future<bool> setPostStatus(String postId, PostStatus status,
+          {DateTime? date}) =>
       account.protocol == BlogProtocol.rest
-          ? rest.editPostStatus(postId, status)
-          : xmlrpc.setPostStatus(postId, status);
+          ? rest.editPostStatus(postId, status, date: date)
+          : xmlrpc.setPostStatus(postId, status, date: date);
 
   Future<bool> deletePost(String id, {bool isPage = false}) =>
       account.protocol == BlogProtocol.rest

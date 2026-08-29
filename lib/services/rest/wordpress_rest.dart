@@ -247,6 +247,7 @@ class WordPressRestClient {
       }
     }
     for (final query in const [
+      'publish,draft,future,pending,private,trash',
       'publish,draft,future,pending,private',
       'publish,draft,pending',
       'publish',
@@ -294,6 +295,10 @@ class WordPressRestClient {
   static const _saveTimeout = Duration(minutes: 3);
 
   Future<BlogPost> newPost(BlogPost post, {required bool publish}) async {
+    // Defense in depth: WordPress rejects status=trash on creation with
+    // rest_invalid_param — the editor hides the option, but any other
+    // path (draft restore, etc.) degrades to draft instead of failing.
+    if (post.status == PostStatus.trash) post.status = PostStatus.draft;
     final body = _postToJson(post,
         publish: publish, tagIds: await _resolveTagIds(post.tags));
     final data = await _request(
@@ -314,10 +319,17 @@ class WordPressRestClient {
   /// Changes ONLY the post status — used by dashboard quick actions so a
   /// "publish" / "move to draft" tap can't clobber concurrent edits made
   /// elsewhere (the full editPost payload is last-write-wins).
+  ///
+  /// [date] accompanies a scheduled (future) transition: WordPress needs
+  /// a future date to keep status=future, otherwise it publishes now.
   Future<bool> editPostStatus(String id, PostStatus status,
-      {bool isPage = false}) async {
+      {bool isPage = false, DateTime? date}) async {
     await _request('POST', '/wp/v2/${isPage ? 'pages' : 'posts'}/$id',
-        body: {'status': status.wpValue}, timeout: _saveTimeout);
+        body: {
+          'status': status.wpValue,
+          if (date != null) 'date': date.toUtc().toIso8601String(),
+        },
+        timeout: _saveTimeout);
     return true;
   }
 
