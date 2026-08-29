@@ -584,6 +584,21 @@ class AppLocalizationsEn extends AppLocalizations {
   String get publishDraftToBlog => 'Publish to blog';
 
   @override
+  String get filterAll => 'All';
+
+  @override
+  String get markAsPending => 'Mark as pending';
+
+  @override
+  String get schedulePost => 'Schedule';
+
+  @override
+  String get schedulePostHelp => 'Pick a future date and time';
+
+  @override
+  String get postScheduled => 'Post scheduled';
+
+  @override
   String get syncedToBlog => 'Synced to blog';
 
   @override

@@ -130,9 +130,10 @@ void main() {
       final posts = await clientFor(mock).getPosts(perPage: 10);
       expect(posts, hasLength(1));
       expect(posts.first.title, 'Public');
-      // Degradation chain: full set rejected, reduced set succeeded.
-      expect(requestedStatuses.length, 2);
-      expect(requestedStatuses.first, contains('private'));
+      // Degradation chain: the trash-inclusive set and the full set are
+      // rejected, the reduced set succeeds.
+      expect(requestedStatuses.length, 3);
+      expect(requestedStatuses.first, contains('trash'));
       expect(requestedStatuses.last, 'publish,draft,pending');
     });
 

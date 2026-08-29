@@ -1160,6 +1160,36 @@ abstract class AppLocalizations {
   /// **'Publish to blog'**
   String get publishDraftToBlog;
 
+  /// No description provided for @filterAll.
+  ///
+  /// In en, this message translates to:
+  /// **'All'**
+  String get filterAll;
+
+  /// No description provided for @markAsPending.
+  ///
+  /// In en, this message translates to:
+  /// **'Mark as pending'**
+  String get markAsPending;
+
+  /// No description provided for @schedulePost.
+  ///
+  /// In en, this message translates to:
+  /// **'Schedule'**
+  String get schedulePost;
+
+  /// No description provided for @schedulePostHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Pick a future date and time'**
+  String get schedulePostHelp;
+
+  /// No description provided for @postScheduled.
+  ///
+  /// In en, this message translates to:
+  /// **'Post scheduled'**
+  String get postScheduled;
+
   /// No description provided for @syncedToBlog.
   ///
   /// In en, this message translates to:
