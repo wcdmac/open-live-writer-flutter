@@ -145,6 +145,15 @@ class EditorState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Marks the post as saved without contacting the server again — used
+  /// after confirming the server already applied a save whose response
+  /// was lost in transit.
+  void markSaved() {
+    _dirty = false;
+    saveError = null;
+    notifyListeners();
+  }
+
   /// Saves the post (draft when [publish] is false).
   Future<bool> save({required bool publish}) async {
     final svc = service;

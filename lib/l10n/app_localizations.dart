@@ -1154,6 +1154,12 @@ abstract class AppLocalizations {
   /// **'Sync now'**
   String get syncNow;
 
+  /// No description provided for @publishDraftToBlog.
+  ///
+  /// In en, this message translates to:
+  /// **'Publish to blog'**
+  String get publishDraftToBlog;
+
   /// No description provided for @syncedToBlog.
   ///
   /// In en, this message translates to:

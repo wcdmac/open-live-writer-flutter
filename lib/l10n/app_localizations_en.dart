@@ -581,6 +581,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncNow => 'Sync now';
 
   @override
+  String get publishDraftToBlog => 'Publish to blog';
+
+  @override
   String get syncedToBlog => 'Synced to blog';
 
   @override

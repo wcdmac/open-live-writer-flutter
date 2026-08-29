@@ -217,6 +217,22 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Publishes a parked local (offline-written) draft to the blog with
+  /// newPost and removes it from the local list on success — the home
+  /// screen's "publish to blog" action for non-offline-copy drafts.
+  Future<bool> publishLocalDraft(LocalDraft draft) async {
+    final svc = _service;
+    final account = currentAccount;
+    if (svc == null || account == null) return false;
+    final post = draft.toBlogPost();
+    final id = await svc.newPost(post,
+        publish: post.status != PostStatus.draft);
+    if (id.isEmpty) return false;
+    await deleteLocalDraft(draft.id);
+    unawaited(refresh());
+    return true;
+  }
+
   // --- Offline copies of server posts ---------------------------------------
 
   /// The local offline copy of a server post, if one exists.
