@@ -281,6 +281,7 @@
   "@offlineCopySubtitle": { "placeholders": { "time": { "type": "String" } } },
   "deleteLocalCopy": "Delete local copy",
   "syncNow": "Sync now",
+  "publishDraftToBlog": "Publish to blog",
   "syncedToBlog": "Synced to blog",
   "saveOfflineCopy": "Save offline copy",
   "saveOfflineCopyHelp": "Download the full post for offline editing",

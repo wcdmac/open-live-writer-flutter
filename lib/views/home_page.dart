@@ -347,14 +347,13 @@ class _LocalDraftTile extends StatelessWidget {
           ? l10n.offlineCopySubtitle(dateFmt.format(draft.updatedAt))
           : l10n.localDraftSubtitle(dateFmt.format(draft.updatedAt))),
       onTap: () => _openEditor(context),
-      onLongPress: () => draft.isOfflineCopy
-          ? _showCopyActions(context)
-          : _confirmDelete(context),
+      onLongPress: () => _showCopyActions(context),
     );
   }
 
-  /// Offline-copy management sheet: open, push changes to the server,
-  /// or remove the local copy.
+  /// Draft management sheet: open, publish/sync to the server, or delete.
+  /// Offline copies push edits back (editPost); plain local drafts are
+  /// published for the first time (newPost).
   void _showCopyActions(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     showModalBottomSheet<void>(
@@ -382,8 +381,11 @@ class _LocalDraftTile extends StatelessWidget {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.sync),
-              title: Text(l10n.syncNow),
+              leading: Icon(draft.isOfflineCopy
+                  ? Icons.sync
+                  : Icons.cloud_upload_outlined),
+              title: Text(
+                  draft.isOfflineCopy ? l10n.syncNow : l10n.publishDraftToBlog),
               onTap: () {
                 Navigator.of(sheetContext).pop();
                 _sync(context);
@@ -392,7 +394,10 @@ class _LocalDraftTile extends StatelessWidget {
             ListTile(
               leading: Icon(Icons.delete_outline,
                   color: Theme.of(context).colorScheme.error),
-              title: Text(l10n.deleteLocalCopy,
+              title: Text(
+                  draft.isOfflineCopy
+                      ? l10n.deleteLocalCopy
+                      : l10n.deleteDraftTitle,
                   style:
                       TextStyle(color: Theme.of(context).colorScheme.error)),
               onTap: () {
@@ -410,7 +415,11 @@ class _LocalDraftTile extends StatelessWidget {
     final l10n = AppLocalizations.of(context)!;
     final messenger = ScaffoldMessenger.of(context);
     try {
-      final ok = await app.syncOfflineCopy(draft);
+      // Offline copies push edits back (editPost); plain local drafts are
+      // published for the first time (newPost) and removed on success.
+      final ok = draft.isOfflineCopy
+          ? await app.syncOfflineCopy(draft)
+          : await app.publishLocalDraft(draft);
       if (!context.mounted) return;
       messenger.showSnackBar(SnackBar(
           content: Text(ok ? l10n.syncedToBlog : l10n.operationFailed(''))));

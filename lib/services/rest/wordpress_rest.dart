@@ -147,6 +147,7 @@ class WordPressRestClient {
     Map<String, String>? query,
     Object? body,
     Map<String, String> extraHeaders = const {},
+    Duration? timeout,
   }) async {
     final uri = Uri.parse('$baseUrl$path').replace(
       queryParameters: query == null || query.isEmpty ? null : query,
@@ -163,7 +164,7 @@ class WordPressRestClient {
     if (body != null && method.toUpperCase() != 'GET') {
       request.body = jsonEncode(body);
     }
-    final res = await _http.send(request).timeout(_timeout);
+    final res = await _http.send(request).timeout(timeout ?? _timeout);
     final response = await http.Response.fromStream(res);
 
     if (response.statusCode >= 400) {
@@ -286,12 +287,18 @@ class WordPressRestClient {
     }
   }
 
+  /// Saves (new/edit/status/delete) tolerate cross-border latency: the
+  /// request often REACHES the server and succeeds while the response
+  /// crawls back — a short timeout here used to misclassify a successful
+  /// publish as a network failure (ghost-draft bug).
+  static const _saveTimeout = Duration(minutes: 3);
+
   Future<BlogPost> newPost(BlogPost post, {required bool publish}) async {
     final body = _postToJson(post,
         publish: publish, tagIds: await _resolveTagIds(post.tags));
     final data = await _request(
         'POST', '/wp/v2/${post.isPage ? 'pages' : 'posts'}',
-        body: body);
+        body: body, timeout: _saveTimeout);
     return _postFromJson(data as Map, isPage: post.isPage);
   }
 
@@ -300,7 +307,7 @@ class WordPressRestClient {
         publish: publish, tagIds: await _resolveTagIds(post.tags));
     final data = await _request(
         'POST', '/wp/v2/${post.isPage ? 'pages' : 'posts'}/${post.id}',
-        body: body);
+        body: body, timeout: _saveTimeout);
     return _postFromJson(data as Map, isPage: post.isPage);
   }
 
@@ -310,7 +317,7 @@ class WordPressRestClient {
   Future<bool> editPostStatus(String id, PostStatus status,
       {bool isPage = false}) async {
     await _request('POST', '/wp/v2/${isPage ? 'pages' : 'posts'}/$id',
-        body: {'status': status.wpValue});
+        body: {'status': status.wpValue}, timeout: _saveTimeout);
     return true;
   }
 
@@ -367,7 +374,8 @@ class WordPressRestClient {
   Future<bool> deletePost(String id, {bool isPage = false}) async {
     // No force param: WordPress moves the post to trash, matching the
     // "move to trash" semantics of wp.deletePost in XML-RPC.
-    await _request('DELETE', '/wp/v2/${isPage ? 'pages' : 'posts'}/$id');
+    await _request('DELETE', '/wp/v2/${isPage ? 'pages' : 'posts'}/$id',
+        timeout: _saveTimeout);
     return true;
   }
 

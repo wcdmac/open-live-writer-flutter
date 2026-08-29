@@ -13,7 +13,7 @@ import 'editor/editor_toolbar.dart';
 import 'editor/live_preview.dart';
 
 /// App version.
-const String kAppVersion = 'v1.7.4';
+const String kAppVersion = 'v1.7.6';
 
 /// Localized display label for a [PostStatus] (dashboard chips + editor).
 String statusLabel(AppLocalizations l10n, PostStatus status) =>
@@ -373,12 +373,66 @@ class _PostEditorPageState extends State<PostEditorPage>
       }
       unawaited(app.refresh()); // Intentionally fire-and-forget.
     } else if (_isNetworkError(_editor.saveError)) {
+      // The request may have SUCCEEDED while the response was lost in
+      // transit (cross-border latency): the server already created the
+      // post, and parking + later re-publishing the draft would duplicate
+      // it. Probe the server BEFORE falling back to a local draft.
+      if (await _confirmServerSave(app)) {
+        if (!mounted) return;
+        _editor.markSaved();
+        showEditorSnack(context, l10n.postPublished(''));
+        final account = app.currentAccount;
+        if (account != null) {
+          app.drafts.clearSnapshot(account.id);
+          if (_sourceDraftId != null) {
+            await app.deleteLocalDraft(_sourceDraftId!);
+            _sourceDraftId = null;
+          }
+        }
+        unawaited(app.refresh());
+        return;
+      }
       // Offline fallback: park the draft locally so nothing is lost; the
       // home screen lists it under local drafts for later publishing.
       await _saveLocalDraft(app);
       if (mounted) showEditorSnack(context, l10n.savedOfflineDraft);
     } else {
       showEditorSnack(context, _editor.saveError ?? l10n.saveFailed);
+    }
+  }
+
+  /// After a save that failed with a NETWORK error, checks whether the
+  /// server actually applied it (request succeeded, response lost).
+  /// - Editing an existing post: fetch it and compare title+content.
+  /// - New post: look for a post with the same title created in the last
+  ///   10 minutes with matching content prefix.
+  /// A failed probe (network really down) returns false → offline draft.
+  Future<bool> _confirmServerSave(AppState app) async {
+    final svc = app.service;
+    if (svc == null) return false;
+    final post = _editor.post;
+    try {
+      if (!post.isNew && post.id != null && post.id!.isNotEmpty) {
+        final fresh = await svc
+            .getPost(post.id!, isPage: post.isPage)
+            .timeout(const Duration(seconds: 30));
+        return fresh.title.trim() == post.title.trim() &&
+            fresh.content.trim() == post.content.trim();
+      }
+      final recent = await svc.getPosts().timeout(const Duration(seconds: 30));
+      final title = post.title.trim();
+      if (title.isEmpty) return false;
+      final cutoff = DateTime.now().toUtc().subtract(const Duration(minutes: 10));
+      final prefix = post.content.trim();
+      final prefixLen = prefix.length < 80 ? prefix.length : 80;
+      return recent.any((p) =>
+          p.title.trim() == title &&
+          (p.datePublished == null || p.datePublished!.isAfter(cutoff)) &&
+          (prefix.isEmpty ||
+              p.content.trim().startsWith(prefix.substring(0, prefixLen))));
+    } catch (_) {
+      // Connectivity really is gone — park the draft.
+      return false;
     }
   }
 

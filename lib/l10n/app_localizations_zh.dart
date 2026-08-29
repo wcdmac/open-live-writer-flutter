@@ -574,6 +574,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncNow => '立即同步到博客';
 
   @override
+  String get publishDraftToBlog => '发布到博客';
+
+  @override
   String get syncedToBlog => '已同步到博客';
 
   @override
