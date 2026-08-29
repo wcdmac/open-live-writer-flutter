@@ -550,21 +550,25 @@ class _PostTile extends StatelessWidget {
       context: context,
       showDragHandle: true,
       builder: (sheetContext) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text(
-                post.title.isEmpty ? l10n.untitled : post.title,
-                style: const TextStyle(fontWeight: FontWeight.bold),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+        // 9 actions + title exceed the sheet's default max height
+        // (9/16 of screen) on phones — without scrolling the trailing
+        // items ("Move to trash") get clipped off-screen.
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(
+                  post.title.isEmpty ? l10n.untitled : post.title,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.edit_outlined),
-              title: Text(l10n.editPost),
+              ListTile(
+                leading: const Icon(Icons.edit_outlined),
+                title: Text(l10n.editPost),
               onTap: () {
                 Navigator.of(sheetContext).pop();
                 Navigator.of(context).push(
@@ -648,7 +652,8 @@ class _PostTile extends StatelessWidget {
                 _deletePost(context, post);
               },
             ),
-          ],
+            ],
+          ),
         ),
       ),
     );

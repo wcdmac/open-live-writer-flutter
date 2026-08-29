@@ -132,9 +132,50 @@ void main() {
       expect(posts.first.title, 'Public');
       // Degradation chain: the trash-inclusive set and the full set are
       // rejected, the reduced set succeeds.
-      expect(requestedStatuses.length, 3);
+      expect(requestedStatuses.length, 4);
       expect(requestedStatuses.first, contains('trash'));
       expect(requestedStatuses.last, 'publish,draft,pending');
+    });
+
+    test('getPosts keeps future for roles without private permission',
+        () async {
+      // WordPress rejects the WHOLE status list when the role lacks
+      // read_private_posts; future must survive via the no-private tier
+      // (scheduled posts used to disappear entirely for Author accounts).
+      final requestedStatuses = <String>[];
+      final mock = MockClient((req) async {
+        final statuses = req.url.queryParameters['status'] ?? '';
+        requestedStatuses.add(statuses);
+        if (statuses.contains('private')) {
+          return http.Response(
+            jsonEncode({
+              'code': 'rest_forbidden_status',
+              'message': 'Status is forbidden.',
+              'data': {'status': 401},
+            }),
+            401,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response(
+          jsonEncode([
+            {
+              'id': 7,
+              'status': 'future',
+              'title': {'raw': 'Scheduled'},
+              'content': {'raw': '<p>s</p>', 'rendered': '<p>s</p>'},
+              'date_gmt': '2030-01-01T09:00:00',
+            }
+          ]),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      });
+      final posts = await clientFor(mock).getPosts(perPage: 10);
+      expect(posts, hasLength(1));
+      expect(posts.first.status, PostStatus.scheduled);
+      // Settles on the no-private tier, which still includes future.
+      expect(requestedStatuses.last, 'publish,draft,future,pending,trash');
     });
 
     test('getPost falls back to context=view on 401 (rendered content)',

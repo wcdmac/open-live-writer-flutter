@@ -123,12 +123,26 @@ class WordPressXmlRpcClient {
           return await wpGetPosts(
               ['publish', 'draft', 'future', 'pending', 'private', 'trash']);
         } on XmlRpcFault {
-          // Degrade: some servers / roles reject the status array.
+          // Degrade: some servers / roles reject the status array or the
+          // private status wholesale (mirrors the REST permission model).
+          // Keep a no-private tier so scheduled/trashed posts survive for
+          // roles without read_private_posts.
           try {
             return await wpGetPosts(
-                'publish,draft,future,pending,private,trash');
+                ['publish', 'draft', 'future', 'pending', 'trash']);
           } on XmlRpcFault {
-            return await wpGetPosts('publish,draft,future,pending,private');
+            try {
+              return await wpGetPosts(
+                  'publish,draft,future,pending,private,trash');
+            } on XmlRpcFault {
+              try {
+                return await wpGetPosts(
+                    'publish,draft,future,pending,trash');
+              } on XmlRpcFault {
+                return await wpGetPosts(
+                    'publish,draft,future,pending,private');
+              }
+            }
           }
         }
       } on XmlRpcFault catch (e) {

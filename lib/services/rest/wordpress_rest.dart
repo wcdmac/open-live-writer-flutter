@@ -248,6 +248,13 @@ class WordPressRestClient {
     }
     for (final query in const [
       'publish,draft,future,pending,private,trash',
+      // WordPress authorizes the WHOLE status list at once: a role without
+      // read_private_posts (e.g. Author) gets 401 for any query containing
+      // 'private'. Degrading straight to 'publish,draft,pending' also lost
+      // future/trash — scheduled posts became invisible even though the
+      // site shows them. The no-private tier keeps future/trash for such
+      // roles; only truly read-only access falls through further.
+      'publish,draft,future,pending,trash',
       'publish,draft,future,pending,private',
       'publish,draft,pending',
       'publish',
