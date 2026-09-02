@@ -1,28 +1,28 @@
 # Open Live Writer
 
-Open Live Writer 是一个跨平台 WordPress 博客写作客户端（Flutter 实现），支持 Windows、Linux、macOS、iOS 和 Android。
+A cross-platform WordPress blog writing client (Flutter implementation) supporting Windows, Linux, macOS, iOS, and Android.
 
-基于 Open Live Writer（MIT License, .NET Foundation）的产品理念与协议行为，使用 Dart/Flutter 完全重写。
+Built on the philosophy and protocol behavior of [Open Live Writer](https://github.com/OpenLiveWriter/OpenLiveWriter) (MIT License, .NET Foundation), fully rewritten in Dart/Flutter.
 
-## 功能
+## Features
 
-- **双模式编辑器**：可视化（所见即所得）块编辑器 + HTML 源代码模式，实时预览
-  - 可视化模式支持：段落、标题（H1–H6）、图片（设备上传到媒体库/URL）、表格（行列增删、表头）、视频（YouTube/MP4/iframe 嵌入）
-  - WordPress 块注释（Gutenberg 标记）在往返编辑中完整保留
-  - 未识别的 HTML 进入"源码块"，永不丢失
-- **WordPress 双协议**：XML-RPC（WordPress / MetaWeblog / MovableType / Blogger）与 REST API v2（应用程序密码 / JWT）
-- **站点自动检测**：RSD 探测、主题样式检测（预览跟随博客主题配色）
-- **完整文章管理**：草稿/发布/排期/私有、分类、标签、摘要、slug、评论开关
-- **CI/CD**：GitHub Actions 五平台自动构建与 Release 发布
+- **Dual-mode editor**: Visual (WYSIWYG) block editor + HTML source mode with real-time preview
+  - Visual mode supports: paragraphs, headings (H1–H6), images (device upload to media library / URL), tables (add/remove rows & columns, headers), video (YouTube / MP4 / iframe embed)
+  - WordPress block comments (Gutenberg markup) preserved verbatim on round-trip edits
+  - Unrecognized HTML falls back to a source block and is never lost
+- **Dual WordPress protocols**: XML-RPC (WordPress / MetaWeblog / MovableType / Blogger) and REST API v2 (Application Password / JWT)
+- **Site auto-detection**: RSD probe, theme style detection (preview follows the blog's theme colors)
+- **Full post management**: drafts / published / scheduled / private, categories, tags, excerpts, slugs, comment toggles
+- **CI/CD**: GitHub Actions five-platform automated builds and Release publishing
 
-## 致谢
+## Credits
 
-本项目的架构设计与 WordPress 交互协议参考自 [Open Live Writer](https://github.com/OpenLiveWriter/OpenLiveWriter)（MIT License, Copyright .NET Foundation）。
+The architecture design and WordPress interaction protocols in this project are inspired by [Open Live Writer](https://github.com/OpenLiveWriter/OpenLiveWriter) (MIT License, Copyright .NET Foundation).
 
-## 构建
+## Building
 
 ```bash
 flutter pub get
-flutter run          # 或 flutter build <platform> --release
-flutter test         # 运行测试
+flutter run          # or flutter build <platform> --release
+flutter test         # run tests
 ```
