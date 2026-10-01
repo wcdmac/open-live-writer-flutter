@@ -39,14 +39,16 @@ String desensitizePath(String path) {
     }
   }
 
-  // Fallback for paths that don't start with the resolved home (e.g. a
-  // manually mounted volume): drop any `/Users/<name>` or `C:\Users\<name>`
-  // segment we can still recognise.
-  final parts = path.split(sep).where((p) => p.isNotEmpty).toList();
+  // Fallback for paths that use a different OS's separator (e.g. a Windows
+  // absolute path inspected on a non-Windows host): collapse everything up
+  // to and including the `Users/<name>` segment to `~`, preserving the
+  // path's own separator style so the remainder stays faithful.
+  final outSep = path.contains('\\') ? '\\' : '/';
+  final parts = path.split(RegExp(r'[\\/]')).where((p) => p.isNotEmpty).toList();
   final userIdx = parts.indexWhere((p) => p.toUpperCase() == 'USERS');
   if (userIdx >= 0 && userIdx + 1 < parts.length) {
-    final rest = parts.sublist(userIdx + 2).join(sep);
-    return '~$sep$rest';
+    final rest = parts.sublist(userIdx + 2).join(outSep);
+    return '~$outSep$rest';
   }
   return path;
 }
@@ -54,8 +56,10 @@ String desensitizePath(String path) {
 /// The portion of a path that is safe to render in the UI: just the file
 /// name. The full path stays available for the share / copy actions.
 String displayFileName(String path) {
-  final sep = Platform.pathSeparator;
-  final cleaned = path.endsWith(sep) ? path.substring(0, path.length - 1) : path;
-  final idx = cleaned.lastIndexOf(sep);
+  var cleaned = path;
+  while (cleaned.endsWith('/') || cleaned.endsWith('\\')) {
+    cleaned = cleaned.substring(0, cleaned.length - 1);
+  }
+  final idx = cleaned.lastIndexOf(RegExp(r'[\\/]'));
   return idx >= 0 ? cleaned.substring(idx + 1) : cleaned;
 }
