@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/blog_post.dart';
@@ -82,9 +83,13 @@ class LocalDraft {
         'remoteModified': remoteModified?.toIso8601String(),
       };
 
+  /// Tolerant decode: every field falls back to a usable default instead of
+  /// throwing. A single legacy/malformed field used to abort decoding of the
+  /// whole list, which the caller then treated as "no drafts stored" and
+  /// overwrote — silently destroying every other draft.
   static LocalDraft fromJson(Map<String, dynamic> json) => LocalDraft(
-        id: json['id'] as String,
-        accountId: json['accountId'] as String,
+        id: (json['id'] ?? '') as String,
+        accountId: (json['accountId'] ?? '') as String,
         title: (json['title'] ?? '') as String,
         content: (json['content'] ?? '') as String,
         excerpt: (json['excerpt'] ?? '') as String,
@@ -93,7 +98,7 @@ class LocalDraft {
             DateTime.now(),
         postId: json['postId'] as String?,
         postStatus: json['postStatus'] as String?,
-        isPage: (json['isPage'] ?? false) as bool,
+        isPage: (json['isPage'] ?? false) == true,
         categories: ((json['categories'] ?? const []) as List<dynamic>)
             .map((e) => '$e')
             .toList(),
@@ -159,21 +164,48 @@ class LocalDraftStore {
 
   // --- Drafts --------------------------------------------------------------
 
-  Future<List<LocalDraft>> loadDrafts(String accountId) async {
+  /// Strict decode of the stored payload.
+  ///
+  /// Returns `null` when nothing is stored yet (absent/empty key) and throws
+  /// when a payload exists but cannot be decoded.
+  ///
+  /// The distinction matters: `saveDraft`/`deleteDraft` rewrite the whole
+  /// key. Treating an undecodable payload as "empty" would replace every
+  /// draft with the single one being saved, so mutation paths MUST use this
+  /// and abort on a throw rather than fall back to an empty list.
+  Future<List<LocalDraft>?> _readDrafts(String accountId) async {
     final raw = (await _prefs).getString('$_draftsPrefix$accountId');
-    if (raw == null || raw.isEmpty) return [];
+    if (raw == null || raw.isEmpty) return null;
+    final decoded = jsonDecode(raw);
+    if (decoded is! List) {
+      throw const FormatException('drafts payload is not a JSON list');
+    }
+    final out = <LocalDraft>[];
+    for (final entry in decoded) {
+      // Entry-level tolerance: skip the unusable record, keep the rest.
+      if (entry is! Map) continue;
+      final draft = LocalDraft.fromJson(Map<String, dynamic>.from(entry));
+      if (draft.id.isEmpty) continue;
+      out.add(draft);
+    }
+    return out;
+  }
+
+  Future<List<LocalDraft>> loadDrafts(String accountId) async {
     try {
-      final list = jsonDecode(raw) as List<dynamic>;
-      return list
-          .map((e) => LocalDraft.fromJson(e as Map<String, dynamic>))
-          .toList();
-    } catch (_) {
-      return [];
+      return await _readDrafts(accountId) ?? const <LocalDraft>[];
+    } catch (e) {
+      // Read path: degrade to empty for display, but never silently — the
+      // payload stays on disk untouched because nothing rewrites it here.
+      debugPrint('LocalDraftStore: corrupt drafts for $accountId: $e');
+      return const <LocalDraft>[];
     }
   }
 
   Future<void> saveDraft(LocalDraft draft) => _synchronized(() async {
-        final drafts = await loadDrafts(draft.accountId);
+        // Strict: a corrupt payload aborts the write instead of being
+        // overwritten (see [_readDrafts]).
+        final drafts = await _readDrafts(draft.accountId) ?? <LocalDraft>[];
         final idx = drafts.indexWhere((d) => d.id == draft.id);
         if (idx >= 0) {
           drafts[idx] = draft;
@@ -186,7 +218,7 @@ class LocalDraftStore {
 
   Future<void> deleteDraft(String accountId, String draftId) =>
       _synchronized(() async {
-        final drafts = await loadDrafts(accountId);
+        final drafts = await _readDrafts(accountId) ?? <LocalDraft>[];
         drafts.removeWhere((d) => d.id == draftId);
         await (await _prefs).setString('$_draftsPrefix$accountId',
             jsonEncode(drafts.map((d) => d.toJson()).toList()));

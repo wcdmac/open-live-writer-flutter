@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as html_parser;
 
@@ -30,16 +31,15 @@ class BlogTheme {
     String? linkColor,
     String? backgroundColor,
     double? contentWidth,
-  }) =>
-      BlogTheme(
-        name: name ?? this.name,
-        fontFamily: fontFamily ?? this.fontFamily,
-        bodyColor: bodyColor ?? this.bodyColor,
-        headingColor: headingColor ?? this.headingColor,
-        linkColor: linkColor ?? this.linkColor,
-        backgroundColor: backgroundColor ?? this.backgroundColor,
-        contentWidth: contentWidth ?? this.contentWidth,
-      );
+  }) => BlogTheme(
+    name: name ?? this.name,
+    fontFamily: fontFamily ?? this.fontFamily,
+    bodyColor: bodyColor ?? this.bodyColor,
+    headingColor: headingColor ?? this.headingColor,
+    linkColor: linkColor ?? this.linkColor,
+    backgroundColor: backgroundColor ?? this.backgroundColor,
+    contentWidth: contentWidth ?? this.contentWidth,
+  );
 }
 
 /// Fetches the blog homepage, locates the active theme stylesheet and
@@ -51,10 +51,21 @@ class BlogTheme {
 /// effects on the blog.
 class ThemeDetector {
   ThemeDetector({http.Client? httpClient})
-      : _http = httpClient ?? http.Client();
+    : _http = httpClient ?? http.Client();
 
   final http.Client _http;
   static const _timeout = Duration(seconds: 20);
+
+  // P-11: these regexes were rebuilt on every decl() call, wasting cycles on
+  // each theme probe. Compile them once — behavior (matching) is unchanged.
+  static final _propertyRe = RegExp(r'\s*:\s*([^;}]+)', caseSensitive: false);
+  static final _literalColorRe = RegExp(r'^[a-z]+\s*$');
+  static final _pxRe = RegExp(r'(\d+(?:\.\d+)?)px');
+  static final Map<String, RegExp> _ruleRegExps = {};
+  static RegExp _ruleRe(String selector) => _ruleRegExps[selector] ??= RegExp(
+    RegExp.escape(selector) + r'\s*\{([^}]*)\}',
+    multiLine: true,
+  );
 
   Future<BlogTheme> detect(String homepageUrl) async {
     try {
@@ -84,13 +95,17 @@ class ThemeDetector {
       if (themeCssUrl != null) {
         final css = await _fetchCss(themeCssUrl);
         if (css != null) {
-          return _themeFromCss(css)
-              .copyWith(name: themeName ?? 'WordPress theme');
+          return _themeFromCss(
+            css,
+          ).copyWith(name: themeName ?? 'WordPress theme');
         }
       }
 
       return BlogTheme(name: themeName);
-    } catch (_) {
+    } catch (e) {
+      // R2: the original swallowed every error silently. Surface it so a
+      // broken theme probe is diagnosable instead of looking like "Default".
+      if (kDebugMode) debugPrint('ThemeDetector: failed to detect theme: $e');
       return const BlogTheme(name: 'Default');
     }
   }
@@ -115,38 +130,37 @@ class ThemeDetector {
 
     String? decl(String selector, String property) {
       // Match `selector { ... property: value; ... }` (single rules only —
-      // good enough for a best-effort theme probe).
-      final rule = RegExp(
-        RegExp.escape(selector) + r'\s*\{([^}]*)\}',
-        multiLine: true,
-      ).firstMatch(css);
+      // good enough for a best-effort theme probe). The rule regex is
+      // memoized per selector (P-11); the property regex is shared.
+      final rule = _ruleRe(selector).firstMatch(css);
       if (rule == null) return null;
-      final prop = RegExp(
-        property + r'\s*:\s*([^;}]+)',
-        caseSensitive: false,
-      ).firstMatch(rule.group(1)!);
+      final prop = _propertyRe.firstMatch(rule.group(1)!);
       return prop?.group(1)?.trim();
     }
 
     font = decl('body', 'font-family') ?? font;
     bodyColor = decl('body', 'color');
-    background = decl('body', 'background-color') ??
+    background =
+        decl('body', 'background-color') ??
         (decl('body', 'background')?.startsWith('#') == true ||
-                RegExp(r'^[a-z]+\s*$').hasMatch(decl('body', 'background') ?? '')
+                _literalColorRe.hasMatch(decl('body', 'background') ?? '')
             ? decl('body', 'background')
             : null);
-    linkColor = decl('a', 'color') ??
+    linkColor =
+        decl('a', 'color') ??
         decl('a:link', 'color') ??
         decl('.entry-content a', 'color');
-    headingColor = decl('h1', 'color') ??
+    headingColor =
+        decl('h1', 'color') ??
         decl('h2', 'color') ??
         decl('.entry-title', 'color');
 
-    final widthDecl = decl('.entry-content', 'max-width') ??
+    final widthDecl =
+        decl('.entry-content', 'max-width') ??
         decl('.site-content', 'max-width') ??
         decl('#content', 'max-width');
     if (widthDecl != null) {
-      final px = RegExp(r'(\d+(?:\.\d+)?)px').firstMatch(widthDecl);
+      final px = _pxRe.firstMatch(widthDecl);
       if (px != null) contentWidth = double.tryParse(px.group(1)!);
     }
 

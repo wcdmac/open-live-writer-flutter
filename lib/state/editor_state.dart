@@ -59,9 +59,15 @@ class EditorState extends ChangeNotifier {
     if (fresh.content.trim().isNotEmpty) post.content = fresh.content;
     if (fresh.excerpt.trim().isNotEmpty) post.excerpt = fresh.excerpt;
     post.slug = fresh.slug ?? post.slug;
-    post.status = fresh.status;
-    post.categories = fresh.categories;
-    post.tags = fresh.tags;
+    // Don't let the server's default status clobber an explicit local
+    // choice — e.g. the user picked "pending"/"private", then a background
+    // full-content fetch returned "draft". Preserve the explicit pick.
+    if (!_statusTouched) post.status = fresh.status;
+    // Guard against empty taxonomy lists returned by a partial getPost
+    // response, which would silently wipe the categories/tags the user
+    // already set on the post.
+    if (fresh.categories.isNotEmpty) post.categories = fresh.categories;
+    if (fresh.tags.isNotEmpty) post.tags = fresh.tags;
     post.datePublished = fresh.datePublished ?? post.datePublished;
     post.commentsEnabled = fresh.commentsEnabled;
     post.pingsEnabled = fresh.pingsEnabled;
@@ -176,6 +182,13 @@ class EditorState extends ChangeNotifier {
       }
       if (post.isNew) {
         final id = await svc.newPost(post, publish: publish);
+        if (id.isEmpty) {
+          // Server returned no id — a successful newPost always yields one.
+          // Bail out instead of leaving the post in "new" state, which would
+          // re-attempt newPost on the next save and duplicate the article.
+          saveError = 'Save failed: server returned an empty post id';
+          return false;
+        }
         post.id = id;
         lastSavedId = id;
       } else {

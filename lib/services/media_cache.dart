@@ -25,6 +25,14 @@ class MediaCache {
   final Set<String> _downloading = {};
   final Map<String, DateTime> _failedAt = {};
 
+  /// Bytes written since the last full eviction scan.
+  ///
+  /// [_evictIfNeeded] lists the whole directory and stats every file, so
+  /// running it after *every* download made an N-image prefetch cost O(n^2)
+  /// stat calls. Only re-scan once enough new data may have tipped the cap.
+  int _bytesSinceEviction = 0;
+  static const _evictCheckIntervalBytes = 16 * 1024 * 1024;
+
   Future<Directory> _baseDir() async {
     if (_base != null) return _base!;
     final root = await getApplicationSupportDirectory();
@@ -93,15 +101,32 @@ class MediaCache {
           return null;
         }
         await file.writeAsBytes(res.bodyBytes, flush: true);
-        unawaited(_evictIfNeeded());
+        _bytesSinceEviction += res.bodyBytes.length;
+        if (_bytesSinceEviction >= _evictCheckIntervalBytes) {
+          _bytesSinceEviction = 0;
+          unawaited(_evictIfNeeded());
+        }
       }
       return file;
     } catch (_) {
       _failedAt[url] = DateTime.now();
+      // Keep the quarantine map bounded here too: it was only pruned on the
+      // prefetch path, so warming via CachedImage alone grew it without limit.
+      _pruneFailed();
       return null;
     } finally {
       _downloading.remove(url);
     }
+  }
+
+  /// Keeps [_failedAt] bounded: drops entries whose quarantine has expired
+  /// and, if it is still over the cap, clears the rest. Without this the
+  /// map of failed URLs grew without limit for the life of the app.
+  static const _maxFailedEntries = 1000;
+  void _pruneFailed() {
+    final now = DateTime.now();
+    _failedAt.removeWhere((_, t) => now.difference(t) >= _failureTtl);
+    if (_failedAt.length > _maxFailedEntries) _failedAt.clear();
   }
 
   /// Enforces [_maxCacheBytes] by deleting the least recently written
@@ -146,8 +171,16 @@ class MediaCache {
         .allMatches(html)
         .map((m) => m.group(1)!)
         .toSet();
-    for (final url in urls) {
-      unawaited(fetch(url));
+    if (urls.isEmpty) return;
+    _pruneFailed();
+    // Bound concurrency so an article with hundreds of images doesn't fire
+    // hundreds of simultaneous downloads (which can exhaust the connection
+    // pool or hammer the server). Prefetch is best-effort background work.
+    const maxConcurrent = 6;
+    final list = urls.toList();
+    for (var i = 0; i < list.length; i += maxConcurrent) {
+      final batch = list.skip(i).take(maxConcurrent);
+      await Future.wait(batch.map((u) => fetch(u)));
     }
   }
 }
@@ -181,6 +214,7 @@ class CachedImage extends StatefulWidget {
 
 class _CachedImageState extends State<CachedImage> {
   File? _local;
+  Timer? _warmDebounce;
 
   @override
   void initState() {
@@ -201,7 +235,24 @@ class _CachedImageState extends State<CachedImage> {
     final file = await MediaCache.instance.existingFile(widget.url);
     if (file != null && mounted && file.path != _local?.path) {
       setState(() => _local = file);
+    } else if (mounted) {
+      // Warm the disk cache in the background for the next (possibly
+      // offline) render. Triggered from init/didUpdate, never from build.
+      //
+      // Debounced: while a URL is being typed character by character this
+      // fired one download per keystroke against a half-finished URL,
+      // wasting requests and filling the cache with garbage entries.
+      _warmDebounce?.cancel();
+      _warmDebounce = Timer(const Duration(milliseconds: 400), () {
+        unawaited(MediaCache.instance.fetch(widget.url));
+      });
     }
+  }
+
+  @override
+  void dispose() {
+    _warmDebounce?.cancel();
+    super.dispose();
   }
 
   @override
@@ -219,9 +270,9 @@ class _CachedImageState extends State<CachedImage> {
         errorBuilder: imgError,
       );
     }
-    // Not cached yet: show the network image and warm the cache in the
-    // background for the next (possibly offline) render.
-    unawaited(MediaCache.instance.fetch(widget.url));
+    // Not cached yet: show the network image. The cache is warmed in
+    // [_load] (init/didUpdateWidget) rather than here, so a plain rebuild
+    // no longer kicks off an extra disk I/O on every frame.
     return Image.network(
       widget.url,
       width: widget.width,

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -88,10 +89,9 @@ class _AddAccountPageState extends State<AddAccountPage> {
       setState(() {
         _detection = detection;
         _flavor = detection.flavor ?? XmlRpcFlavor.wordpress;
-        _protocol =
-            detection.restRoot != null && detection.xmlrpcUrl == null
-                ? BlogProtocol.rest
-                : BlogProtocol.xmlrpc;
+        _protocol = detection.restRoot != null && detection.xmlrpcUrl == null
+            ? BlogProtocol.rest
+            : BlogProtocol.xmlrpc;
         _step = 1;
       });
     } catch (e) {
@@ -108,27 +108,37 @@ class _AddAccountPageState extends State<AddAccountPage> {
       _error = null;
     });
 
+    BlogService? service;
     try {
       final detection = _detection!;
       final password = _passController.text;
 
       // Build a temporary account and validate credentials by listing blogs.
+      final apiUrl = _protocol == BlogProtocol.rest
+          ? (detection.restRoot ??
+                '${detection.homepageUrl.replaceAll(RegExp(r'/+$'), '')}/wp-json')
+          : detection.xmlrpcUrl!;
+      // S1: surface insecure (http) transport — credentials would be sent in
+      // cleartext. The connection still proceeds (local/test servers).
+      if (!apiUrl.startsWith('https') && kDebugMode) {
+        debugPrint(
+          'WARNING: connecting to blog endpoint "$apiUrl" over '
+          'plaintext HTTP — credentials will be sent in cleartext.',
+        );
+      }
       final tempAccount = BlogAccount(
         id: 'temp',
         blogId: detection.blogId ?? '1',
         name: 'temp',
         homepageUrl: detection.homepageUrl,
-        apiUrl: _protocol == BlogProtocol.rest
-            ? (detection.restRoot ??
-                '${detection.homepageUrl.replaceAll(RegExp(r'/+$'), '')}/wp-json')
-            : detection.xmlrpcUrl!,
+        apiUrl: apiUrl,
         protocol: _protocol,
         username: _userController.text.trim(),
         flavor: _flavor,
         restAuth: _restAuth,
       );
 
-      final service = BlogService(tempAccount, password);
+      service = BlogService(tempAccount, password);
       final blogs = await service.getUsersBlogs();
 
       if (!mounted) return;
@@ -148,12 +158,15 @@ class _AddAccountPageState extends State<AddAccountPage> {
       final msg = e.statusCode == 401
           ? l10n.restAuth401('$e')
           : e.statusCode == 404 && _restAuth == RestAuthMethod.jwt
-              ? l10n.restJwt404('$e')
-              : l10n.connectionFailed(e);
+          ? l10n.restJwt404('$e')
+          : l10n.connectionFailed(e);
       setState(() => _error = msg);
     } catch (e) {
       setState(() => _error = l10n.connectionFailed(e));
     } finally {
+      // M1: the temporary service owns an HTTP client + JWT future; leak it
+      // on every cancelled or errored connect. Release it here unconditionally.
+      service?.dispose();
       setState(() => _connecting = false);
     }
   }
@@ -174,7 +187,7 @@ class _AddAccountPageState extends State<AddAccountPage> {
         homepageUrl: detection.homepageUrl,
         apiUrl: _protocol == BlogProtocol.rest
             ? (detection.restRoot ??
-                '${detection.homepageUrl.replaceAll(RegExp(r'/+$'), '')}/wp-json')
+                  '${detection.homepageUrl.replaceAll(RegExp(r'/+$'), '')}/wp-json')
             : detection.xmlrpcUrl ?? picked.xmlrpcUrl!,
         protocol: _protocol,
         username: _userController.text.trim(),
@@ -183,9 +196,10 @@ class _AddAccountPageState extends State<AddAccountPage> {
       );
 
       await app.addAccount(account, _passController.text);
-      await app.refresh();
 
       if (!mounted) return;
+      // M2: addAccount() already runs refresh() (via selectAccount), so an
+      // extra refresh here is a redundant second network fetch on every add.
       if (!widget.embedded) Navigator.of(context).pop();
     } catch (e) {
       setState(() => _error = l10n.saveAccountFailed(e));
@@ -201,10 +215,7 @@ class _AddAccountPageState extends State<AddAccountPage> {
 
     return Scaffold(
       appBar: widget.embedded
-          ? AppBar(
-              title: Text(l10n.appTitle),
-              automaticallyImplyLeading: false,
-            )
+          ? AppBar(title: Text(l10n.appTitle), automaticallyImplyLeading: false)
           : AppBar(title: Text(l10n.addBlogAccount)),
       body: Center(
         child: SingleChildScrollView(
@@ -268,8 +279,9 @@ class _AddAccountPageState extends State<AddAccountPage> {
                     padding: const EdgeInsets.only(top: 16),
                     child: Text(
                       _error!,
-                      style:
-                          TextStyle(color: Theme.of(context).colorScheme.error),
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
                     ),
                   ),
                 const SizedBox(height: 24),
@@ -338,45 +350,63 @@ class _AddAccountPageState extends State<AddAccountPage> {
         _detectionRow(l10n.xmlrpcEndpoint, d.xmlrpcUrl ?? l10n.notDetected),
         _detectionRow(l10n.restApi, d.restRoot ?? l10n.notDetected),
         const SizedBox(height: 16),
-        Text(l10n.connectionProtocol,
-            style: Theme.of(context).textTheme.titleSmall),
-        RadioListTile<BlogProtocol>(
-          value: BlogProtocol.xmlrpc,
-          groupValue: _protocol,
-          title: Text(l10n.xmlrpcClassic),
-          subtitle: Text('${l10n.flavor}: ${flavorLabel(l10n, _flavor)}'),
-          onChanged: d.xmlrpcUrl == null
-              ? null
-              : (v) => setState(() => _protocol = v!),
+        Text(
+          l10n.connectionProtocol,
+          style: Theme.of(context).textTheme.titleSmall,
         ),
-        RadioListTile<BlogProtocol>(
-          value: BlogProtocol.rest,
+        RadioGroup<BlogProtocol>(
           groupValue: _protocol,
-          title: Text(l10n.restV2),
-          subtitle:
-              Text('${l10n.endpoint}: ${d.restRoot ?? l10n.notAvailable}'),
-          onChanged: d.restRoot == null
-              ? null
-              : (v) => setState(() => _protocol = v!),
+          onChanged: (BlogProtocol? value) {
+            if (value == null) return;
+            // Preserve the original per-tile disable: a protocol whose
+            // endpoint was not detected cannot be selected.
+            if (value == BlogProtocol.xmlrpc && d.xmlrpcUrl == null) return;
+            if (value == BlogProtocol.rest && d.restRoot == null) return;
+            setState(() => _protocol = value);
+          },
+          child: Column(
+            children: [
+              RadioListTile<BlogProtocol>(
+                value: BlogProtocol.xmlrpc,
+                title: Text(l10n.xmlrpcClassic),
+                subtitle: Text('${l10n.flavor}: ${flavorLabel(l10n, _flavor)}'),
+              ),
+              RadioListTile<BlogProtocol>(
+                value: BlogProtocol.rest,
+                title: Text(l10n.restV2),
+                subtitle: Text(
+                  '${l10n.endpoint}: ${d.restRoot ?? l10n.notAvailable}',
+                ),
+              ),
+            ],
+          ),
         ),
         if (_protocol == BlogProtocol.xmlrpc) ...[
           DropdownButtonFormField<XmlRpcFlavor>(
-            value: _flavor,
+            initialValue: _flavor,
             decoration: InputDecoration(labelText: l10n.xmlrpcFlavor),
             items: XmlRpcFlavor.values
-                .map((f) => DropdownMenuItem(
-                    value: f, child: Text(flavorLabel(l10n, f))))
+                .map(
+                  (f) => DropdownMenuItem(
+                    value: f,
+                    child: Text(flavorLabel(l10n, f)),
+                  ),
+                )
                 .toList(),
             onChanged: (v) => setState(() => _flavor = v!),
           ),
         ],
         if (_protocol == BlogProtocol.rest) ...[
           DropdownButtonFormField<RestAuthMethod>(
-            value: _restAuth,
+            initialValue: _restAuth,
             decoration: InputDecoration(labelText: l10n.authentication),
             items: RestAuthMethod.values
-                .map((m) => DropdownMenuItem(
-                    value: m, child: Text(restAuthLabel(l10n, m))))
+                .map(
+                  (m) => DropdownMenuItem(
+                    value: m,
+                    child: Text(restAuthLabel(l10n, m)),
+                  ),
+                )
                 .toList(),
             onChanged: (v) => setState(() => _restAuth = v!),
           ),
@@ -393,27 +423,45 @@ class _AddAccountPageState extends State<AddAccountPage> {
         children: [
           SizedBox(
             width: 150,
-            child: Text(label,
-                style: const TextStyle(fontWeight: FontWeight.w500)),
+            child: Text(
+              label,
+              style: const TextStyle(fontWeight: FontWeight.w500),
+            ),
           ),
-          Expanded(child: Text(value, overflow: TextOverflow.ellipsis, maxLines: 2)),
+          Expanded(
+            child: Text(value, overflow: TextOverflow.ellipsis, maxLines: 2),
+          ),
         ],
       ),
     );
   }
 
   Widget _blogPicker() {
-    return Column(
-      children: _blogs
-          .map((blog) => RadioListTile<String>(
+    return RadioGroup<String>(
+      groupValue: _pickedBlog?.blogId,
+      onChanged: (v) {
+        if (v == null) return;
+        // `v` always originates from one of the radios above, so a miss here
+        // is unreachable — but guard against it to avoid a StateError if the
+        // blog list is ever rebuilt out from under the selection.
+        setState(() {
+          _pickedBlog = _blogs.firstWhere(
+            (b) => b.blogId == v,
+            orElse: () => _blogs.first,
+          );
+        });
+      },
+      child: Column(
+        children: _blogs
+            .map(
+              (blog) => RadioListTile<String>(
                 value: blog.blogId,
-                groupValue: _pickedBlog?.blogId,
                 title: Text(blog.name),
                 subtitle: Text(blog.url),
-                onChanged: (v) => setState(
-                    () => _pickedBlog = _blogs.firstWhere((b) => b.blogId == v)),
-              ))
-          .toList(),
+              ),
+            )
+            .toList(),
+      ),
     );
   }
 

@@ -93,7 +93,14 @@ class XmlRpcCodec {
 
   /// Parses an XML-RPC response document into the returned Dart value.
   static dynamic decodeResponse(String body) {
-    final doc = XmlDocument.parse(body);
+    final XmlDocument doc;
+    try {
+      doc = XmlDocument.parse(body);
+    } catch (_) {
+      // Malformed XML surfaced as a raw XmlException that callers did not
+      // expect; normalise it to the protocol error type.
+      throw XmlRpcFault(-32700, 'Malformed XML-RPC response');
+    }
     final methodResponse = doc.rootElement;
     if (methodResponse.name.local != 'methodResponse') {
       throw XmlRpcFault(-32700, 'Invalid XML-RPC response root element');
@@ -124,7 +131,16 @@ class XmlRpcCodec {
     return _decodeValue(value);
   }
 
-  static dynamic _decodeValue(XmlElement value) {
+  /// Guards against a hostile or broken server sending pathologically nested
+  /// arrays/structs: decoding recursed without bound and could blow the stack.
+  static const _maxDecodeDepth = 64;
+
+  static dynamic _decodeValue(XmlElement value) => _decodeValueAt(value, 0);
+
+  static dynamic _decodeValueAt(XmlElement value, int depth) {
+    if (depth > _maxDecodeDepth) {
+      throw XmlRpcFault(-32603, 'XML-RPC response nested too deeply');
+    }
     // A <value> may contain text directly (implicit string) or a typed child.
     for (final child in value.childElements) {
       switch (child.name.local) {
@@ -139,16 +155,21 @@ class XmlRpcCodec {
         case 'dateTime.iso8601':
           return _decodeDateTime(child.innerText.trim());
         case 'base64':
-          return base64Decode(child.innerText.trim());
+          try {
+            return base64Decode(child.innerText.trim());
+          } catch (_) {
+            // Surface the protocol error type, not a bare FormatException.
+            throw XmlRpcFault(-32603, 'Invalid base64 payload in response');
+          }
         case 'string':
           return child.innerText;
         case 'array':
           return child
-              .findElements('data')
-              .firstOrNull
-              ?.findElements('value')
-              .map(_decodeValue)
-              .toList() ??
+                  .findElements('data')
+                  .firstOrNull
+                  ?.findElements('value')
+                  .map((v) => _decodeValueAt(v, depth + 1))
+                  .toList() ??
               <dynamic>[];
         case 'struct':
           final map = <String, dynamic>{};
@@ -156,8 +177,9 @@ class XmlRpcCodec {
             final name =
                 member.findElements('name').firstOrNull?.innerText ?? '';
             final memberValue = member.findElements('value').firstOrNull;
-            map[name] =
-                memberValue == null ? null : _decodeValue(memberValue);
+            map[name] = memberValue == null
+                ? null
+                : _decodeValueAt(memberValue, depth + 1);
           }
           return map;
       }

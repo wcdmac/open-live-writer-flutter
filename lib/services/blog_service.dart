@@ -18,8 +18,18 @@ class BlogService {
 
   WordPressXmlRpcClient? _xmlrpc;
   WordPressRestClient? _rest;
+  bool _disposed = false;
 
   WordPressXmlRpcClient get xmlrpc {
+    // P-04: after dispose() the cached clients are gone. Rebuilding a fresh
+    // client here would leak an unreferenced http.Client that is never closed
+    // — fail loudly instead so the caller drops the stale reference.
+    if (_disposed) {
+      throw StateError(
+        'BlogService for ${account.homepageUrl} has been disposed; '
+        'cannot use its XML-RPC client.',
+      );
+    }
     if (_xmlrpc == null) {
       final client = xmlRpcClientFor(account, password);
       final wp = WordPressXmlRpcClient(client, flavor: account.flavor);
@@ -29,18 +39,28 @@ class BlogService {
     return _xmlrpc!;
   }
 
-  WordPressRestClient get rest => _rest ??= WordPressRestClient(
-        baseUrl: account.apiUrl,
-        username: account.username,
-        password: password,
-        authMethod: account.restAuth,
+  WordPressRestClient get rest {
+    // P-04: see [xmlrpc] — never rebuild a client after disposal.
+    if (_disposed) {
+      throw StateError(
+        'BlogService for ${account.homepageUrl} has been disposed; '
+        'cannot use its REST client.',
       );
+    }
+    return _rest ??= WordPressRestClient(
+      baseUrl: account.apiUrl,
+      username: account.username,
+      password: password,
+      authMethod: account.restAuth,
+    );
+  }
 
   // -------------------------------------------------------------------------
   // Blogs / profile
   // -------------------------------------------------------------------------
 
-  Future<List<BlogInfo>> getUsersBlogs() => account.protocol == BlogProtocol.rest
+  Future<List<BlogInfo>> getUsersBlogs() =>
+      account.protocol == BlogProtocol.rest
       ? _restUserBlogs()
       : xmlrpc.getUsersBlogs();
 
@@ -58,23 +78,26 @@ class BlogService {
 
   Future<Map<String, dynamic>> getProfile() =>
       account.protocol == BlogProtocol.rest
-          ? rest.getProfile()
-          : xmlrpc.getProfile();
+      ? rest.getProfile()
+      : xmlrpc.getProfile();
 
   // -------------------------------------------------------------------------
   // Posts
   // -------------------------------------------------------------------------
 
-  Future<List<BlogPost>> getPosts(
-          {int count = 30, bool pages = false, PostStatus? status}) =>
-      account.protocol == BlogProtocol.rest
-          ? rest.getPosts(perPage: count, pages: pages, status: status)
-          : xmlrpc.getPosts(count: count, pages: pages, status: status);
+  Future<List<BlogPost>> getPosts({
+    int count = 30,
+    bool pages = false,
+    PostStatus? status,
+    List<String>? fields,
+  }) => account.protocol == BlogProtocol.rest
+      ? rest.getPosts(perPage: count, pages: pages, status: status, fields: fields)
+      : xmlrpc.getPosts(count: count, pages: pages, status: status);
 
   Future<BlogPost> getPost(String id, {bool isPage = false}) =>
       account.protocol == BlogProtocol.rest
-          ? rest.getPost(id, isPage: isPage)
-          : xmlrpc.getPost(id, isPage: isPage);
+      ? rest.getPost(id, isPage: isPage)
+      : xmlrpc.getPost(id, isPage: isPage);
 
   /// Creates a new post. Returns the post id (XML-RPC) or the created
   /// post (REST gives us the full object back).
@@ -88,23 +111,25 @@ class BlogService {
 
   Future<bool> editPost(BlogPost post, {required bool publish}) =>
       account.protocol == BlogProtocol.rest
-          ? rest.editPost(post, publish: publish).then((_) => true)
-          : xmlrpc.editPost(post, publish: publish);
+      ? rest.editPost(post, publish: publish).then((_) => true)
+      : xmlrpc.editPost(post, publish: publish);
 
   /// Changes ONLY the post status (dashboard quick actions) — avoids the
   /// full editPost payload, which is last-write-wins over title/content.
   /// [date] accompanies scheduled transitions (status=future needs a
   /// future date or WordPress publishes immediately).
-  Future<bool> setPostStatus(String postId, PostStatus status,
-          {DateTime? date}) =>
-      account.protocol == BlogProtocol.rest
-          ? rest.editPostStatus(postId, status, date: date)
-          : xmlrpc.setPostStatus(postId, status, date: date);
+  Future<bool> setPostStatus(
+    String postId,
+    PostStatus status, {
+    DateTime? date,
+  }) => account.protocol == BlogProtocol.rest
+      ? rest.editPostStatus(postId, status, date: date)
+      : xmlrpc.setPostStatus(postId, status, date: date);
 
   Future<bool> deletePost(String id, {bool isPage = false}) =>
       account.protocol == BlogProtocol.rest
-          ? rest.deletePost(id, isPage: isPage)
-          : xmlrpc.deletePost(id);
+      ? rest.deletePost(id, isPage: isPage)
+      : xmlrpc.deletePost(id);
 
   // -------------------------------------------------------------------------
   // Taxonomies
@@ -112,27 +137,28 @@ class BlogService {
 
   Future<List<PostCategory>> getCategories() =>
       account.protocol == BlogProtocol.rest
-          ? rest.getCategories()
-          : xmlrpc.getCategories();
+      ? rest.getCategories()
+      : xmlrpc.getCategories();
 
-  Future<List<PostTag>> getTags() => account.protocol == BlogProtocol.rest
-      ? rest.getTags()
-      : xmlrpc.getTags();
+  Future<List<PostTag>> getTags() =>
+      account.protocol == BlogProtocol.rest ? rest.getTags() : xmlrpc.getTags();
 
   Future<String> newCategory(String name, {String? parentId}) =>
       account.protocol == BlogProtocol.rest
-          ? rest.newCategory(name, parentId: parentId).then((c) => c.id)
-          : xmlrpc.newCategory(name, parentId: parentId);
+      ? rest.newCategory(name, parentId: parentId).then((c) => c.id)
+      : xmlrpc.newCategory(name, parentId: parentId);
 
   // -------------------------------------------------------------------------
   // Media
   // -------------------------------------------------------------------------
 
   Future<MediaUploadResult> uploadMedia(
-          String filename, List<int> bytes, String mimeType) =>
-      account.protocol == BlogProtocol.rest
-          ? rest.uploadMedia(filename, bytes, mimeType)
-          : xmlrpc.uploadMedia(filename, bytes, mimeType);
+    String filename,
+    List<int> bytes,
+    String mimeType,
+  ) => account.protocol == BlogProtocol.rest
+      ? rest.uploadMedia(filename, bytes, mimeType)
+      : xmlrpc.uploadMedia(filename, bytes, mimeType);
 
   // -------------------------------------------------------------------------
   // Site info
@@ -161,9 +187,11 @@ class BlogService {
   /// Closes the underlying HTTP clients. Must run when the service is
   /// discarded (account switch/removal) or the connection pool leaks.
   void dispose() {
+    if (_disposed) return;
     _xmlrpc?.close();
     _rest?.close();
     _xmlrpc = null;
     _rest = null;
+    _disposed = true;
   }
 }

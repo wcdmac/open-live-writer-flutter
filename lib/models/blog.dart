@@ -29,14 +29,22 @@ enum XmlRpcFlavor {
         XmlRpcFlavor.blogger => 'Blogger',
       };
 
+  /// Values are persisted as [XmlRpcFlavor.name], so they are matched exactly.
+  ///
+  /// The previous substring tests were over-eager: `contains('wp')` matched
+  /// any string that happened to contain "wp" (e.g. "wpengine"), silently
+  /// selecting the wrong flavor.
   static XmlRpcFlavor fromName(String? name) {
-    final n = (name ?? '').toLowerCase();
-    if (n.contains('wordpress') || n.contains('wp')) {
-      return XmlRpcFlavor.wordpress;
+    switch ((name ?? '').toLowerCase()) {
+      case 'wordpress':
+        return XmlRpcFlavor.wordpress;
+      case 'movabletype':
+        return XmlRpcFlavor.movabletype;
+      case 'blogger':
+        return XmlRpcFlavor.blogger;
+      default:
+        return XmlRpcFlavor.metaweblog;
     }
-    if (n.contains('movable') || n == 'mt') return XmlRpcFlavor.movabletype;
-    if (n.contains('blogger')) return XmlRpcFlavor.blogger;
-    return XmlRpcFlavor.metaweblog;
   }
 }
 
@@ -128,8 +136,11 @@ class BlogAccount {
         'themeName': themeName,
       };
 
+  /// Tolerant decode: `id` used to be the one field with no fallback, so a
+  /// single malformed record aborted decoding of the entire account list —
+  /// which callers then read as "no accounts" and overwrote.
   factory BlogAccount.fromJson(Map<String, dynamic> json) => BlogAccount(
-        id: json['id'] as String,
+        id: (json['id'] ?? '') as String,
         blogId: json['blogId'] as String? ?? '1',
         name: json['name'] as String? ?? 'Blog',
         homepageUrl: json['homepageUrl'] as String? ?? '',
