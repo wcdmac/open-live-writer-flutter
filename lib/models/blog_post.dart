@@ -144,6 +144,14 @@ class BlogPost {
   int? pageOrder;
   DateTime? dateCreated;
   DateTime? datePublished;
+
+  /// When the post was last modified on the server (`modified_gmt` for REST,
+  /// `post_modified_gmt` for XML-RPC).
+  ///
+  /// Used to detect that a post changed remotely while an offline copy was
+  /// being edited. Null when the response omits it — notably the dashboard's
+  /// lightweight field projection, which deliberately excludes it.
+  DateTime? modified;
   bool commentsEnabled;
   bool pingsEnabled;
   List<String> categories;
@@ -160,16 +168,28 @@ class BlogPost {
   String? _excerptCache;
   String? _excerptCacheSrc;
 
+  static final _htmlTagRe = RegExp(r'<[^>]+>');
+  static final _whitespaceRe = RegExp(r'\s+');
+
+  /// Strips HTML tags and collapses runs of whitespace to a single space.
+  static String _stripHtml(String s) =>
+      s.replaceAll(_htmlTagRe, ' ').replaceAll(_whitespaceRe, ' ').trim();
+
   /// Excerpt with a sane fallback (first 160 chars of plain text content).
+  ///
+  /// `excerpt` comes from `excerpt.rendered` (REST) or the plain `post_excerpt`
+  /// / `mt_excerpt` field (XML-RPC). The rendered form may still carry `<p>`…
+  /// `</p>` wrappers, so it is stripped before display to avoid showing literal
+  /// HTML tags in the dashboard tile.
   String get displayExcerpt {
-    if (excerpt.trim().isNotEmpty) return excerpt;
+    if (excerpt.trim().isNotEmpty) {
+      final stripped = _stripHtml(excerpt);
+      if (stripped.isNotEmpty) return stripped;
+    }
     if (_excerptCache != null && _excerptCacheSrc == content) {
       return _excerptCache!;
     }
-    final plain = content
-        .replaceAll(RegExp(r'<[^>]+>'), ' ')
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .trim();
+    final plain = _stripHtml(content);
     final result =
         plain.length > 160 ? '${plain.substring(0, 160)}…' : plain;
     _excerptCacheSrc = content;
@@ -193,6 +213,7 @@ class BlogPost {
         pageOrder: pageOrder,
         dateCreated: dateCreated,
         datePublished: datePublished,
+        modified: modified,
         commentsEnabled: commentsEnabled,
         pingsEnabled: pingsEnabled,
         categories: List.of(categories),

@@ -5,7 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../l10n/app_localizations.dart';
 import '../../models/blog_post.dart';
 import '../../editor/block_document.dart'
-    show buildImageHtml, normalizeImageUpload;
+    show buildImageHtml, htmlAttr, normalizeImageUpload;
 
 /// Signature for the media upload callback provided by the editor page.
 typedef MediaUploader = Future<MediaUploadResult> Function(
@@ -77,7 +77,9 @@ class EditorToolbar extends StatelessWidget {
     final url = await _prompt(context, l10n.linkUrl, 'https://');
     if (url == null || url.isEmpty) return;
     final sel = controller.selection.textInside(controller.text);
-    _wrapSelection('<a href="$url">', '</a>');
+    // Escape the pasted URL: an unescaped `"` would close the attribute and
+    // let arbitrary markup into the post. Matches buildImageHtml's escaping.
+    _wrapSelection('<a href="${htmlAttr(url)}">', '</a>');
     if (sel.isEmpty) {
       // Put a friendly placeholder between the tags.
       final text = controller.text;

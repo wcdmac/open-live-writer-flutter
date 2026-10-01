@@ -37,6 +37,12 @@ class _LivePreviewState extends State<LivePreview> {
   late String _title;
   StreamSubscription<String>? _sub;
 
+  /// Cached rendered HTML widget. Rebuilding it only when the content (or
+  /// theme) actually changes keeps title/banner/spinner updates from
+  /// re-parsing the whole post document through HtmlWidget on every frame.
+  Widget? _contentWidget;
+  String? _contentKey;
+
   @override
   void initState() {
     super.initState();
@@ -66,6 +72,59 @@ class _LivePreviewState extends State<LivePreview> {
   void dispose() {
     _sub?.cancel();
     super.dispose();
+  }
+
+  /// Builds (and caches) the rendered HTML widget for the current content.
+  Widget _cachedHtmlWidget(BuildContext context, AppLocalizations l10n,
+      BlogTheme? theme, TextStyle bodyStyle) {
+    final content = _content.isEmpty
+        ? '<p style="opacity:0.5">${l10n.startWritingHint}</p>'
+        : _content;
+    // Theme colors feed the inline styles below, so include them in the
+    // cache key to force a rebuild when the detected theme changes.
+    final key = '${theme?.linkColor ?? ''}|${theme?.headingColor ?? ''}|'
+        '${theme?.name ?? ''}|$content';
+    if (_contentWidget == null || _contentKey != key) {
+      _contentKey = key;
+      _contentWidget = HtmlWidget(
+        content,
+        textStyle: bodyStyle,
+        customWidgetBuilder: mediaPlaceholderBuilder,
+        customStylesBuilder: (element) {
+          switch (element.localName) {
+            case 'a':
+              return {
+                'color': theme?.linkColor ?? '#2563eb',
+                'text-decoration': 'underline',
+              };
+            case 'h1':
+            case 'h2':
+            case 'h3':
+            case 'h4':
+              return {
+                'color': theme?.headingColor ?? 'rgba(0,0,0,0.89)',
+                'font-weight': '700',
+              };
+            case 'blockquote':
+              return {
+                'border-left':
+                    '3px solid ${theme?.linkColor ?? '#2563eb'}',
+                'padding-left': '16px',
+                'opacity': '0.85',
+              };
+            case 'img':
+              return {'max-width': '100%'};
+            case 'code':
+              return {
+                'background-color': 'rgba(127,127,127,0.12)',
+                'font-family': 'monospace',
+              };
+          }
+          return null;
+        },
+      );
+    }
+    return _contentWidget!;
   }
 
   @override
@@ -124,48 +183,7 @@ class _LivePreviewState extends State<LivePreview> {
                               ),
                         ),
                       ),
-                    HtmlWidget(
-                      _content.isEmpty
-                          ? '<p style="opacity:0.5">${l10n.startWritingHint}</p>'
-                          : _content,
-                      textStyle: bodyStyle,
-                      // <video>/<iframe>/embeds cannot be played and failed
-                      // image URLs must not be silent — swap in placeholder
-                      // widgets with visible loading/error states.
-                      customWidgetBuilder: mediaPlaceholderBuilder,
-                      customStylesBuilder: (element) {
-                        switch (element.localName) {
-                          case 'a':
-                            return {
-                              'color': theme?.linkColor ?? '#2563eb',
-                              'text-decoration': 'underline',
-                            };
-                          case 'h1':
-                          case 'h2':
-                          case 'h3':
-                          case 'h4':
-                            return {
-                              'color': theme?.headingColor ?? 'rgba(0,0,0,0.89)',
-                              'font-weight': '700',
-                            };
-                          case 'blockquote':
-                            return {
-                              'border-left':
-                                  '3px solid ${theme?.linkColor ?? '#2563eb'}',
-                              'padding-left': '16px',
-                              'opacity': '0.85',
-                            };
-                          case 'img':
-                            return {'max-width': '100%'};
-                          case 'code':
-                            return {
-                              'background-color': 'rgba(127,127,127,0.12)',
-                              'font-family': 'monospace',
-                            };
-                        }
-                        return null;
-                      },
-                    ),
+                    _cachedHtmlWidget(context, l10n, theme, bodyStyle),
                   ],
                 ),
               ),

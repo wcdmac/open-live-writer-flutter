@@ -51,7 +51,11 @@ class _BlockEditorState extends State<BlockEditor> {
   @override
   void didUpdateWidget(BlockEditor oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.content.trim() != _lastEmitted.trim()) {
+    // Compare the raw strings first: trimming before the comparison meant an
+    // external update that differed only in leading/trailing whitespace was
+    // ignored, leaving the card showing stale content.
+    if (widget.content != _lastEmitted &&
+        widget.content.trim() != _lastEmitted.trim()) {
       setState(() {
         _blocks = parseBlocks(widget.content);
         _focusedIndex = null;
@@ -301,16 +305,20 @@ class _BlockCardState extends State<_BlockCard> {
 // Paragraph helpers: edit inner text, keep the original <p> wrapper/attrs.
 // ---------------------------------------------------------------------------
 
+// Hoisted: both run on every keystroke and [_paragraphInner] is also called
+// from build, so compiling them per call was measurable on long documents.
+final RegExp _paragraphInnerRe =
+    RegExp(r'^\s*<p[^>]*>([\s\S]*)</p>\s*$', caseSensitive: false);
+final RegExp _wrapParagraphRe =
+    RegExp(r'^\s*(<p[^>]*>)[\s\S]*(</p>)\s*$', caseSensitive: false);
+
 String _paragraphInner(String html) {
-  final m = RegExp(r'^\s*<p[^>]*>([\s\S]*)</p>\s*$', caseSensitive: false)
-      .firstMatch(html);
+  final m = _paragraphInnerRe.firstMatch(html);
   return m?.group(1) ?? html;
 }
 
 String _wrapParagraph(String inner, ContentBlock block) {
-  final m =
-      RegExp(r'^\s*(<p[^>]*>)[\s\S]*(</p>)\s*$', caseSensitive: false)
-          .firstMatch(block.html);
+  final m = _wrapParagraphRe.firstMatch(block.html);
   if (m != null) return '${m.group(1)}$inner${m.group(2)}';
   return '<p>$inner</p>';
 }
@@ -391,6 +399,12 @@ class _TextBlockFieldState extends State<_TextBlockField> {
         ),
       ],
     );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
   }
 }
 
@@ -488,6 +502,12 @@ class _HeadingFieldState extends State<_HeadingField> {
       ],
     );
   }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -573,7 +593,9 @@ class _ImageFieldState extends State<_ImageField> {
     if (uploader == null) return;
     final xfile = await imgpick.ImagePicker().pickImage(
         imageQuality: 90, maxWidth: 2560, source: imgpick.ImageSource.gallery);
-    if (xfile == null) return;
+    // Picking opens an external activity: the user can back out and pop this
+    // route while it is open, so the State may already be disposed here.
+    if (xfile == null || !mounted) return;
     setState(() => _uploading = true);
     try {
       final bytes = await xfile.readAsBytes();
@@ -664,6 +686,12 @@ class _ImageFieldState extends State<_ImageField> {
 // Video: URL field, embed builder.
 // ---------------------------------------------------------------------------
 
+/// Videos are NOT downscaled by the picker (unlike images, which pass
+/// `maxWidth`/`imageQuality`), so reading one straight into memory can OOM
+/// the app on a several-hundred-MB file. Reject oversized picks up front
+/// instead of `readAsBytes()`-ing them whole.
+const int kMaxVideoUploadBytes = 100 * 1024 * 1024;
+
 class _VideoField extends StatefulWidget {
   const _VideoField({
     required this.block,
@@ -695,9 +723,21 @@ class _VideoFieldState extends State<_VideoField> {
     if (uploader == null) return;
     final xfile = await imgpick.ImagePicker()
         .pickVideo(source: imgpick.ImageSource.gallery);
-    if (xfile == null) return;
+    // Same disposal hazard as the image picker above.
+    if (xfile == null || !mounted) return;
     setState(() => _uploading = true);
     try {
+      // Size gate before the whole file is pulled into RAM (see
+      // [kMaxVideoUploadBytes]). Far larger than any realistic phone clip
+      // that servers accept, but small enough to keep the process alive.
+      final size = await xfile.length();
+      if (size > kMaxVideoUploadBytes) {
+        if (!mounted) return;
+        setState(() => _uploading = false);
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(l10n.uploadTooLarge)));
+        return;
+      }
       final bytes = await xfile.readAsBytes();
       final result = await uploader(
           xfile.name, bytes, xfile.mimeType ?? 'video/mp4');
@@ -761,6 +801,12 @@ class _VideoFieldState extends State<_VideoField> {
       ],
     );
   }
+
+  @override
+  void dispose() {
+    _url.dispose();
+    super.dispose();
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -770,16 +816,44 @@ class _VideoFieldState extends State<_VideoField> {
 /// Read-only bordered table used for the unfocused (WYSIWYG) rendering —
 /// the HTML renderer draws no grid lines and the cell structure must be
 /// visible at all times.
-class _ReadOnlyTable extends StatelessWidget {
+class _ReadOnlyTable extends StatefulWidget {
   const _ReadOnlyTable(this.html);
 
   final String html;
 
   @override
+  State<_ReadOnlyTable> createState() => _ReadOnlyTableState();
+}
+
+class _ReadOnlyTableState extends State<_ReadOnlyTable> {
+  TableData? _table;
+  String? _parsedFrom;
+
+  /// Parses once per distinct html. `parseTable` compiles several RegExps,
+  /// so running it inside build re-paid that cost on every card rebuild.
+  void _parse() {
+    if (_parsedFrom == widget.html) return;
+    _parsedFrom = widget.html;
+    _table = parseTable(widget.html);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _parse();
+  }
+
+  @override
+  void didUpdateWidget(_ReadOnlyTable oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _parse();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final table = parseTable(html);
-    if (table.rows.isEmpty) return const SizedBox.shrink();
+    final table = _table;
+    if (table == null || table.rows.isEmpty) return const SizedBox.shrink();
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Table(
@@ -824,15 +898,42 @@ class _ReadOnlyTable extends StatelessWidget {
 
 /// Read-only code rendering for the unfocused (WYSIWYG) view. Rendered
 /// natively so the HTML renderer never interprets the source inside.
-class _ReadOnlyCode extends StatelessWidget {
+class _ReadOnlyCode extends StatefulWidget {
   const _ReadOnlyCode(this.html);
 
   final String html;
 
   @override
+  State<_ReadOnlyCode> createState() => _ReadOnlyCodeState();
+}
+
+class _ReadOnlyCodeState extends State<_ReadOnlyCode> {
+  String? _code;
+  String? _parsedFrom;
+
+  /// Parses once per distinct html (see [_ReadOnlyTableState._parse]).
+  void _parse() {
+    if (_parsedFrom == widget.html) return;
+    _parsedFrom = widget.html;
+    _code = parseCodeBlock(widget.html) ?? widget.html;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _parse();
+  }
+
+  @override
+  void didUpdateWidget(_ReadOnlyCode oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _parse();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final code = parseCodeBlock(html) ?? html;
+    final code = _code ?? widget.html;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
@@ -1531,6 +1632,9 @@ class _InsertBar extends StatelessWidget {
     final url = await _prompt(context, l10n.imageUrl, 'https://');
     if (url == null || url.isEmpty || !context.mounted) return;
     final alt = await _prompt(context, l10n.altText, '');
+    // The second prompt is another await point: the dialog's context owner
+    // can be unmounted before onInsert reaches back into the editor state.
+    if (!context.mounted) return;
     onInsert(ContentBlock(
       type: BlockType.image,
       html: buildImageHtml(url, alt ?? ''),

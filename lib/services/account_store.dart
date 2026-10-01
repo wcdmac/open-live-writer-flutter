@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -22,18 +23,41 @@ class AccountStore {
   Future<SharedPreferences> get prefs async =>
       _prefs ??= await SharedPreferences.getInstance();
 
-  /// All saved accounts, ordered by name.
-  Future<List<BlogAccount>> loadAccounts() async {
+  /// Strict decode of the stored payload.
+  ///
+  /// Returns `null` when nothing is stored yet; throws when a payload exists
+  /// but cannot be decoded. Mutation paths ([addAccount], [updateAccount],
+  /// [removeAccount]) rewrite the whole key, so they must abort on a throw:
+  /// treating an undecodable payload as "empty" would replace every saved
+  /// account with the single one being written.
+  Future<List<BlogAccount>?> _readAccounts() async {
     final p = await prefs;
     final raw = p.getString(_accountsKey);
-    if (raw == null || raw.isEmpty) return [];
+    if (raw == null || raw.isEmpty) return null;
+    final decoded = jsonDecode(raw);
+    if (decoded is! List) {
+      throw const FormatException('accounts payload is not a JSON list');
+    }
+    final out = <BlogAccount>[];
+    for (final entry in decoded) {
+      // Entry-level tolerance: skip the unusable record, keep the rest.
+      if (entry is! Map) continue;
+      final account = BlogAccount.fromJson(Map<String, dynamic>.from(entry));
+      if (account.id.isEmpty) continue;
+      out.add(account);
+    }
+    return out;
+  }
+
+  /// All saved accounts.
+  Future<List<BlogAccount>> loadAccounts() async {
     try {
-      final list = jsonDecode(raw) as List;
-      return list
-          .map((e) => BlogAccount.fromJson(Map<String, dynamic>.from(e)))
-          .toList();
-    } catch (_) {
-      return [];
+      return await _readAccounts() ?? const <BlogAccount>[];
+    } catch (e) {
+      // Read path: degrade to empty for display; the payload on disk is left
+      // untouched because nothing rewrites it here.
+      debugPrint('AccountStore: corrupt accounts payload: $e');
+      return const <BlogAccount>[];
     }
   }
 
@@ -57,14 +81,22 @@ class AccountStore {
   }
 
   Future<void> addAccount(BlogAccount account, String password) async {
-    final accounts = await loadAccounts();
-    accounts.add(account);
+    // Strict read: never rewrite over an undecodable payload.
+    final accounts = await _readAccounts() ?? <BlogAccount>[];
+    // Upsert by id — appending blindly would create duplicate rows for an
+    // id that is already stored (and duplicate entries in secure storage).
+    final idx = accounts.indexWhere((a) => a.id == account.id);
+    if (idx >= 0) {
+      accounts[idx] = account;
+    } else {
+      accounts.add(account);
+    }
     await saveAccounts(accounts);
     await savePassword(account.id, password);
   }
 
   Future<void> updateAccount(BlogAccount account) async {
-    final accounts = await loadAccounts();
+    final accounts = await _readAccounts() ?? <BlogAccount>[];
     final idx = accounts.indexWhere((a) => a.id == account.id);
     if (idx >= 0) {
       accounts[idx] = account;
@@ -73,7 +105,7 @@ class AccountStore {
   }
 
   Future<void> removeAccount(String accountId) async {
-    final accounts = await loadAccounts();
+    final accounts = await _readAccounts() ?? <BlogAccount>[];
     accounts.removeWhere((a) => a.id == accountId);
     await saveAccounts(accounts);
     await deletePassword(accountId);

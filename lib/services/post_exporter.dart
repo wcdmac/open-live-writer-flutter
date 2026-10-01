@@ -47,13 +47,24 @@ class PostExporter {
     return file;
   }
 
+  /// DOS device names: still unwritable on Windows even with an extension.
+  static const _reservedNames = {
+    'con', 'prn', 'aux', 'nul',
+    'com1', 'com2', 'com3', 'com4', 'com5', 'com6', 'com7', 'com8', 'com9',
+    'lpt1', 'lpt2', 'lpt3', 'lpt4', 'lpt5', 'lpt6', 'lpt7', 'lpt8', 'lpt9',
+  };
+
   /// File-system-safe name derived from the post title.
   static String safeName(String raw) {
     final cleaned = raw
         .trim()
         .replaceAll(RegExp(r'[\\/:*?"<>|\r\n]+'), '_')
         .replaceAll(RegExp(r'\s+'), '-');
-    final name = cleaned.isEmpty ? 'untitled' : cleaned;
+    // Separators are already stripped above, but a bare "." or ".." is still
+    // a path-navigation hazard, and the reserved names cannot be written.
+    var name = cleaned.replaceAll(RegExp(r'^\.+|\.+$'), '');
+    if (name.isEmpty) name = 'untitled';
+    if (_reservedNames.contains(name.toLowerCase())) name = '${name}_';
     return name.length > 60 ? name.substring(0, 60) : name;
   }
 
@@ -70,7 +81,8 @@ class PostExporter {
       if (post.datePublished != null)
         DateFormat('yyyy-MM-dd').format(post.datePublished!.toLocal()),
       post.status.label,
-      if (post.authorName?.isNotEmpty == true) post.authorName!,
+      // Escape: author names are server data and this is raw HTML output.
+      if (post.authorName?.isNotEmpty == true) _esc(post.authorName!),
     ].join(' · ');
     return '<!DOCTYPE html>\n'
         '<html>\n'
@@ -106,20 +118,20 @@ class PostExporter {
         .where((c) => c.trim().isNotEmpty)
         .toList();
     final fm = StringBuffer('---\n');
-    fm.writeln('title: "${post.title.replaceAll('"', r'\"')}"');
+    fm.writeln('title: "${_yamlQuote(post.title)}"');
     if (post.slug?.isNotEmpty == true) fm.writeln('slug: ${post.slug}');
     fm.writeln('status: ${post.status.wpValue}');
     if (post.datePublished != null) {
       fm.writeln('date: ${post.datePublished!.toIso8601String()}');
     }
     if (cats.isNotEmpty) {
-      fm.writeln('categories: [${cats.map((c) => '"$c"').join(', ')}]');
+      fm.writeln('categories: [${cats.map((c) => '"${_yamlQuote(c)}"').join(', ')}]');
     }
     if (post.tags.isNotEmpty) {
-      fm.writeln('tags: [${post.tags.map((t) => '"$t"').join(', ')}]');
+      fm.writeln('tags: [${post.tags.map((t) => '"${_yamlQuote(t)}"').join(', ')}]');
     }
     if (post.excerpt.trim().isNotEmpty) {
-      fm.writeln('excerpt: "${post.excerpt.trim().replaceAll('"', r'\"')}"');
+      fm.writeln('excerpt: "${_yamlQuote(post.excerpt.trim())}"');
     }
     fm.writeln('---\n');
 
@@ -216,6 +228,16 @@ class PostExporter {
   }
 
   // --- helpers -------------------------------------------------------------
+
+  /// Escapes a value for a YAML double-quoted scalar.
+  ///
+  /// Only quotes were escaped before, so a title or excerpt containing a
+  /// newline broke the front matter into invalid YAML.
+  static String _yamlQuote(String s) => s
+      .replaceAll('\\', '\\\\')
+      .replaceAll('"', r'\"')
+      .replaceAll('\r', ' ')
+      .replaceAll('\n', ' ');
 
   static String _esc(String raw) => raw
       .replaceAll('&', '&amp;')

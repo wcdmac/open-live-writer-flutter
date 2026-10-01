@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../editor/block_editor.dart';
 import '../l10n/app_localizations.dart';
 import '../models/blog_post.dart';
+import '../services/error_message.dart';
 import '../services/local_draft_store.dart';
 import '../state/app_state.dart';
 import '../state/editor_state.dart';
@@ -42,6 +43,86 @@ class PostEditorPage extends StatefulWidget {
   State<PostEditorPage> createState() => _PostEditorPageState();
 }
 
+/// Title input bound to a shared controller through a private mirror.
+///
+/// Both editor panes are mounted at the same time (the wide layout shows them
+/// side by side, and the narrow one uses an IndexedStack). Binding two
+/// `TextField`s to one `TextEditingController` made them fight over the
+/// selection and composing state, so typing jumped the caret between panes.
+///
+/// Each instance owns its controller and keeps it in sync with [master]; the
+/// master stays the single source of truth for save/history/preview.
+class _MirroredTitleField extends StatefulWidget {
+  const _MirroredTitleField({
+    required this.master,
+    required this.onChanged,
+  });
+
+  final TextEditingController master;
+  final ValueChanged<String> onChanged;
+
+  @override
+  State<_MirroredTitleField> createState() => _MirroredTitleFieldState();
+}
+
+class _MirroredTitleFieldState extends State<_MirroredTitleField> {
+  late final TextEditingController _local;
+
+  @override
+  void initState() {
+    super.initState();
+    _local = TextEditingController(text: widget.master.text);
+    widget.master.addListener(_syncFromMaster);
+  }
+
+  void _syncFromMaster() {
+    // Guard against a feedback loop: pushing to master below also notifies
+    // this listener, but the values already match so it stops here.
+    if (_local.text != widget.master.text) {
+      _local.text = widget.master.text;
+    }
+  }
+
+  @override
+  void didUpdateWidget(_MirroredTitleField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.master != widget.master) {
+      oldWidget.master.removeListener(_syncFromMaster);
+      widget.master.addListener(_syncFromMaster);
+      _local.text = widget.master.text;
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.master.removeListener(_syncFromMaster);
+    _local.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: TextField(
+        controller: _local,
+        style: Theme.of(
+          context,
+        ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
+        decoration: InputDecoration(
+          border: InputBorder.none,
+          hintText: l10n.postTitle,
+        ),
+        onChanged: (value) {
+          widget.master.text = value;
+          widget.onChanged(value);
+        },
+      ),
+    );
+  }
+}
+
 class _PostEditorPageState extends State<PostEditorPage>
     with SingleTickerProviderStateMixin {
   late final EditorState _editor;
@@ -51,8 +132,10 @@ class _PostEditorPageState extends State<PostEditorPage>
   // The narrow-screen tab bar NEEDS an explicit controller: without one the
   // TabBar build fails (assertion in debug, null-controller crash subtree in
   // release) and the whole editor pane goes blank on phones.
-  late final TabController _tabController =
-      TabController(length: 3, vsync: this);
+  late final TabController _tabController = TabController(
+    length: 3,
+    vsync: this,
+  );
   int _tabIndex = 0; // 0: visual, 1: source, 2: preview (narrow screens)
 
   /// Wide layout: which editor mode the left pane shows (visual / source).
@@ -73,11 +156,19 @@ class _PostEditorPageState extends State<PostEditorPage>
   final List<(String, String)> _redoStack = [];
   bool _applyingHistory = false;
   Timer? _historyDebounce;
+  Timer? _charCountDebounce;
   int _charCount = 0;
 
   /// Id of the local draft this editor session was opened from (null when
   /// not editing a local draft). Consumed after the first successful save.
   String? _sourceDraftId;
+
+  /// Title/content as the page opened, captured before the crash-recovery
+  /// dialog is shown. If either differs at restore time the user has already
+  /// typed, and restoring would silently discard it (the undo stack is
+  /// cleared as part of the restore).
+  String? _baselineTitle;
+  String? _baselineContent;
 
   @override
   void initState() {
@@ -88,21 +179,23 @@ class _PostEditorPageState extends State<PostEditorPage>
       service: app.service,
       // An offline copy carries its server post id: opening it must edit
       // that post (editPost), not publish a duplicate (newPost).
-      initialPost: widget.existingPost?.copy() ??
+      initialPost:
+          widget.existingPost?.copy() ??
           (draft != null && draft.isOfflineCopy ? draft.toBlogPost() : null),
       theme: app.theme,
     );
     _titleController = TextEditingController(
-        text: widget.existingPost?.title ?? draft?.title ?? '');
+      text: widget.existingPost?.title ?? draft?.title ?? '',
+    );
     _contentController = TextEditingController(
-        text: widget.existingPost?.content ?? draft?.content ?? '');
+      text: widget.existingPost?.content ?? draft?.content ?? '',
+    );
     // Show tag NAMES: REST posts carry numeric ids; tagName() maps them
     // back (falling back to the raw value, which also covers XML-RPC
     // name-style tags).
     String? initialTags;
     if (widget.existingPost != null) {
-      initialTags =
-          widget.existingPost!.tags.map(app.tagName).join(', ');
+      initialTags = widget.existingPost!.tags.map(app.tagName).join(', ');
     } else if (draft != null) {
       initialTags = draft.tags.map(app.tagName).join(', ');
     }
@@ -124,13 +217,22 @@ class _PostEditorPageState extends State<PostEditorPage>
     _updateCharCount();
     // The empty-content notice is only meaningful for EXISTING posts whose
     // content failed to load — never for a brand-new blank post.
-    _emptyContent = widget.existingPost != null &&
+    _emptyContent =
+        widget.existingPost != null &&
         widget.existingPost!.content.trim().isEmpty;
 
     // Crash recovery: a NEW post (not opened from a local draft) checks for
     // an unsaved snapshot from a previous session.
     if (widget.existingPost == null && draft == null && app.hasAccount) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _checkCrashSnapshot(app));
+      // Capture the as-opened baseline first: the snapshot check runs after a
+      // frame and shows a dialog, during which the page is already editable.
+      // Comparing against this lets restore skip overwriting anything the
+      // user typed while the dialog was up.
+      _baselineTitle = _titleController.text;
+      _baselineContent = _contentController.text;
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _checkCrashSnapshot(app),
+      );
     }
 
     // Post lists often ship without full content — fetch the complete
@@ -176,16 +278,14 @@ class _PostEditorPageState extends State<PostEditorPage>
           // Keep the caret at the end after replacing the text.
           _contentController.value = TextEditingValue(
             text: fresh.content,
-            selection: TextSelection.collapsed(
-                offset: fresh.content.length),
+            selection: TextSelection.collapsed(offset: fresh.content.length),
           );
         } else {
           // Distinguish "failed to load" from "server returned empty body".
           _emptyContent = _contentController.text.trim().isEmpty;
         }
         if (fresh.tags.isNotEmpty) {
-          _tagController.text =
-              fresh.tags.map(app.tagName).join(', ');
+          _tagController.text = fresh.tags.map(app.tagName).join(', ');
         }
         // Fresh server copy = new baseline; user edits start from here.
         _applyingHistory = true;
@@ -201,7 +301,7 @@ class _PostEditorPageState extends State<PostEditorPage>
       // Degrade gracefully: keep whatever the post list gave us.
       setState(() {
         _fetchingFull = false;
-        _loadError = '$e';
+        _loadError = userFacingError(e, context: 'loadFullPost');
       });
     }
   }
@@ -209,6 +309,7 @@ class _PostEditorPageState extends State<PostEditorPage>
   @override
   void dispose() {
     _historyDebounce?.cancel();
+    _charCountDebounce?.cancel();
     _tabController.dispose();
     _titleController.dispose();
     _contentController.dispose();
@@ -284,18 +385,33 @@ class _PostEditorPageState extends State<PostEditorPage>
     });
   }
 
+  /// Stripping patterns for the character count. Hoisted: this used to
+  /// compile three RegExps on every keystroke.
+  static final _commentRe = RegExp(r'<!--[\s\S]*?-->');
+  static final _tagRe = RegExp(r'<[^>]+>');
+  static final _spaceRe = RegExp(r'\s');
+
   /// Counts visible characters (tags, WP block comments and whitespace
   /// stripped). For CJK text this is the conventional "字数".
+  ///
+  /// Debounced: the count walks the whole document, so a burst of keystrokes
+  /// should cost one pass rather than one per character.
   void _updateCharCount() {
-    final text =
-        (_titleController.text + _contentController.text)
-            .replaceAll(RegExp(r'<!--[\s\S]*?-->'), '')
-            .replaceAll(RegExp(r'<[^>]+>'), '')
-            .replaceAll(RegExp(r'\s'), '');
+    _charCountDebounce?.cancel();
+    _charCountDebounce =
+        Timer(const Duration(milliseconds: 300), _computeCharCount);
+  }
+
+  void _computeCharCount() {
+    if (!mounted) return;
+    final text = (_titleController.text + _contentController.text)
+        .replaceAll(_commentRe, '')
+        .replaceAll(_tagRe, '')
+        .replaceAll(_spaceRe, '');
     final n = text.runes.length;
     if (n != _charCount) {
       _charCount = n;
-      if (mounted) setState(() {});
+      setState(() {});
     }
   }
 
@@ -326,10 +442,9 @@ class _PostEditorPageState extends State<PostEditorPage>
               padding: const EdgeInsets.only(right: 12),
               child: Text(
                 l10n.charCount(_charCount),
-                style: Theme.of(context)
-                    .textTheme
-                    .bodySmall
-                    ?.copyWith(color: scheme.onSurfaceVariant),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
               ),
             ),
           ],
@@ -339,6 +454,9 @@ class _PostEditorPageState extends State<PostEditorPage>
   }
 
   Future<void> _save({required bool publish}) async {
+    // Re-entrancy guard. The UI hides the button while saving, but a double
+    // tap (or a shortcut) could still slip a second save through.
+    if (_editor.saving) return;
     final l10n = AppLocalizations.of(context)!;
     final ok = await _editor.save(publish: publish);
     if (!mounted) return;
@@ -347,9 +465,11 @@ class _PostEditorPageState extends State<PostEditorPage>
       showEditorSnack(
         context,
         publish
-            ? l10n.postPublished(_editor.lastSavedId != null
-                ? ' (id ${_editor.lastSavedId})'
-                : '')
+            ? l10n.postPublished(
+                _editor.lastSavedId != null
+                    ? ' (id ${_editor.lastSavedId})'
+                    : '',
+              )
             : l10n.draftSaved,
       );
       final account = app.currentAccount;
@@ -422,14 +542,18 @@ class _PostEditorPageState extends State<PostEditorPage>
       final recent = await svc.getPosts().timeout(const Duration(seconds: 30));
       final title = post.title.trim();
       if (title.isEmpty) return false;
-      final cutoff = DateTime.now().toUtc().subtract(const Duration(minutes: 10));
+      final cutoff = DateTime.now().toUtc().subtract(
+        const Duration(minutes: 10),
+      );
       final prefix = post.content.trim();
       final prefixLen = prefix.length < 80 ? prefix.length : 80;
-      return recent.any((p) =>
-          p.title.trim() == title &&
-          (p.datePublished == null || p.datePublished!.isAfter(cutoff)) &&
-          (prefix.isEmpty ||
-              p.content.trim().startsWith(prefix.substring(0, prefixLen))));
+      return recent.any(
+        (p) =>
+            p.title.trim() == title &&
+            (p.datePublished == null || p.datePublished!.isAfter(cutoff)) &&
+            (prefix.isEmpty ||
+                p.content.trim().startsWith(prefix.substring(0, prefixLen))),
+      );
     } catch (_) {
       // Connectivity really is gone — park the draft.
       return false;
@@ -438,10 +562,12 @@ class _PostEditorPageState extends State<PostEditorPage>
 
   /// True when the save error looks like a connectivity failure rather
   /// than a server rejection.
-  bool _isNetworkError(String? message) => message != null &&
+  bool _isNetworkError(String? message) =>
+      message != null &&
       RegExp(
-          r'SocketException|TimeoutException|Connection|Failed host lookup|ClientException|Transport error|Network is unreachable',
-          caseSensitive: false).hasMatch(message);
+        r'SocketException|TimeoutException|Connection|Failed host lookup|ClientException|Transport error|Network is unreachable',
+        caseSensitive: false,
+      ).hasMatch(message);
 
   /// Saves the current editor content as a local (offline) draft.
   /// Offline-copy metadata (server post id, status, taxonomy) rides
@@ -452,24 +578,29 @@ class _PostEditorPageState extends State<PostEditorPage>
     final source = _sourceDraftId == null
         ? null
         : app.localDrafts.where((d) => d.id == _sourceDraftId).firstOrNull;
-    await app.saveLocalDraft(LocalDraft(
-      id: _sourceDraftId ?? app.newDraftId(),
-      accountId: account.id,
-      title: _titleController.text,
-      content: _contentController.text,
-      excerpt: _editor.post.excerpt,
-      slug: _editor.post.slug,
-      updatedAt: DateTime.now(),
-      postId: source?.postId,
-      postStatus: source?.postStatus ?? _editor.post.status.wpValue,
-      isPage: source?.isPage ?? _editor.post.isPage,
-      categories: source?.categories,
-      tags: source?.tags,
-    ));
+    await app.saveLocalDraft(
+      LocalDraft(
+        id: _sourceDraftId ?? app.newDraftId(),
+        accountId: account.id,
+        title: _titleController.text,
+        content: _contentController.text,
+        excerpt: _editor.post.excerpt,
+        slug: _editor.post.slug,
+        updatedAt: DateTime.now(),
+        postId: source?.postId,
+        postStatus: source?.postStatus ?? _editor.post.status.wpValue,
+        isPage: source?.isPage ?? _editor.post.isPage,
+        categories: source?.categories,
+        tags: source?.tags,
+      ),
+    );
     _sourceDraftId ??= app.localDrafts
-        .where((d) => d.accountId == account.id &&
-            d.title == _titleController.text &&
-            d.content == _contentController.text)
+        .where(
+          (d) =>
+              d.accountId == account.id &&
+              d.title == _titleController.text &&
+              d.content == _contentController.text,
+        )
         .firstOrNull
         ?.id;
   }
@@ -486,8 +617,11 @@ class _PostEditorPageState extends State<PostEditorPage>
       context: context,
       builder: (context) => AlertDialog(
         title: Text(l10n.crashRecoveryTitle),
-        content: Text(l10n.crashRecoveryBody(
-            snap.savedAt.toLocal().toString().substring(0, 16))),
+        content: Text(
+          l10n.crashRecoveryBody(
+            snap.savedAt.toLocal().toString().substring(0, 16),
+          ),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -502,6 +636,18 @@ class _PostEditorPageState extends State<PostEditorPage>
     );
     if (!mounted) return;
     if (restore == true) {
+      // The dialog was up while the page was already editable. If the user
+      // typed in the meantime, restoring would overwrite that input and
+      // clear the undo stack, leaving no way back — so skip it and keep the
+      // snapshot for a later attempt.
+      final userTyped = (_baselineTitle != null &&
+              _titleController.text != _baselineTitle) ||
+          (_baselineContent != null &&
+              _contentController.text != _baselineContent);
+      if (userTyped) {
+        debugPrint('Crash restore skipped: content changed since open.');
+        return;
+      }
       setState(() {
         _applyingHistory = true;
         _titleController.text = snap.title;
@@ -548,15 +694,21 @@ class _PostEditorPageState extends State<PostEditorPage>
 
   @override
   Widget build(BuildContext context) {
-    final app = context.watch<AppState>();
+    // `read`, not `watch`: AppState notifies several times during a dashboard
+    // refresh, and a watch here rebuilt the whole page — both editor panes,
+    // the toolbar and the settings surface — on every one of them.
+    // This page's rendered content comes from its own controllers and
+    // `_editor`; AppState is only needed for callbacks and the (fixed after
+    // init) upload service, neither of which requires re-subscription.
+    final app = context.read<AppState>();
     final l10n = AppLocalizations.of(context)!;
     final isWide = MediaQuery.of(context).size.width >= 1000;
 
-    // Listen to the editor state so applyPost()/saving changes rebuild the
-    // page — without this, loaded content and the save spinner never show.
-    return ListenableBuilder(
-      listenable: _editor,
-      builder: (context, _) => PopScope(
+    // The AppBar (live post title + save spinner) reacts to editor changes,
+    // while the body is driven by local controllers/state and only rebuilds
+    // on explicit setState — so typing in the title/content no longer
+    // rebuilds the whole page (banners, history bar, block editor pane).
+    return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
@@ -566,54 +718,70 @@ class _PostEditorPageState extends State<PostEditorPage>
       },
       child: Scaffold(
         appBar: AppBar(
-          title: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Flexible(
-                child: Text(
-                  _editor.post.isNew
-                      ? (_editor.post.isPage
-                          ? l10n.newPageTitle
-                          : l10n.newPostTitle)
-                      : l10n.editTitle(_editor.post.title.isEmpty
-                          ? l10n.untitled
-                          : _editor.post.title),
-                  overflow: TextOverflow.ellipsis,
+          // Only the title + actions react to editor changes; the rest of
+          // the page (body, block editor, preview) no longer rebuilds on
+          // every keystroke.
+          title: ListenableBuilder(
+            listenable: _editor,
+            builder: (context, _) => Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Flexible(
+                  child: Text(
+                    _editor.post.isNew
+                        ? (_editor.post.isPage
+                              ? l10n.newPageTitle
+                              : l10n.newPostTitle)
+                        : l10n.editTitle(
+                            _editor.post.title.isEmpty
+                                ? l10n.untitled
+                                : _editor.post.title,
+                          ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-              ),
-              if (_fetchingFull) ...[
-                const SizedBox(width: 10),
-                const SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
+                if (_fetchingFull) ...[
+                  const SizedBox(width: 10),
+                  const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
           actions: [
-            if (_editor.saving)
-              const Padding(
-                padding: EdgeInsets.all(14),
-                child: SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-              )
-            else ...[
-              // Icon + tooltip instead of a text label: four text-labeled
-              // actions overflow the AppBar on phone widths.
-              IconButton(
-                tooltip: l10n.saveDraft,
-                icon: const Icon(Icons.save_outlined),
-                onPressed: () => _save(publish: false),
+            ListenableBuilder(
+              listenable: _editor,
+              builder: (context, _) => Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (_editor.saving)
+                    const Padding(
+                      padding: EdgeInsets.all(14),
+                      child: SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    )
+                  else ...[
+                    // Icon + tooltip instead of a text label: four text-labeled
+                    // actions overflow the AppBar on phone widths.
+                    IconButton(
+                      tooltip: l10n.saveDraft,
+                      icon: const Icon(Icons.save_outlined),
+                      onPressed: () => _save(publish: false),
+                    ),
+                    FilledButton(
+                      onPressed: () => _save(publish: true),
+                      child: Text(l10n.publish),
+                    ),
+                  ],
+                ],
               ),
-              FilledButton(
-                onPressed: () => _save(publish: true),
-                child: Text(l10n.publish),
-              ),
-            ],
+            ),
             IconButton(
               tooltip: l10n.postSettings,
               icon: const Icon(Icons.tune),
@@ -629,14 +797,13 @@ class _PostEditorPageState extends State<PostEditorPage>
           children: [
             if (_emptyContent && !_fetchingFull)
               MaterialBanner(
-                backgroundColor:
-                    Theme.of(context).colorScheme.secondaryContainer,
+                backgroundColor: Theme.of(
+                  context,
+                ).colorScheme.secondaryContainer,
                 content: Text(
                   l10n.emptyContentNotice,
                   style: TextStyle(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .onSecondaryContainer,
+                    color: Theme.of(context).colorScheme.onSecondaryContainer,
                   ),
                 ),
                 actions: [
@@ -648,11 +815,9 @@ class _PostEditorPageState extends State<PostEditorPage>
               ),
             if (_loadError != null)
               MaterialBanner(
-                backgroundColor:
-                    Theme.of(context).colorScheme.errorContainer,
+                backgroundColor: Theme.of(context).colorScheme.errorContainer,
                 content: Text(
-                  AppLocalizations.of(context)!
-                      .loadPostFailed(_loadError!),
+                  AppLocalizations.of(context)!.loadPostFailed(_loadError!),
                   style: TextStyle(
                     color: Theme.of(context).colorScheme.onErrorContainer,
                   ),
@@ -669,8 +834,7 @@ class _PostEditorPageState extends State<PostEditorPage>
                     child: Text(AppLocalizations.of(context)!.retry),
                   ),
                   TextButton(
-                    onPressed: () =>
-                        setState(() => _loadError = null),
+                    onPressed: () => setState(() => _loadError = null),
                     child: Text(AppLocalizations.of(context)!.cancel),
                   ),
                 ],
@@ -682,7 +846,6 @@ class _PostEditorPageState extends State<PostEditorPage>
           ],
         ),
       ),
-    ),
     );
   }
 
@@ -699,13 +862,15 @@ class _PostEditorPageState extends State<PostEditorPage>
                 child: SegmentedButton<int>(
                   segments: [
                     ButtonSegment(
-                        value: 0,
-                        icon: const Icon(Icons.visibility, size: 16),
-                        label: Text(l10n.visualMode)),
+                      value: 0,
+                      icon: const Icon(Icons.visibility, size: 16),
+                      label: Text(l10n.visualMode),
+                    ),
                     ButtonSegment(
-                        value: 1,
-                        icon: const Icon(Icons.code, size: 16),
-                        label: Text(l10n.sourceMode)),
+                      value: 1,
+                      icon: const Icon(Icons.code, size: 16),
+                      label: Text(l10n.sourceMode),
+                    ),
                   ],
                   selected: {_wideEditorMode},
                   onSelectionChanged: (s) =>
@@ -713,20 +878,31 @@ class _PostEditorPageState extends State<PostEditorPage>
                 ),
               ),
               Expanded(
-                child: _wideEditorMode == 0
-                    ? _buildVisualPane(app)
-                    : _buildEditorPane(app),
+                // #8: keep BOTH panes mounted (IndexedStack) so switching
+                // visual↔source does not dispose/recreate the BlockEditor —
+                // recreating it re-parses the whole document and can drop
+                // unsaved caret/scroll state.
+                child: IndexedStack(
+                  index: _wideEditorMode,
+                  children: [_buildVisualPane(app), _buildEditorPane(app)],
+                ),
               ),
             ],
           ),
         ),
         VerticalDivider(width: 1, thickness: 1, color: Colors.grey.shade300),
         Expanded(
-          child: LivePreview(
-            content: _editor.post.content,
-            title: _titleController.text,
-            theme: _editor.theme,
-            onContentChanged: _editor.contentChanged,
+          // The preview's title is driven by the local controller and only
+          // updates when the editor notifies — scope that here so the rest
+          // of the page (already outside the editor listener) stays put.
+          child: ListenableBuilder(
+            listenable: _editor,
+            builder: (context, _) => LivePreview(
+              content: _editor.post.content,
+              title: _titleController.text,
+              theme: _editor.theme,
+              onContentChanged: _editor.contentChanged,
+            ),
           ),
         ),
       ],
@@ -752,11 +928,14 @@ class _PostEditorPageState extends State<PostEditorPage>
             children: [
               _buildVisualPane(app),
               _buildEditorPane(app),
-              LivePreview(
-                content: _editor.post.content,
-                title: _titleController.text,
-                theme: _editor.theme,
-                onContentChanged: _editor.contentChanged,
+              ListenableBuilder(
+                listenable: _editor,
+                builder: (context, _) => LivePreview(
+                  content: _editor.post.content,
+                  title: _titleController.text,
+                  theme: _editor.theme,
+                  onContentChanged: _editor.contentChanged,
+                ),
               ),
             ],
           ),
@@ -770,23 +949,11 @@ class _PostEditorPageState extends State<PostEditorPage>
   /// sync; external content loads are picked up via BlockEditor's
   /// didUpdateWidget.
   Widget _buildVisualPane(AppState app) {
-    final l10n = AppLocalizations.of(context)!;
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-          child: TextField(
-            controller: _titleController,
-            style: Theme.of(context)
-                .textTheme
-                .headlineSmall
-                ?.copyWith(fontWeight: FontWeight.w700),
-            decoration: InputDecoration(
-              border: InputBorder.none,
-              hintText: l10n.postTitle,
-            ),
-            onChanged: _editor.updateTitle,
-          ),
+        _MirroredTitleField(
+          master: _titleController,
+          onChanged: _editor.updateTitle,
         ),
         const Divider(height: 1),
         Expanded(
@@ -814,23 +981,11 @@ class _PostEditorPageState extends State<PostEditorPage>
   }
 
   Widget _buildEditorPane(AppState app) {
-    final l10n = AppLocalizations.of(context)!;
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-          child: TextField(
-            controller: _titleController,
-            style: Theme.of(context)
-                .textTheme
-                .headlineSmall
-                ?.copyWith(fontWeight: FontWeight.w700),
-            decoration: InputDecoration(
-              border: InputBorder.none,
-              hintText: l10n.postTitle,
-            ),
-            onChanged: _editor.updateTitle,
-          ),
+        _MirroredTitleField(
+          master: _titleController,
+          onChanged: _editor.updateTitle,
         ),
         const Divider(height: 1),
         SingleChildScrollView(
@@ -862,10 +1017,9 @@ class _PostEditorPageState extends State<PostEditorPage>
               // resolve on iOS and rendered every glyph blank. Derive the
               // style from the theme (same resolution path as the title
               // field, which is proven to render).
-              style: Theme.of(context)
-                  .textTheme
-                  .bodyLarge
-                  ?.copyWith(fontSize: 14, height: 1.6),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyLarge?.copyWith(fontSize: 14, height: 1.6),
               decoration: InputDecoration(
                 border: InputBorder.none,
                 hintText: l10n.writePostHint,
@@ -929,10 +1083,10 @@ class _PostSettingsSheetState extends State<_PostSettingsSheet> {
   void initState() {
     super.initState();
     _excerptCtrl = TextEditingController(text: widget.editor.post.excerpt);
-    _slugCtrl =
-        TextEditingController(text: widget.editor.post.slug ?? '');
-    _passwordCtrl =
-        TextEditingController(text: widget.editor.post.password ?? '');
+    _slugCtrl = TextEditingController(text: widget.editor.post.slug ?? '');
+    _passwordCtrl = TextEditingController(
+      text: widget.editor.post.password ?? '',
+    );
   }
 
   @override
@@ -954,8 +1108,10 @@ class _PostSettingsSheetState extends State<_PostSettingsSheet> {
         controller: widget.scrollController,
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
         children: [
-          Text(l10n.postSettings,
-              style: Theme.of(context).textTheme.titleLarge),
+          Text(
+            l10n.postSettings,
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
           const SizedBox(height: 8),
 
           // --- Save local draft (offline writing) -------------------------
@@ -973,18 +1129,21 @@ class _PostSettingsSheetState extends State<_PostSettingsSheet> {
                 // id so a later save edits instead of duplicating).
                 await app.saveOfflinePost(editor.post);
               } else {
-                await app.saveLocalDraft(LocalDraft(
-                  id: app.newDraftId(),
-                  accountId: account.id,
-                  title: editor.post.title,
-                  content: editor.post.content,
-                  excerpt: editor.post.excerpt,
-                  slug: editor.post.slug,
-                  updatedAt: DateTime.now(),
-                ));
+                await app.saveLocalDraft(
+                  LocalDraft(
+                    id: app.newDraftId(),
+                    accountId: account.id,
+                    title: editor.post.title,
+                    content: editor.post.content,
+                    excerpt: editor.post.excerpt,
+                    slug: editor.post.slug,
+                    updatedAt: DateTime.now(),
+                  ),
+                );
               }
               messenger.showSnackBar(
-                  SnackBar(content: Text(l10n.savedOfflineDraft)));
+                SnackBar(content: Text(l10n.savedOfflineDraft)),
+              );
               if (context.mounted) Navigator.of(context).pop();
             },
           ),
@@ -996,16 +1155,24 @@ class _PostSettingsSheetState extends State<_PostSettingsSheet> {
           // status with rest_invalid_param (400). Trash stays available
           // for existing posts via the dashboard's "move to trash".
           DropdownButtonFormField<PostStatus>(
-            value: editor.post.status,
-            decoration: InputDecoration(
-                labelText: l10n.statusApplied),
-            items: (editor.post.isNew
-                    ? PostStatus.values
-                        .where((s) => s != PostStatus.trash)
-                    : PostStatus.values)
-                .map((s) =>
-                    DropdownMenuItem(value: s, child: Text(statusLabel(l10n, s))))
-                .toList(),
+            // `value` is deprecated (v3.33); `initialValue` is the replacement.
+            // Status is owned by the editor and can change externally, so a
+            // key tied to it re-creates the field and keeps the display in
+            // sync with `editor.post.status` (behavior-preserving).
+            key: ValueKey<PostStatus>(editor.post.status),
+            initialValue: editor.post.status,
+            decoration: InputDecoration(labelText: l10n.statusApplied),
+            items:
+                (editor.post.isNew
+                        ? PostStatus.values.where((s) => s != PostStatus.trash)
+                        : PostStatus.values)
+                    .map(
+                      (s) => DropdownMenuItem(
+                        value: s,
+                        child: Text(statusLabel(l10n, s)),
+                      ),
+                    )
+                    .toList(),
             onChanged: (v) => editor.updateStatus(v!),
           ),
           const SizedBox(height: 16),
@@ -1014,9 +1181,11 @@ class _PostSettingsSheetState extends State<_PostSettingsSheet> {
           ListTile(
             contentPadding: EdgeInsets.zero,
             title: Text(l10n.publishDate),
-            subtitle: Text(editor.post.datePublished == null
-                ? l10n.immediately
-                : '${editor.post.datePublished!.toLocal()}'),
+            subtitle: Text(
+              editor.post.datePublished == null
+                  ? l10n.immediately
+                  : '${editor.post.datePublished!.toLocal()}',
+            ),
             trailing: const Icon(Icons.calendar_month),
             onTap: () async {
               final picked = await showDatePicker(
@@ -1028,24 +1197,29 @@ class _PostSettingsSheetState extends State<_PostSettingsSheet> {
               if (picked == null || !context.mounted) return;
               final time = await showTimePicker(
                 context: context,
-                initialTime:
-                    TimeOfDay.fromDateTime(editor.post.datePublished ?? DateTime.now()),
+                initialTime: TimeOfDay.fromDateTime(
+                  editor.post.datePublished ?? DateTime.now(),
+                ),
               );
               if (time == null) return;
-              editor.setPublishDate(DateTime(
-                picked.year,
-                picked.month,
-                picked.day,
-                time.hour,
-                time.minute,
-              ));
+              editor.setPublishDate(
+                DateTime(
+                  picked.year,
+                  picked.month,
+                  picked.day,
+                  time.hour,
+                  time.minute,
+                ),
+              );
             },
           ),
 
           // --- Categories --------------------------------------------------
           if (app.categories.isNotEmpty) ...[
-            Text(l10n.categories,
-                style: Theme.of(context).textTheme.titleSmall),
+            Text(
+              l10n.categories,
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
             ...app.categories.map(
               (cat) => CheckboxListTile(
                 dense: true,
@@ -1066,7 +1240,10 @@ class _PostSettingsSheetState extends State<_PostSettingsSheet> {
             ),
             const SizedBox(height: 8),
           ] else if (editor.post.categories.isNotEmpty) ...[
-            Text(l10n.categories, style: Theme.of(context).textTheme.titleSmall),
+            Text(
+              l10n.categories,
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
             Wrap(
               spacing: 6,
               runSpacing: 6,
@@ -1095,7 +1272,11 @@ class _PostSettingsSheetState extends State<_PostSettingsSheet> {
               ),
             ),
             onSubmitted: (value) => editor.setTags(
-              value.split(',').map((t) => t.trim()).where((t) => t.isNotEmpty).toList(),
+              value
+                  .split(',')
+                  .map((t) => t.trim())
+                  .where((t) => t.isNotEmpty)
+                  .toList(),
             ),
           ),
           if (app.tagNames.isNotEmpty)
@@ -1106,15 +1287,17 @@ class _PostSettingsSheetState extends State<_PostSettingsSheet> {
                 runSpacing: 6,
                 children: app.tagNames
                     .take(15)
-                    .map((name) => ActionChip(
-                          label: Text(name),
-                          onPressed: () {
-                            final tags = List.of(editor.post.tags);
-                            if (!tags.contains(name)) tags.add(name);
-                            editor.setTags(tags);
-                            widget.tagController.text = tags.join(', ');
-                          },
-                        ))
+                    .map(
+                      (name) => ActionChip(
+                        label: Text(name),
+                        onPressed: () {
+                          final tags = List.of(editor.post.tags);
+                          if (!tags.contains(name)) tags.add(name);
+                          editor.setTags(tags);
+                          widget.tagController.text = tags.join(', ');
+                        },
+                      ),
+                    )
                     .toList(),
               ),
             ),
@@ -1145,6 +1328,11 @@ class _PostSettingsSheetState extends State<_PostSettingsSheet> {
           // which hides the post from everyone but the owner).
           TextField(
             controller: _passwordCtrl,
+            // Never echo it, and keep it out of the keyboard's suggestion /
+            // autocorrect cache, which persists across apps.
+            obscureText: true,
+            enableSuggestions: false,
+            autocorrect: false,
             decoration: InputDecoration(
               labelText: l10n.postPassword,
               helperText: l10n.postPasswordHelp,
@@ -1180,7 +1368,10 @@ class _PostSettingsSheetState extends State<_PostSettingsSheet> {
 
   /// Creates a category on the blog, then pre-selects it for this post.
   Future<void> _createCategory(
-      BuildContext context, AppState app, EditorState editor) async {
+    BuildContext context,
+    AppState app,
+    EditorState editor,
+  ) async {
     final l10n = AppLocalizations.of(context)!;
     final controller = TextEditingController();
     final name = await showDialog<String>(
@@ -1194,12 +1385,13 @@ class _PostSettingsSheetState extends State<_PostSettingsSheet> {
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text(l10n.cancel)),
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(l10n.cancel),
+          ),
           FilledButton(
-              onPressed: () =>
-                  Navigator.of(context).pop(controller.text.trim()),
-              child: Text(l10n.ok)),
+            onPressed: () => Navigator.of(context).pop(controller.text.trim()),
+            child: Text(l10n.ok),
+          ),
         ],
       ),
     ).whenComplete(controller.dispose);
@@ -1207,8 +1399,7 @@ class _PostSettingsSheetState extends State<_PostSettingsSheet> {
     final ok = await app.createCategory(name);
     if (!ok || !context.mounted) return;
     // Pre-select the freshly created category by name.
-    final created =
-        app.categories.where((c) => c.name == name).firstOrNull;
+    final created = app.categories.where((c) => c.name == name).firstOrNull;
     if (created != null && !editor.post.categories.contains(created.id)) {
       editor.toggleCategory(created.id);
     }

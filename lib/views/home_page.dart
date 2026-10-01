@@ -8,6 +8,7 @@ import 'package:share_plus/share_plus.dart';
 import '../l10n/app_localizations.dart';
 import '../models/blog.dart';
 import '../models/blog_post.dart';
+import '../services/error_message.dart';
 import '../services/local_draft_store.dart';
 import '../services/post_exporter.dart';
 import '../state/app_state.dart';
@@ -30,6 +31,9 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      // The route can be popped before the first frame is delivered; reading
+      // a disposed element's ancestor would assert.
+      if (!mounted) return;
       final app = context.read<AppState>();
       if (app.hasAccount &&
           app.posts.isEmpty &&
@@ -175,6 +179,10 @@ class _HomePageState extends State<HomePage> {
             child: visiblePosts.isEmpty && app.localDrafts.isEmpty
                 ? Center(child: Text(l10n.noPostsYet))
                 : ListView.separated(
+                    // Always scrollable: with the default physics a short
+                    // list (or the empty state) has nothing to scroll, so
+                    // pull-to-refresh never triggers on Android.
+                    physics: const AlwaysScrollableScrollPhysics(),
                     itemCount: app.localDrafts.length + visiblePosts.length,
                     separatorBuilder: (_, _) => const Divider(height: 1),
                     itemBuilder: (context, index) {
@@ -193,7 +201,10 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Future<void> _openAccountSettings(BuildContext context, AppState app) async {
+  void _openAccountSettings(BuildContext context, AppState app) {
+    // Not async: the sheet is intentionally fire-and-forget (see the comment
+    // below). Declaring Future<void> without awaiting anything misled callers
+    // into thinking they could observe its completion.
     final l10n = AppLocalizations.of(context)!;
     showModalBottomSheet<void>(
       context: context,
@@ -466,14 +477,14 @@ class _LocalDraftTile extends StatelessWidget {
       // published for the first time (newPost) and removed on success.
       final ok = draft.isOfflineCopy
           ? await app.syncOfflineCopy(draft)
-          : await app.publishLocalDraft(draft);
+          : await app.publishLocalDraft(draft, publish: true);
       if (!context.mounted) return;
       messenger.showSnackBar(SnackBar(
           content: Text(ok ? l10n.syncedToBlog : l10n.operationFailed(''))));
     } catch (e) {
       if (context.mounted) {
         messenger.showSnackBar(
-            SnackBar(content: Text(l10n.operationFailed('$e'))));
+            SnackBar(content: Text(l10n.operationFailed(userFacingError(e)))));
       }
     }
   }
@@ -666,7 +677,13 @@ class _PostTile extends StatelessWidget {
     final messenger = ScaffoldMessenger.of(context);
     final svc = app.service;
     final postId = post.id;
-    if (svc == null || postId == null) return;
+    if (svc == null || postId == null) {
+      // Was a bare `return`: the menu item appeared to do nothing.
+      messenger.showSnackBar(
+        SnackBar(content: Text(l10n.connectionFailed('no blog connection'))),
+      );
+      return;
+    }
 
     final picked = await showDatePicker(
       context: context,
@@ -686,6 +703,15 @@ class _PostTile extends StatelessWidget {
     if (time == null) return;
     final date = DateTime(
         picked.year, picked.month, picked.day, time.hour, time.minute);
+    // showDatePicker only constrains the calendar day; the time picker still
+    // returns an earlier hour when the day is today, producing a past
+    // timestamp — which publishes immediately instead of scheduling.
+    if (!date.isAfter(DateTime.now())) {
+      messenger.showSnackBar(
+        SnackBar(content: Text(l10n.schedulePostHelp)),
+      );
+      return;
+    }
 
     try {
       await svc.setPostStatus(postId, PostStatus.scheduled, date: date);
@@ -697,7 +723,7 @@ class _PostTile extends StatelessWidget {
     } catch (e) {
       if (context.mounted) {
         messenger.showSnackBar(
-            SnackBar(content: Text(l10n.operationFailed('$e'))));
+            SnackBar(content: Text(l10n.operationFailed(userFacingError(e)))));
       }
     }
   }
@@ -708,7 +734,12 @@ class _PostTile extends StatelessWidget {
     final messenger = ScaffoldMessenger.of(context);
     final svc = app.service;
     final postId = post.id;
-    if (svc == null || postId == null) return;
+    if (svc == null || postId == null) {
+      messenger.showSnackBar(
+        SnackBar(content: Text(l10n.connectionFailed('no blog connection'))),
+      );
+      return;
+    }
     try {
       // Send ONLY the status change: the full editPost payload is
       // last-write-wins and would clobber concurrent edits of the post
@@ -718,7 +749,7 @@ class _PostTile extends StatelessWidget {
     } catch (e) {
       if (context.mounted) {
         messenger.showSnackBar(
-            SnackBar(content: Text(l10n.operationFailed('$e'))));
+            SnackBar(content: Text(l10n.operationFailed(userFacingError(e)))));
       }
     }
   }
@@ -728,7 +759,12 @@ class _PostTile extends StatelessWidget {
     final l10n = AppLocalizations.of(context)!;
     final messenger = ScaffoldMessenger.of(context);
     final svc = app.service;
-    if (svc == null || post.id == null) return;
+    if (svc == null || post.id == null) {
+      messenger.showSnackBar(
+        SnackBar(content: Text(l10n.connectionFailed('no blog connection'))),
+      );
+      return;
+    }
     try {
       final full = await svc.getPost(post.id!, isPage: post.isPage);
       await app.saveOfflinePost(full);
@@ -739,7 +775,7 @@ class _PostTile extends StatelessWidget {
     } catch (e) {
       if (context.mounted) {
         messenger.showSnackBar(
-            SnackBar(content: Text(l10n.operationFailed('$e'))));
+            SnackBar(content: Text(l10n.operationFailed(userFacingError(e)))));
       }
     }
   }
@@ -748,8 +784,14 @@ class _PostTile extends StatelessWidget {
   /// system. Fetches the full post first — list entries can be partial.
   Future<void> _exportPost(BuildContext context, BlogPost post) async {
     final l10n = AppLocalizations.of(context)!;
+    final messenger = ScaffoldMessenger.of(context);
     final svc = app.service;
-    if (svc == null || post.id == null) return;
+    if (svc == null || post.id == null) {
+      messenger.showSnackBar(
+        SnackBar(content: Text(l10n.connectionFailed('no blog connection'))),
+      );
+      return;
+    }
     BlogPost full = post;
     try {
       full = await svc.getPost(post.id!, isPage: post.isPage);
@@ -786,7 +828,7 @@ class _PostTile extends StatelessWidget {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(l10n.operationFailed('$e'))));
+            SnackBar(content: Text(l10n.operationFailed(userFacingError(e)))));
       }
     }
   }
@@ -820,7 +862,7 @@ class _PostTile extends StatelessWidget {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(l10n.operationFailed('$e'))));
+            SnackBar(content: Text(l10n.operationFailed(userFacingError(e)))));
       }
     }
   }

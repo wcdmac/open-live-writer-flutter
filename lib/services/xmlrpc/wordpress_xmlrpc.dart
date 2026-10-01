@@ -33,8 +33,10 @@ class WordPressXmlRpcClient {
     // Preferred: wp.getUsersBlogs (WordPress flavor).
     if (flavor == XmlRpcFlavor.wordpress) {
       try {
-        final result = await _client.callMethod('wp.getUsersBlogs',
-            [_client.username, _client.password]);
+        final result = await _client.callMethod('wp.getUsersBlogs', [
+          _client.username,
+          _client.password,
+        ]);
         final blogs = _parseUserBlogs(result, 'wp.getUsersBlogs');
         if (blogs.isNotEmpty) return blogs;
       } on XmlRpcFault catch (e) {
@@ -44,23 +46,31 @@ class WordPressXmlRpcClient {
     }
 
     if (flavor == XmlRpcFlavor.blogger) {
-      final result = await _client.callMethod('blogger.getUsersBlogs',
-          ['', _client.username, _client.password]);
+      final result = await _client.callMethod('blogger.getUsersBlogs', [
+        '',
+        _client.username,
+        _client.password,
+      ]);
       return _parseUserBlogs(result, 'blogger.getUsersBlogs');
     }
 
     // MetaWeblog / MovableType servers commonly support blogger.getUsersBlogs.
     try {
-      final result = await _client.callMethod('blogger.getUsersBlogs',
-          ['', _client.username, _client.password]);
+      final result = await _client.callMethod('blogger.getUsersBlogs', [
+        '',
+        _client.username,
+        _client.password,
+      ]);
       final blogs = _parseUserBlogs(result, 'blogger.getUsersBlogs');
       if (blogs.isNotEmpty) return blogs;
     } on XmlRpcFault catch (e) {
       if (!_isMethodMissing(e)) rethrow;
     }
 
-    final result = await _client.callMethod(
-        'wp.getUsersBlogs', [_client.username, _client.password]);
+    final result = await _client.callMethod('wp.getUsersBlogs', [
+      _client.username,
+      _client.password,
+    ]);
     return _parseUserBlogs(result, 'wp.getUsersBlogs');
   }
 
@@ -95,7 +105,8 @@ class WordPressXmlRpcClient {
     bool pages = false,
     PostStatus? status,
   }) async {
-    if (flavor == XmlRpcFlavor.wordpress || flavor == XmlRpcFlavor.movabletype) {
+    if (flavor == XmlRpcFlavor.wordpress ||
+        flavor == XmlRpcFlavor.movabletype) {
       try {
         Future<List<BlogPost>> wpGetPosts(dynamic postStatus) async {
           final filter = <String, dynamic>{
@@ -107,8 +118,12 @@ class WordPressXmlRpcClient {
             // reject the multi-status filter.
             'post_status': postStatus,
           };
-          final result = await _client.callMethod(
-              'wp.getPosts', [_blogId, _client.username, _client.password, filter]);
+          final result = await _client.callMethod('wp.getPosts', [
+            _blogId,
+            _client.username,
+            _client.password,
+            filter,
+          ]);
           final rows = result is List ? result : [result];
           return rows
               .whereType<Map>()
@@ -116,31 +131,49 @@ class WordPressXmlRpcClient {
               .toList();
         }
 
-        if (status != null) {
-          return await wpGetPosts(status.wpValue);
-        }
         try {
-          return await wpGetPosts(
-              ['publish', 'draft', 'future', 'pending', 'private', 'trash']);
+          // P-13: mirror REST R4. When an explicit status is requested, try
+          // it first; if the role can't read it (e.g. `private` for a
+          // non-privileged author) the call faults — degrade to the broad
+          // editable-status query instead of blanking the dashboard.
+          if (status != null) {
+            try {
+              return await wpGetPosts(status.wpValue);
+            } on XmlRpcFault {
+              // fall through to the broad query below
+            }
+          }
+          return await wpGetPosts([
+            'publish',
+            'draft',
+            'future',
+            'pending',
+            'private',
+            'trash',
+          ]);
         } on XmlRpcFault {
           // Degrade: some servers / roles reject the status array or the
           // private status wholesale (mirrors the REST permission model).
           // Keep a no-private tier so scheduled/trashed posts survive for
           // roles without read_private_posts.
           try {
-            return await wpGetPosts(
-                ['publish', 'draft', 'future', 'pending', 'trash']);
+            return await wpGetPosts([
+              'publish',
+              'draft',
+              'future',
+              'pending',
+              'trash',
+            ]);
           } on XmlRpcFault {
             try {
               return await wpGetPosts(
-                  'publish,draft,future,pending,private,trash');
+                'publish,draft,future,pending,private,trash',
+              );
             } on XmlRpcFault {
               try {
-                return await wpGetPosts(
-                    'publish,draft,future,pending,trash');
+                return await wpGetPosts('publish,draft,future,pending,trash');
               } on XmlRpcFault {
-                return await wpGetPosts(
-                    'publish,draft,future,pending,private');
+                return await wpGetPosts('publish,draft,future,pending,private');
               }
             }
           }
@@ -150,8 +183,12 @@ class WordPressXmlRpcClient {
       }
     }
 
-    final result = await _client.callMethod('metaWeblog.getRecentPosts',
-        [_blogId, _client.username, _client.password, count]);
+    final result = await _client.callMethod('metaWeblog.getRecentPosts', [
+      _blogId,
+      _client.username,
+      _client.password,
+      count,
+    ]);
     final rows = result is List ? result : [result];
     return rows.whereType<Map>().map(_postFromMetaweblogStruct).toList();
   }
@@ -160,19 +197,27 @@ class WordPressXmlRpcClient {
   Future<BlogPost> getPost(String postId, {bool isPage = false}) async {
     if (flavor == XmlRpcFlavor.wordpress) {
       try {
-        final result = await _client.callMethod(
-            'wp.getPost',
-            [_blogId, _client.username, _client.password, int.tryParse(postId) ?? postId]);
+        final result = await _client.callMethod('wp.getPost', [
+          _blogId,
+          _client.username,
+          _client.password,
+          int.tryParse(postId) ?? postId,
+        ]);
         if (result is Map) return _postFromWpStruct(result, isPage: isPage);
       } on XmlRpcFault catch (e) {
         if (!_isMethodMissing(e)) rethrow;
       }
     }
-    final result = await _client.callMethod(
-        'metaWeblog.getPost', [postId, _client.username, _client.password]);
+    final result = await _client.callMethod('metaWeblog.getPost', [
+      postId,
+      _client.username,
+      _client.password,
+    ]);
     if (result is! Map) {
-      throw XmlRpcFault(-32700,
-          'metaWeblog.getPost returned unexpected data for post $postId');
+      throw XmlRpcFault(
+        -32700,
+        'metaWeblog.getPost returned unexpected data for post $postId',
+      );
     }
     return _postFromMetaweblogStruct(result);
   }
@@ -184,32 +229,42 @@ class WordPressXmlRpcClient {
   /// while the client reports a bogus "transport error".
   Future<String> newPost(BlogPost post, {required bool publish}) async {
     const saveTimeout = Duration(minutes: 3);
-    // WordPress rejects status=trash on creation (same as REST); degrade
-    // to draft instead of failing the whole save.
-    if (post.status == PostStatus.trash) post.status = PostStatus.draft;
-    if (flavor == XmlRpcFlavor.wordpress || flavor == XmlRpcFlavor.movabletype) {
+    // R5: compute the trash→draft downgrade LOCALLY — never mutate [post],
+    // or the caller's in-memory draft (offline copy) is silently changed.
+    final effectiveStatus = post.status == PostStatus.trash
+        ? PostStatus.draft
+        : post.status;
+    if (flavor == XmlRpcFlavor.wordpress ||
+        flavor == XmlRpcFlavor.movabletype) {
       try {
-        final content = _wpPostStruct(post, publish: publish);
-        final result = await _client.callMethod('wp.newPost',
-            [_blogId, _client.username, _client.password, content],
-            timeout: saveTimeout);
+        final content = _wpPostStruct(
+          post,
+          publish: publish,
+          effectiveStatus: effectiveStatus,
+        );
+        final result = await _client.callMethod('wp.newPost', [
+          _blogId,
+          _client.username,
+          _client.password,
+          content,
+        ], timeout: saveTimeout);
         return _asId(result);
       } on XmlRpcFault catch (e) {
         if (!_isMethodMissing(e)) rethrow;
       }
     }
     final content = _metaweblogPostStruct(post);
-    final result = await _client.callMethod('metaWeblog.newPost',
-        [_blogId, _client.username, _client.password, content, publish],
-        timeout: saveTimeout);
+    final result = await _client.callMethod('metaWeblog.newPost', [
+      _blogId,
+      _client.username,
+      _client.password,
+      content,
+      publish,
+    ], timeout: saveTimeout);
     final id = _asId(result);
-    // MetaWeblog needs out-of-band category + tag calls.
+    // MetaWeblog needs out-of-band category calls.
     if (post.categories.isNotEmpty) {
       await setPostCategories(id, post.categories);
-    }
-    if (post.tags.isNotEmpty) {
-      // mt_keywords is handled inside the struct for MT-compatible servers;
-      // WordPress XML-RPC reads tags from mt_keywords too.
     }
     return id;
   }
@@ -217,21 +272,34 @@ class WordPressXmlRpcClient {
   /// wp.editPost / metaWeblog.editPost.
   Future<bool> editPost(BlogPost post, {required bool publish}) async {
     const saveTimeout = Duration(minutes: 3);
-    if (flavor == XmlRpcFlavor.wordpress || flavor == XmlRpcFlavor.movabletype) {
+    if (flavor == XmlRpcFlavor.wordpress ||
+        flavor == XmlRpcFlavor.movabletype) {
       try {
-        final content = _wpPostStruct(post, publish: publish);
-        final result = await _client.callMethod('wp.editPost',
-            [_blogId, _client.username, _client.password, post.id, content],
-            timeout: saveTimeout);
+        final content = _wpPostStruct(
+          post,
+          publish: publish,
+          effectiveStatus: post.status,
+        );
+        final result = await _client.callMethod('wp.editPost', [
+          _blogId,
+          _client.username,
+          _client.password,
+          post.id,
+          content,
+        ], timeout: saveTimeout);
         return result == true || result == 1 || '$result' == 'true';
       } on XmlRpcFault catch (e) {
         if (!_isMethodMissing(e)) rethrow;
       }
     }
     final content = _metaweblogPostStruct(post);
-    final result = await _client.callMethod('metaWeblog.editPost',
-        [post.id, _client.username, _client.password, content, publish],
-        timeout: saveTimeout);
+    final result = await _client.callMethod('metaWeblog.editPost', [
+      post.id,
+      _client.username,
+      _client.password,
+      content,
+      publish,
+    ], timeout: saveTimeout);
     if (post.categories.isNotEmpty) {
       await setPostCategories(post.id!, post.categories);
     }
@@ -242,8 +310,11 @@ class WordPressXmlRpcClient {
   /// actions so a status change never re-sends (and overwrites) the whole
   /// post content. [date] accompanies scheduled transitions (WordPress
   /// needs a future date to keep status=future).
-  Future<bool> setPostStatus(String postId, PostStatus status,
-      {DateTime? date}) async {
+  Future<bool> setPostStatus(
+    String postId,
+    PostStatus status, {
+    DateTime? date,
+  }) async {
     final result = await _client.callMethod('wp.editPost', [
       _blogId,
       _client.username,
@@ -251,8 +322,7 @@ class WordPressXmlRpcClient {
       int.tryParse(postId) ?? postId,
       {
         'post_status': status.wpValue,
-        if (date != null)
-          'post_date_gmt': date.toUtc().toIso8601String(),
+        if (date != null) 'post_date_gmt': date.toUtc().toIso8601String(),
       },
     ]);
     return result == true || result == 1 || '$result' == 'true';
@@ -262,24 +332,34 @@ class WordPressXmlRpcClient {
   Future<bool> deletePost(String postId) async {
     if (flavor == XmlRpcFlavor.wordpress) {
       try {
-        final result = await _client.callMethod(
-            'wp.deletePost',
-            [_blogId, _client.username, _client.password,
-             int.tryParse(postId) ?? postId]);
+        final result = await _client.callMethod('wp.deletePost', [
+          _blogId,
+          _client.username,
+          _client.password,
+          int.tryParse(postId) ?? postId,
+        ]);
         return result == true || result == 1;
       } on XmlRpcFault catch (e) {
         if (!_isMethodMissing(e)) rethrow;
       }
     }
-    final result = await _client.callMethod('blogger.deletePost',
-        ['', postId, _client.username, _client.password, true]);
+    final result = await _client.callMethod('blogger.deletePost', [
+      '',
+      postId,
+      _client.username,
+      _client.password,
+      true,
+    ]);
     return result == true || result == 1;
   }
 
   /// mt.publishPost - force publish a draft.
   Future<bool> publishPost(String postId) async {
-    final result = await _client.callMethod(
-        'mt.publishPost', [postId, _client.username, _client.password]);
+    final result = await _client.callMethod('mt.publishPost', [
+      postId,
+      _client.username,
+      _client.password,
+    ]);
     return result != null;
   }
 
@@ -292,15 +372,20 @@ class WordPressXmlRpcClient {
     // WordPress flavor: wp.getCategories (hierarchical).
     if (flavor == XmlRpcFlavor.wordpress) {
       try {
-        final result = await _client.callMethod(
-            'wp.getCategories', [_blogId, _client.username, _client.password]);
+        final result = await _client.callMethod('wp.getCategories', [
+          _blogId,
+          _client.username,
+          _client.password,
+        ]);
         final rows = result is List ? result : [result];
         return rows.whereType<Map>().map((m) {
           return PostCategory(
             id: '${m['categoryId'] ?? m['category_id'] ?? ''}',
             name: '${m['categoryName'] ?? m['category_name'] ?? ''}',
             parentId: m['parentId'] == null ? null : '${m['parentId']}',
-            description: m['description'] == null ? null : '${m['description']}',
+            description: m['description'] == null
+                ? null
+                : '${m['description']}',
             slug: m['slug'] == null ? null : '${m['slug']}',
           );
         }).toList();
@@ -311,12 +396,17 @@ class WordPressXmlRpcClient {
 
     // MetaWeblog: metaWeblog.getCategories.
     try {
-      final result = await _client.callMethod('metaWeblog.getCategories',
-          [_blogId, _client.username, _client.password]);
+      final result = await _client.callMethod('metaWeblog.getCategories', [
+        _blogId,
+        _client.username,
+        _client.password,
+      ]);
       final rows = result is List ? result : [result];
       return rows.whereType<Map>().map((m) {
         return PostCategory(
-          id: '${m['categoryId'] ?? m['categoryid'] ?? m['description'] ?? ''}',
+          // C5: a category id is never its description — using `description`
+          // as a fallback id produced a bogus id (and a broken term lookup).
+          id: '${m['categoryId'] ?? m['categoryid'] ?? ''}',
           name: '${m['categoryName'] ?? m['name'] ?? m['title'] ?? ''}',
           description: m['description'] == null ? null : '${m['description']}',
           slug: m['slug'] == null ? null : '${m['slug']}',
@@ -327,8 +417,11 @@ class WordPressXmlRpcClient {
     }
 
     // MovableType: mt.getCategoryList.
-    final result = await _client.callMethod(
-        'mt.getCategoryList', [_blogId, _client.username, _client.password]);
+    final result = await _client.callMethod('mt.getCategoryList', [
+      _blogId,
+      _client.username,
+      _client.password,
+    ]);
     final rows = result is List ? result : [result];
     return rows.whereType<Map>().map((m) {
       return PostCategory(
@@ -340,23 +433,34 @@ class WordPressXmlRpcClient {
   }
 
   /// wp.newCategory. Returns the new category id.
-  Future<String> newCategory(String name, {String? parentId, String? slug}) async {
+  Future<String> newCategory(
+    String name, {
+    String? parentId,
+    String? slug,
+  }) async {
     final struct = <String, dynamic>{
       'name': name,
       'slug': ?slug,
       if (parentId != null && parentId.isNotEmpty)
         'parent_id': int.tryParse(parentId) ?? parentId,
     };
-    final result = await _client.callMethod(
-        'wp.newCategory', [_blogId, _client.username, _client.password, struct]);
+    final result = await _client.callMethod('wp.newCategory', [
+      _blogId,
+      _client.username,
+      _client.password,
+      struct,
+    ]);
     return _asId(result);
   }
 
   /// mt.getPostCategories for a post.
   Future<List<String>> getPostCategories(String postId) async {
     try {
-      final result = await _client.callMethod(
-          'mt.getPostCategories', [postId, _client.username, _client.password]);
+      final result = await _client.callMethod('mt.getPostCategories', [
+        postId,
+        _client.username,
+        _client.password,
+      ]);
       final rows = result is List ? result : [result];
       return rows
           .whereType<Map>()
@@ -369,19 +473,29 @@ class WordPressXmlRpcClient {
   }
 
   /// mt.setPostCategories.
-  Future<void> setPostCategories(String postId, List<String> categoryIds) async {
+  Future<void> setPostCategories(
+    String postId,
+    List<String> categoryIds,
+  ) async {
     final categories = categoryIds
         .map((id) => {'categoryId': int.tryParse(id) ?? id})
         .toList();
-    await _client.callMethod(
-        'mt.setPostCategories', [postId, _client.username, _client.password, categories]);
+    await _client.callMethod('mt.setPostCategories', [
+      postId,
+      _client.username,
+      _client.password,
+      categories,
+    ]);
   }
 
   /// Port of WordPressGetKeywords (wp.getTags).
   Future<List<PostTag>> getTags() async {
     try {
-      final result = await _client.callMethod(
-          'wp.getTags', [_blogId, _client.username, _client.password]);
+      final result = await _client.callMethod('wp.getTags', [
+        _blogId,
+        _client.username,
+        _client.password,
+      ]);
       final rows = result is List ? result : [result];
       return rows.whereType<Map>().map((m) {
         return PostTag(
@@ -406,7 +520,10 @@ class WordPressXmlRpcClient {
   /// base64-encoded (~33% larger), and the server re-encodes images — the
   /// default 30s call timeout aborts them mid-flight (transport error -32300).
   Future<MediaUploadResult> uploadMedia(
-      String filename, List<int> bytes, String mimeType) async {
+    String filename,
+    List<int> bytes,
+    String mimeType,
+  ) async {
     const uploadTimeout = Duration(minutes: 5);
     final data = <String, dynamic>{
       'name': filename,
@@ -415,28 +532,41 @@ class WordPressXmlRpcClient {
       if (flavor == XmlRpcFlavor.wordpress) 'overwrite': false,
     };
     try {
-      final result = await _client.callMethod(
-          'wp.uploadFile', [_blogId, _client.username, _client.password, data],
-          timeout: uploadTimeout);
+      final result = await _client.callMethod('wp.uploadFile', [
+        _blogId,
+        _client.username,
+        _client.password,
+        data,
+      ], timeout: uploadTimeout);
       if (result is Map) return _mediaFromStruct(result);
     } on XmlRpcFault catch (e) {
       if (!_isMethodMissing(e)) rethrow;
     }
-    final result = await _client.callMethod(
-        'metaWeblog.newMediaObject',
-        [_blogId, _client.username, _client.password, data],
-        timeout: uploadTimeout);
-    return _mediaFromStruct(result as Map);
+    final result = await _client.callMethod('metaWeblog.newMediaObject', [
+      _blogId,
+      _client.username,
+      _client.password,
+      data,
+    ], timeout: uploadTimeout);
+    if (result is! Map) {
+      // metaWeblog.newMediaObject is documented to return a struct; a scalar
+      // or array payload means the server spoke a different dialect. Surface a
+      // typed error instead of letting `result as Map` throw an opaque
+      // CastError downstream.
+      throw StateError(
+        'uploadMedia: expected struct response, got ${result.runtimeType}',
+      );
+    }
+    return _mediaFromStruct(result);
   }
 
   MediaUploadResult _mediaFromStruct(Map m) => MediaUploadResult(
-        id: '${m['id'] ?? m['attachment_id'] ?? ''}',
-        url: '${m['url'] ?? ''}',
-        file: m['file'] == null ? null : '${m['file']}',
-        type: m['type'] == null ? null : '${m['type']}',
-        thumbnailUrl:
-            m['thumbnail'] == null ? null : '${m['thumbnail']}',
-      );
+    id: '${m['id'] ?? m['attachment_id'] ?? ''}',
+    url: '${m['url'] ?? ''}',
+    file: m['file'] == null ? null : '${m['file']}',
+    type: m['type'] == null ? null : '${m['type']}',
+    thumbnailUrl: m['thumbnail'] == null ? null : '${m['thumbnail']}',
+  );
 
   // ---------------------------------------------------------------------------
   // Options, profile, comments (WordPress extras)
@@ -445,8 +575,11 @@ class WordPressXmlRpcClient {
   /// wp.getOptions - returns raw name/value map.
   Future<Map<String, String>> getOptions() async {
     try {
-      final result = await _client.callMethod(
-          'wp.getOptions', [_blogId, _client.username, _client.password]);
+      final result = await _client.callMethod('wp.getOptions', [
+        _blogId,
+        _client.username,
+        _client.password,
+      ]);
       final map = <String, String>{};
       if (result is Map) {
         result.forEach((key, value) {
@@ -465,8 +598,11 @@ class WordPressXmlRpcClient {
 
   /// wp.getProfile.
   Future<Map<String, dynamic>> getProfile() async {
-    final result = await _client.callMethod(
-        'wp.getProfile', [_blogId, _client.username, _client.password]);
+    final result = await _client.callMethod('wp.getProfile', [
+      _blogId,
+      _client.username,
+      _client.password,
+    ]);
     return result is Map ? Map<String, dynamic>.from(result) : const {};
   }
 
@@ -477,10 +613,13 @@ class WordPressXmlRpcClient {
         _blogId,
         _client.username,
         _client.password,
-        {'number': count, 'status': 'hold'}
+        {'number': count, 'status': 'hold'},
       ]);
       final rows = result is List ? result : [result];
-      return rows.whereType<Map>().map((m) => Map<String, dynamic>.from(m)).toList();
+      return rows
+          .whereType<Map>()
+          .map((m) => Map<String, dynamic>.from(m))
+          .toList();
     } on XmlRpcFault {
       return const [];
     }
@@ -491,12 +630,16 @@ class WordPressXmlRpcClient {
   // ---------------------------------------------------------------------------
 
   /// WordPress content struct (wp.newPost / wp.editPost).
-  Map<String, dynamic> _wpPostStruct(BlogPost post, {required bool publish}) {
-    // publish=false means "Save draft"; publish=true sends the status
-    // exactly as the editor chose it (EditorState handles the untouched
-    // draft → publish default) — converting here would silently revert
-    // explicit choices like published → draft.
-    final status = publish ? post.status : PostStatus.draft;
+  Map<String, dynamic> _wpPostStruct(
+    BlogPost post, {
+    required bool publish,
+    required PostStatus effectiveStatus,
+  }) {
+    // C3: send the effective status verbatim. A "save draft" (publish=false)
+    // now honors an explicit non-draft status the user selected (e.g.
+    // "pending review") instead of always reverting to draft; the trash→draft
+    // downgrade was applied to a local copy (R5) so [post] is never mutated.
+    final status = effectiveStatus;
     return {
       'post_type': post.isPage ? 'page' : 'post',
       'post_status': status.wpValue,
@@ -504,21 +647,27 @@ class WordPressXmlRpcClient {
       'post_content': post.content,
       'post_excerpt': post.excerpt,
       if (post.slug?.isNotEmpty == true) 'post_name': post.slug,
-      if (post.datePublished != null) 'post_date_gmt': post.datePublished,
+      // P-14: WordPress expects post_date_gmt in UTC. A local DateTime here
+      // would silently store the wrong scheduled time — normalize to UTC.
+      if (post.datePublished != null)
+        'post_date_gmt': post.datePublished!.toUtc(),
       if (post.password?.isNotEmpty == true) 'post_password': post.password,
       if (post.isPage) ...{
         if (post.pageParentId?.isNotEmpty == true)
-          'wp_page_parent_id': int.tryParse(post.pageParentId!) ?? post.pageParentId,
+          'wp_page_parent_id':
+              int.tryParse(post.pageParentId!) ?? post.pageParentId,
         if (post.pageOrder != null) 'wp_page_order': post.pageOrder,
       } else ...{
         // Tags: numeric values are term ids; names must ride terms_names
         // (wp.newPost creates them server-side) — the plain terms field
         // accepts ids only, so names there are silently dropped.
         ...() {
-          final tagIds =
-              post.tags.where((t) => int.tryParse(t) != null).toList();
-          final tagNames =
-              post.tags.where((t) => int.tryParse(t) == null).toList();
+          final tagIds = post.tags
+              .where((t) => int.tryParse(t) != null)
+              .toList();
+          final tagNames = post.tags
+              .where((t) => int.tryParse(t) == null)
+              .toList();
           return {
             'terms': {
               'category': post.categories
@@ -526,8 +675,7 @@ class WordPressXmlRpcClient {
                   .toList(),
               if (tagIds.isNotEmpty) 'post_tag': tagIds,
             },
-            if (tagNames.isNotEmpty)
-              'terms_names': {'post_tag': tagNames},
+            if (tagNames.isNotEmpty) 'terms_names': {'post_tag': tagNames},
           };
         }(),
         'comment_status': post.commentsEnabled ? 'open' : 'closed',
@@ -605,6 +753,7 @@ class WordPressXmlRpcClient {
       authorId: m['post_author'] == null ? null : '${m['post_author']}',
       dateCreated: parseDate(m['post_date_gmt'] ?? m['post_date']),
       datePublished: parseDate(m['post_date_gmt'] ?? m['post_date']),
+      modified: parseDate(m['post_modified_gmt'] ?? m['post_modified']),
       commentsEnabled: '${m['comment_status'] ?? 'open'}' == 'open',
       pingsEnabled: '${m['ping_status'] ?? 'open'}' == 'open',
       categories: extractTerms(m['terms'], 'category'),

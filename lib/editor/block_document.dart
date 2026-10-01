@@ -257,10 +257,11 @@ String? firstImgAlt(String html) {
 /// and frontend themes have no centering styles.
 String buildImageHtml(String src, String alt,
     {String? caption, String? figureClass, String? imgAttrs}) {
-  final img = '<img src="$src" alt="$alt"${imgAttrs == null ? '' : ' $imgAttrs'} />';
+  final img = '<img src="${_htmlAttr(src)}" alt="${_htmlAttr(alt)}"'
+      '${imgAttrs == null ? '' : ' $imgAttrs'} />';
   final cap = (caption == null || caption.trim().isEmpty)
       ? ''
-      : '<figcaption>${caption.trim()}</figcaption>';
+      : '<figcaption>${_encodeEntities(caption.trim())}</figcaption>';
   return '<figure class="${figureClass ?? 'wp-block-image'}">$img$cap</figure>';
 }
 
@@ -268,7 +269,7 @@ String buildImageHtml(String src, String alt,
 /// `wp-block-video` figure wrapper, matching the block editor's own
 /// output so frontend alignment styles apply.
 String buildVideoFileHtml(String url) =>
-    '<figure class="wp-block-video"><video controls src="$url">'
+    '<figure class="wp-block-video"><video controls src="${_htmlAttr(url)}">'
     '</video></figure>';
 
 /// Heading level (1-6) from `<hN>` markup, defaulting to 2.
@@ -308,6 +309,18 @@ String? firstEmbedUrl(String html) {
 /// when they look like a media file, else an iframe.
 String buildVideoEmbed(String url) {
   final u = url.trim();
+  // Never emit an iframe/embed source that is not plain http(s). A pasted
+  // `javascript:` or `data:` URL would otherwise be embedded verbatim and
+  // executed by whatever renders the post. Degrade to visible escaped text
+  // so the input is preserved but inert.
+  //
+  // Scheme-less input ("youtube.com/watch?v=…") is completed to https first:
+  // the matchers below accept it, so rejecting it here would be a regression
+  // for the common paste-a-bare-link case.
+  final candidate = u.contains('://') ? u : 'https://$u';
+  if (!isSafeEmbedUrl(candidate)) {
+    return '<p>${_encodeEntities(u)}</p>';
+  }
   // Canonicalize youtu.be short links to the watch form so they take the
   // wp:embed path instead of degrading to a bare iframe.
   final short = RegExp(r'^(?:https?://)?youtu\.be/([\w-]{6,})').firstMatch(u);
@@ -321,14 +334,14 @@ String buildVideoEmbed(String url) {
   if (yt != null) {
     return '<figure class="wp-block-embed is-type-video is-provider-youtube wp-block-embed-youtube wp-embed-aspect-16-9 wp-has-aspect-ratio">'
         '<div class="wp-block-embed__wrapper">\n'
-        'https://www.youtube.com/watch?v=${yt.group(1)}\n'
+        '${_encodeEntities('https://www.youtube.com/watch?v=${yt.group(1)}')}\n'
         '</div></figure>';
   }
   if (RegExp(r'\.(mp4|webm|ogg|m4v)(\?|$)', caseSensitive: false)
       .hasMatch(u)) {
-    return '<video controls src="$u"></video>';
+    return '<video controls src="${_htmlAttr(u)}"></video>';
   }
-  return '<iframe src="$u" width="640" height="360" frameborder="0" '
+  return '<iframe src="${_htmlAttr(u)}" width="640" height="360" frameborder="0" '
       'allowfullscreen></iframe>';
 }
 
@@ -627,3 +640,31 @@ String _encodeEntities(String s) => s
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;');
+
+/// Escapes a value destined for an HTML *attribute* (e.g. an <img> src or
+/// alt). Double quotes must be escaped or a crafted value (`alt="><script>`)
+/// breaks out of the attribute and corrupts / injects into the post markup.
+/// `&`/`<`/`>` are escaped too so URLs and captions round-trip intact.
+String _htmlAttr(String s) => s
+    .replaceAll('&', '&amp;')
+    .replaceAll('"', '&quot;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;');
+
+/// Public entry point to the attribute escaper, for callers outside this
+/// library that assemble HTML by hand (e.g. the toolbar's "insert link").
+/// Leaving a user-supplied URL unescaped lets a stray `"` close the attribute
+/// and inject arbitrary markup into the post.
+String htmlAttr(String value) => _htmlAttr(value);
+
+/// True when [url] may be used as the source of an embedded frame / media
+/// element.
+///
+/// Only `http`/`https` are accepted: `javascript:` and `data:` URLs pasted
+/// into the video field would otherwise be embedded verbatim and executed in
+/// whatever context renders the post.
+bool isSafeEmbedUrl(String url) {
+  final uri = Uri.tryParse(url.trim());
+  if (uri == null) return false;
+  return (uri.scheme == 'http' || uri.scheme == 'https') && uri.host.isNotEmpty;
+}
