@@ -7,7 +7,6 @@ import 'dart:io' show Platform;
 /// `/Users/alice/Documents/...` or `C:\Users\bob\...`). Rendering or logging
 /// them leaks the machine layout and account name, so the UI only ever sees
 /// the file name and diagnostics get a `~`-collapsed form.
-library;
 
 /// The current user's home directory, or `null` when it cannot be resolved.
 String? get _userHome {

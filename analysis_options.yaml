@@ -25,7 +25,6 @@ linter:
     # absolute paths). Reported as info (non-fatal under --no-fatal-infos).
     avoid_print: true
     prefer_single_quotes: true
-    curly_braces_in_flow_control_statements: true
 
 # Additional information about this file can be found at
 # https://dart.dev/guides/language/analysis-options

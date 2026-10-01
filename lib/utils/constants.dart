@@ -8,7 +8,7 @@ library;
 const int kImageUploadQuality = 90;
 
 /// Maximum pixel width images are resized to before upload.
-const int kImageMaxWidth = 2560;
+const double kImageMaxWidth = 2560.0;
 
 /// Debounce window for coalescing undo-history snapshots while typing.
 const Duration kHistoryDebounce = Duration(milliseconds: 700);
