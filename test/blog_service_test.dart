@@ -15,26 +15,44 @@ BlogAccount _account({BlogProtocol protocol = BlogProtocol.rest}) => BlogAccount
 
 void main() {
   group('BlogService', () {
-    // ----------------------------------------------------------------- P-04
-    test('disposed service throws instead of rebuilding a leaked client (P-04)',
-        () {
+    // P2-8: the protocol client is chosen once at construction. Both paths
+    // must build (no network at construction) and dispose cleanly + idempotently
+    // so the underlying HTTP pool is never leaked across account switches.
+    test('REST service constructs and disposes idempotently', () {
       final svc = BlogService(_account(), 'p');
-      // Before dispose, clients are constructed lazily (no network call).
-      expect(svc.rest, isNotNull);
-      expect(svc.xmlrpc, isNotNull);
-
       svc.dispose();
-      // After dispose, any access must fail loudly rather than silently
-      // allocate a new http.Client that would never be closed.
-      expect(() => svc.rest, throwsA(isA<StateError>()));
-      expect(() => svc.xmlrpc, throwsA(isA<StateError>()));
+      svc.dispose(); // must not throw
     });
 
-    test('dispose is idempotent', () {
+    test('XML-RPC service constructs and disposes idempotently', () {
       final svc = BlogService(_account(protocol: BlogProtocol.xmlrpc), 'p');
       svc.dispose();
       svc.dispose(); // must not throw
-      expect(() => svc.xmlrpc, throwsA(isA<StateError>()));
+    });
+
+    test('facade exposes the same operation surface for both protocols', () {
+      // Compile-time + shape check: the unified facade exposes every operation
+      // regardless of transport, so callers never branch on protocol.
+      final rest = BlogService(_account(), 'p');
+      final xml = BlogService(_account(protocol: BlogProtocol.xmlrpc), 'p');
+      for (final svc in [rest, xml]) {
+        expect(svc.getUsersBlogs, isNotNull);
+        expect(svc.getProfile, isNotNull);
+        expect(svc.getPosts, isNotNull);
+        expect(svc.getPost, isNotNull);
+        expect(svc.newPost, isNotNull);
+        expect(svc.editPost, isNotNull);
+        expect(svc.setPostStatus, isNotNull);
+        expect(svc.deletePost, isNotNull);
+        expect(svc.getCategories, isNotNull);
+        expect(svc.getTags, isNotNull);
+        expect(svc.newCategory, isNotNull);
+        expect(svc.uploadMedia, isNotNull);
+        expect(svc.getOptions, isNotNull);
+        expect(svc.detectTheme, isNotNull);
+      }
+      rest.dispose();
+      xml.dispose();
     });
   });
 }

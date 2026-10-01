@@ -1,3 +1,4 @@
+import 'dart:async' show unawaited;
 import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
@@ -25,13 +26,65 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
+/// Immutable snapshot of the [AppState] slices the dashboard renders (P1-4).
+///
+/// A [Selector] rebuilds [HomePage] only when one of these fields changes, so
+/// unrelated mutations (theme/tags/categories) don't redraw the post list.
+/// [app] is kept for fire-and-forget callbacks that must never subscribe.
+class _HomeView {
+  _HomeView(this.app);
+
+  final AppState app;
+
+  bool get hasAccount => app.hasAccount;
+  String? get error => app.error;
+  bool get loading => app.loading;
+  bool get loadingMore => app.loadingMore;
+  bool get canLoadMore => app.canLoadMore;
+  List<BlogPost> get posts => app.posts;
+  List<LocalDraft> get localDrafts => app.localDrafts;
+  String? get currentAccountId => app.currentAccount?.id;
+  List<BlogAccount> get accounts => app.accounts;
+
+  @override
+  bool operator ==(Object other) =>
+      other is _HomeView &&
+      hasAccount == other.hasAccount &&
+      error == other.error &&
+      loading == other.loading &&
+      loadingMore == other.loadingMore &&
+      canLoadMore == other.canLoadMore &&
+      identical(posts, other.posts) &&
+      identical(localDrafts, other.localDrafts) &&
+      currentAccountId == other.currentAccountId &&
+      identical(accounts, other.accounts);
+
+  @override
+  int get hashCode => Object.hash(
+        hasAccount,
+        error,
+        loading,
+        loadingMore,
+        canLoadMore,
+        identityHashCode(posts),
+        identityHashCode(localDrafts),
+        currentAccountId,
+        identityHashCode(accounts),
+      );
+}
+
 class _HomePageState extends State<HomePage> {
   /// Status filter for the dashboard list; null shows everything.
   PostStatus? _statusFilter;
 
+  /// Drives infinite-scroll paging (P1-5): when the list is scrolled near
+  /// its end, [AppState.loadMorePosts] is invoked if more posts exist.
+  final ScrollController _scrollController = ScrollController();
+
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_onScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // The route can be popped before the first frame is delivered; reading
       // a disposed element's ancestor would assert.
@@ -47,44 +100,70 @@ class _HomePageState extends State<HomePage> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final app = context.watch<AppState>();
-    final l10n = AppLocalizations.of(context)!;
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
 
-    if (!app.hasAccount) {
-      return const AddAccountPage(embedded: true);
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    final app = context.read<AppState>();
+    // Within 400px of the bottom (and not already fetching) → load next page.
+    if (_scrollController.position.pixels >=
+            _scrollController.position.maxScrollExtent - 400 &&
+        app.canLoadMore &&
+        !app.loadingMore &&
+        !app.loading) {
+      unawaited(app.loadMorePosts());
     }
+  }
 
-    return Scaffold(
-      appBar: AppBar(
-        title: _BlogSwitcher(app: app),
-        actions: [
-          IconButton(
-            tooltip: l10n.refresh,
-            icon: app.loading
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.refresh),
-            onPressed: app.loading ? null : () => app.refresh(),
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    // P1-4: rebuild only on the slices the dashboard actually renders, not on
+    // every AppState change (theme/tags/categories edits no longer rebuild the
+    // whole home screen). Callbacks keep the live [AppState] via the snapshot
+    // and never subscribe themselves.
+    return Selector<AppState, _HomeView>(
+      selector: (_, a) => _HomeView(a),
+      shouldRebuild: (prev, next) => prev != next,
+      builder: (context, view, _) {
+        if (!view.hasAccount) {
+          return const AddAccountPage(embedded: true);
+        }
+        return Scaffold(
+          appBar: AppBar(
+            title: _BlogSwitcher(app: view.app),
+            actions: [
+              IconButton(
+                tooltip: l10n.refresh,
+                icon: view.loading
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.refresh),
+                onPressed: view.loading ? null : () => view.app.refresh(),
+              ),
+              IconButton(
+                tooltip: l10n.manageAccounts,
+                icon: const Icon(Icons.settings),
+                onPressed: () => _openAccountSettings(context, view.app),
+              ),
+            ],
           ),
-          IconButton(
-            tooltip: l10n.manageAccounts,
-            icon: const Icon(Icons.settings),
-            onPressed: () => _openAccountSettings(context, app),
+          body: _buildBody(context, view.app),
+          floatingActionButton: FloatingActionButton.extended(
+            icon: const Icon(Icons.edit),
+            label: Text(l10n.newPost),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const PostEditorPage()),
+            ),
           ),
-        ],
-      ),
-      body: _buildBody(context, app),
-      floatingActionButton: FloatingActionButton.extended(
-        icon: const Icon(Icons.edit),
-        label: Text(l10n.newPost),
-        onPressed: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const PostEditorPage()),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -181,19 +260,32 @@ class _HomePageState extends State<HomePage> {
             child: visiblePosts.isEmpty && app.localDrafts.isEmpty
                 ? Center(child: Text(l10n.noPostsYet))
                 : ListView.separated(
+                    // P1-5: drive infinite scroll through this controller.
+                    controller: _scrollController,
                     // Always scrollable: with the default physics a short
                     // list (or the empty state) has nothing to scroll, so
                     // pull-to-refresh never triggers on Android.
                     physics: const AlwaysScrollableScrollPhysics(),
-                    itemCount: app.localDrafts.length + visiblePosts.length,
+                    itemCount: app.localDrafts.length +
+                        visiblePosts.length +
+                        (app.canLoadMore ? 1 : 0),
                     separatorBuilder: (_, _) => const Divider(height: 1),
                     itemBuilder: (context, index) {
                       if (index < app.localDrafts.length) {
                         return _LocalDraftTile(
                             draft: app.localDrafts[index], app: app);
                       }
-                      final post =
-                          visiblePosts[index - app.localDrafts.length];
+                      final postIndex = index - app.localDrafts.length;
+                      // P1-5: trailing "load more" footer (spinner while
+                      // fetching, tappable otherwise).
+                      if (postIndex == visiblePosts.length &&
+                          app.canLoadMore) {
+                        return _LoadMoreFooter(
+                          loading: app.loadingMore,
+                          onTap: () => unawaited(app.loadMorePosts()),
+                        );
+                      }
+                      final post = visiblePosts[postIndex];
                       return _PostTile(post: post, app: app);
                     },
                   ),
@@ -934,6 +1026,37 @@ void showExportedPath(BuildContext context, String path, {String? detail}) {
       ],
     ),
   );
+}
+
+/// Trailing footer of the dashboard list (P1-5): shows a spinner while the
+/// next page loads, or a tappable "Load more" affordance when more posts
+/// exist but the list isn't scrolled to the bottom.
+class _LoadMoreFooter extends StatelessWidget {
+  const _LoadMoreFooter({required this.loading, required this.onTap});
+
+  final bool loading;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    if (loading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 16),
+        child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+      );
+    }
+    final l10n = AppLocalizations.of(context)!;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Center(
+        child: TextButton.icon(
+          onPressed: onTap,
+          icon: const Icon(Icons.expand_more),
+          label: Text(l10n.loadMore),
+        ),
+      ),
+    );
+  }
 }
 
 class _StatusChip extends StatelessWidget {

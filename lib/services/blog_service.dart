@@ -1,5 +1,6 @@
 import '../models/blog.dart';
 import '../models/blog_post.dart';
+import 'blog_protocol_client.dart';
 import 'rest/wordpress_rest.dart';
 import 'theme_detector.dart';
 import 'xmlrpc/wordpress_xmlrpc.dart';
@@ -10,76 +11,43 @@ import 'xmlrpc/xmlrpc_client.dart';
 ///
 /// This is the Flutter equivalent of OpenLiveWriter.BlogClient's
 /// BlogClientProvider layer: same operations, modern transports.
+///
+/// P2-8: the protocol is chosen ONCE at construction (a [BlogProtocolClient]
+/// per transport), so there are no per-method ternary branches and the
+/// REST/XML-RPC field mapping lives in exactly one file
+/// ([blog_protocol_client.dart]).
 class BlogService {
-  BlogService(this.account, this.password);
+  BlogService(this.account, this.password)
+      : _client = account.protocol == BlogProtocol.rest
+            ? RestProtocolClient(
+                WordPressRestClient(
+                  baseUrl: account.apiUrl,
+                  username: account.username,
+                  password: password,
+                  authMethod: account.restAuth,
+                ),
+                account: account,
+              )
+            : XmlRpcProtocolClient(
+                WordPressXmlRpcClient(
+                  xmlRpcClientFor(account, password),
+                  flavor: account.flavor,
+                )..blogId = account.blogId,
+                flavor: account.flavor,
+              );
 
   final BlogAccount account;
   final String password;
 
-  WordPressXmlRpcClient? _xmlrpc;
-  WordPressRestClient? _rest;
-  bool _disposed = false;
-
-  WordPressXmlRpcClient get xmlrpc {
-    // P-04: after dispose() the cached clients are gone. Rebuilding a fresh
-    // client here would leak an unreferenced http.Client that is never closed
-    // — fail loudly instead so the caller drops the stale reference.
-    if (_disposed) {
-      throw StateError(
-        'BlogService for ${account.homepageUrl} has been disposed; '
-        'cannot use its XML-RPC client.',
-      );
-    }
-    if (_xmlrpc == null) {
-      final client = xmlRpcClientFor(account, password);
-      final wp = WordPressXmlRpcClient(client, flavor: account.flavor);
-      wp.blogId = account.blogId;
-      _xmlrpc = wp;
-    }
-    return _xmlrpc!;
-  }
-
-  WordPressRestClient get rest {
-    // P-04: see [xmlrpc] — never rebuild a client after disposal.
-    if (_disposed) {
-      throw StateError(
-        'BlogService for ${account.homepageUrl} has been disposed; '
-        'cannot use its REST client.',
-      );
-    }
-    return _rest ??= WordPressRestClient(
-      baseUrl: account.apiUrl,
-      username: account.username,
-      password: password,
-      authMethod: account.restAuth,
-    );
-  }
+  final BlogProtocolClient _client;
 
   // -------------------------------------------------------------------------
   // Blogs / profile
   // -------------------------------------------------------------------------
 
-  Future<List<BlogInfo>> getUsersBlogs() =>
-      account.protocol == BlogProtocol.rest
-      ? _restUserBlogs()
-      : xmlrpc.getUsersBlogs();
+  Future<List<BlogInfo>> getUsersBlogs() => _client.getUsersBlogs();
 
-  Future<List<BlogInfo>> _restUserBlogs() async {
-    final profile = await rest.getProfile();
-    final index = await rest.getSiteIndex();
-    return [
-      BlogInfo(
-        blogId: account.blogId,
-        name: '${index['name'] ?? profile['name'] ?? 'Blog'}',
-        url: account.homepageUrl,
-      ),
-    ];
-  }
-
-  Future<Map<String, dynamic>> getProfile() =>
-      account.protocol == BlogProtocol.rest
-      ? rest.getProfile()
-      : xmlrpc.getProfile();
+  Future<Map<String, dynamic>> getProfile() => _client.getProfile();
 
   // -------------------------------------------------------------------------
   // Posts
@@ -87,32 +55,28 @@ class BlogService {
 
   Future<List<BlogPost>> getPosts({
     int count = 30,
+    int offset = 0,
     bool pages = false,
     PostStatus? status,
     List<String>? fields,
-  }) => account.protocol == BlogProtocol.rest
-      ? rest.getPosts(perPage: count, pages: pages, status: status, fields: fields)
-      : xmlrpc.getPosts(count: count, pages: pages, status: status);
+  }) =>
+      _client.getPosts(
+        count: count,
+        offset: offset,
+        pages: pages,
+        status: status,
+        fields: fields,
+      );
 
   Future<BlogPost> getPost(String id, {bool isPage = false}) =>
-      account.protocol == BlogProtocol.rest
-      ? rest.getPost(id, isPage: isPage)
-      : xmlrpc.getPost(id, isPage: isPage);
+      _client.getPost(id, isPage: isPage);
 
-  /// Creates a new post. Returns the post id (XML-RPC) or the created
-  /// post (REST gives us the full object back).
-  Future<String> newPost(BlogPost post, {required bool publish}) async {
-    if (account.protocol == BlogProtocol.rest) {
-      final created = await rest.newPost(post, publish: publish);
-      return created.id ?? '';
-    }
-    return xmlrpc.newPost(post, publish: publish);
-  }
+  /// Creates a new post. Returns the post id.
+  Future<String> newPost(BlogPost post, {required bool publish}) =>
+      _client.newPost(post, publish: publish);
 
   Future<bool> editPost(BlogPost post, {required bool publish}) =>
-      account.protocol == BlogProtocol.rest
-      ? rest.editPost(post, publish: publish).then((_) => true)
-      : xmlrpc.editPost(post, publish: publish);
+      _client.editPost(post, publish: publish);
 
   /// Changes ONLY the post status (dashboard quick actions) — avoids the
   /// full editPost payload, which is last-write-wins over title/content.
@@ -122,31 +86,22 @@ class BlogService {
     String postId,
     PostStatus status, {
     DateTime? date,
-  }) => account.protocol == BlogProtocol.rest
-      ? rest.editPostStatus(postId, status, date: date)
-      : xmlrpc.setPostStatus(postId, status, date: date);
+  }) =>
+      _client.setPostStatus(postId, status, date: date);
 
   Future<bool> deletePost(String id, {bool isPage = false}) =>
-      account.protocol == BlogProtocol.rest
-      ? rest.deletePost(id, isPage: isPage)
-      : xmlrpc.deletePost(id);
+      _client.deletePost(id, isPage: isPage);
 
   // -------------------------------------------------------------------------
   // Taxonomies
   // -------------------------------------------------------------------------
 
-  Future<List<PostCategory>> getCategories() =>
-      account.protocol == BlogProtocol.rest
-      ? rest.getCategories()
-      : xmlrpc.getCategories();
+  Future<List<PostCategory>> getCategories() => _client.getCategories();
 
-  Future<List<PostTag>> getTags() =>
-      account.protocol == BlogProtocol.rest ? rest.getTags() : xmlrpc.getTags();
+  Future<List<PostTag>> getTags() => _client.getTags();
 
   Future<String> newCategory(String name, {String? parentId}) =>
-      account.protocol == BlogProtocol.rest
-      ? rest.newCategory(name, parentId: parentId).then((c) => c.id)
-      : xmlrpc.newCategory(name, parentId: parentId);
+      _client.newCategory(name, parentId: parentId);
 
   // -------------------------------------------------------------------------
   // Media
@@ -156,21 +111,15 @@ class BlogService {
     String filename,
     List<int> bytes,
     String mimeType,
-  ) => account.protocol == BlogProtocol.rest
-      ? rest.uploadMedia(filename, bytes, mimeType)
-      : xmlrpc.uploadMedia(filename, bytes, mimeType);
+  ) {
+    return _client.uploadMedia(filename, bytes, mimeType);
+  }
 
   // -------------------------------------------------------------------------
   // Site info
   // -------------------------------------------------------------------------
 
-  Future<Map<String, String>> getOptions() async {
-    if (account.protocol == BlogProtocol.rest) {
-      final settings = await rest.getSettings();
-      return settings.map((k, v) => MapEntry(k, '$v'));
-    }
-    return xmlrpc.getOptions();
-  }
+  Future<Map<String, String>> getOptions() => _client.getOptions();
 
   /// One theme probe per service instance: the detector allocates its own
   /// HTTP client, so it must be closed — a fresh ThemeDetector per call
@@ -186,12 +135,5 @@ class BlogService {
 
   /// Closes the underlying HTTP clients. Must run when the service is
   /// discarded (account switch/removal) or the connection pool leaks.
-  void dispose() {
-    if (_disposed) return;
-    _xmlrpc?.close();
-    _rest?.close();
-    _xmlrpc = null;
-    _rest = null;
-    _disposed = true;
-  }
+  void dispose() => _client.dispose();
 }

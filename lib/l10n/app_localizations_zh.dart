@@ -586,6 +586,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get filterAll => '全部';
 
   @override
+  String get loadMore => '加载更多';
+
+  @override
   String get markAsPending => '设为待审';
 
   @override

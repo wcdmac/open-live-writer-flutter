@@ -593,6 +593,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get filterAll => 'All';
 
   @override
+  String get loadMore => 'Load more';
+
+  @override
   String get markAsPending => 'Mark as pending';
 
   @override

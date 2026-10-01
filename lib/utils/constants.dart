@@ -18,3 +18,12 @@ const int kHistoryStackLimit = 100;
 
 /// Layout breakpoint (px) above which the editor uses the wide two-pane UI.
 const double kWideLayoutBreakpoint = 1000;
+
+/// Number of posts fetched per dashboard page (P1-5 pagination). A full
+/// page back implies more posts exist, so the list offers "load more".
+const int kPostPageSize = 50;
+
+/// Allowed wall-clock skew when deciding whether a server post changed after
+/// an offline copy was taken (P3-13). Server and device clocks rarely match
+/// exactly, so a change within this window is not treated as a conflict.
+const Duration kConflictClockSkew = Duration(seconds: 1);

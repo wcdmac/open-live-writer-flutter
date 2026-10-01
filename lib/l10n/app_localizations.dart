@@ -1178,6 +1178,12 @@ abstract class AppLocalizations {
   /// **'All'**
   String get filterAll;
 
+  /// No description provided for @loadMore.
+  ///
+  /// In en, this message translates to:
+  /// **'Load more'**
+  String get loadMore;
+
   /// No description provided for @markAsPending.
   ///
   /// In en, this message translates to:

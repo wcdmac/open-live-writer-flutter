@@ -229,6 +229,7 @@
   "syncNow": "立即同步到博客",
   "publishDraftToBlog": "发布到博客",
   "filterAll": "全部",
+  "loadMore": "加载更多",
   "markAsPending": "设为待审",
   "schedulePost": "排期发布",
   "schedulePostHelp": "选择未来的日期和时间",

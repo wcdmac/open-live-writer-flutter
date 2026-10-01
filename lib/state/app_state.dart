@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 
 import '../models/blog.dart';
 import '../models/blog_post.dart';
+import '../utils/constants.dart';
 import '../services/account_store.dart';
 import '../services/blog_service.dart';
 import '../services/error_message.dart';
@@ -33,7 +34,13 @@ class AppState extends ChangeNotifier {
   List<LocalDraft> localDrafts = [];
   BlogTheme? theme;
   bool loading = false;
+  bool loadingMore = false;
+  bool canLoadMore = false;
   String? error;
+
+  /// Number of posts already loaded for the current dashboard page (P1-5).
+  /// `loadMorePosts` fetches the next slice at `_postOffset + kPostPageSize`.
+  int _postOffset = 0;
 
   /// Account whose theme was already probed in this session — theme
   /// detection is one HTTP round-trip per homepage; retrying it on every
@@ -171,6 +178,8 @@ class AppState extends ChangeNotifier {
     if (loading) return;
     loading = true;
     error = null;
+    loadingMore = false;
+    _postOffset = 0;
     notifyListeners();
 
     // Taxonomies are best-effort; failures degrade silently.
@@ -182,6 +191,10 @@ class AppState extends ChangeNotifier {
       debugPrint('getTags failed: $e');
       return <PostTag>[];
     });
+    // Theme probe runs concurrently with the list load (P1-5): it used to
+    // wait for the whole post list first, adding a full extra round-trip to
+    // every refresh. Non-fatal, so a failure just returns the current theme.
+    final themeFuture = _probeTheme(account, svc);
 
     // The post list is the critical payload. P-09: request only the fields
     // the dashboard renders (title/excerpt/date/categories…). Full `content`
@@ -189,7 +202,8 @@ class AppState extends ChangeNotifier {
     // crash recovery / offline copies already fetch full posts on demand.
     try {
       posts = await svc.getPosts(
-        count: 50,
+        count: kPostPageSize,
+        offset: 0,
         fields: const [
           'id',
           'title',
@@ -212,23 +226,81 @@ class AppState extends ChangeNotifier {
 
     categories = await catsFuture;
     tags = await tagsFuture;
+    theme = await themeFuture;
+    // A full first page implies there may be more posts to load.
+    canLoadMore = posts.length >= kPostPageSize;
 
+    loading = false;
+    notifyListeners();
+  }
+
+  /// Concurrent theme probe: detects the blog theme at most once per account
+  /// connection and persists it, but never blocks or fails the dashboard.
+  Future<BlogTheme?> _probeTheme(BlogAccount account, BlogService svc) async {
+    if (_themeProbedFor != account.id &&
+        (theme == null || theme!.name == null || theme!.name == 'Default')) {
+      _themeProbedFor = account.id;
+      try {
+        final detected = await svc.detectTheme();
+        await store.saveTheme(account.id, detected);
+        await store.updateAccount(account.copyWith(themeName: detected.name));
+        return detected;
+      } catch (e) {
+        debugPrint('theme detection failed (non-fatal): $e');
+      }
+    }
+    return theme;
+  }
+
+  /// Loads the next page of posts for the dashboard (P1-5 infinite scroll).
+  ///
+  /// Runs independently of [refresh] so scrolling never blocks on a full
+  /// reload. New posts are appended (deduped by id) and the offset advances;
+  /// when a fetch returns fewer than a full page, [canLoadMore] flips to
+  /// false so the list stops offering more.
+  Future<void> loadMorePosts() async {
+    final svc = _service;
+    final account = currentAccount;
+    if (svc == null || account == null) return;
+    if (loading || loadingMore || !canLoadMore) return;
+    loadingMore = true;
+    notifyListeners();
     try {
-      // Probe the theme at most once per account connection; a failed
-      // probe returning "Default" must not re-fetch the homepage on
-      // every subsequent refresh.
-      if (_themeProbedFor != account.id &&
-          (theme == null || theme!.name == null || theme!.name == 'Default')) {
-        _themeProbedFor = account.id;
-        theme = await svc.detectTheme();
-        await store.saveTheme(account.id, theme!);
-        await store.updateAccount(
-            account.copyWith(themeName: theme!.name));
+      final more = await svc.getPosts(
+        count: kPostPageSize,
+        offset: _postOffset + kPostPageSize,
+        fields: const [
+          'id',
+          'title',
+          'status',
+          'date_gmt',
+          'excerpt',
+          'link',
+          'slug',
+          'categories',
+          'tags',
+          'author',
+          'comment_status',
+          'ping_status',
+        ],
+      );
+      if (more.isEmpty) {
+        canLoadMore = false;
+      } else {
+        final seen = <String>{for (final p in posts) p.id ?? ''};
+        final appended = more
+            .where((p) => (p.id ?? '').isEmpty || !seen.contains(p.id ?? ''))
+            .toList();
+        posts = [...posts, ...appended];
+        _postOffset += kPostPageSize;
+        canLoadMore = more.length >= kPostPageSize;
       }
     } catch (e) {
-      debugPrint('theme detection failed (non-fatal): $e');
+      // Don't blank the list or disable further loads on a transient error;
+      // just log and let the user scroll/retry.
+      debugPrint('loadMorePosts failed: $e');
     } finally {
-      loading = false;
+      loadingMore = false;
       notifyListeners();
     }
   }
@@ -339,7 +411,10 @@ class AppState extends ChangeNotifier {
         isPage: post.isPage,
         categories: List.of(post.categories),
         tags: List.of(post.tags),
-        remoteModified: DateTime.now(),
+        // P3-13: baseline the conflict check against the server's own
+        // modified_gmt (not the local download time), so the comparison is
+        // server-clock vs server-clock and immune to device-clock skew.
+        remoteModified: post.modified ?? DateTime.now(),
       ));
     } catch (e) {
       debugPrint('saveOfflinePost failed: $e');
@@ -375,7 +450,7 @@ class AppState extends ChangeNotifier {
         final remote = await svc.getPost(id, isPage: draft.isPage);
         final remoteModified = remote.modified;
         if (remoteModified != null &&
-            remoteModified.isAfter(baseline.add(const Duration(seconds: 1)))) {
+            remoteModified.isAfter(baseline.add(kConflictClockSkew))) {
           error = 'This post changed on the blog since your offline copy was '
               'saved. Sync is paused to avoid overwriting those changes.';
           notifyListeners();

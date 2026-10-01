@@ -285,6 +285,7 @@
   "syncNow": "Sync now",
   "publishDraftToBlog": "Publish to blog",
   "filterAll": "All",
+  "loadMore": "Load more",
   "markAsPending": "Mark as pending",
   "schedulePost": "Schedule",
   "schedulePostHelp": "Pick a future date and time",

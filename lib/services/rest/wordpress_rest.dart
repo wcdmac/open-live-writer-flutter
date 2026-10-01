@@ -297,6 +297,7 @@ class WordPressRestClient {
   Future<List<BlogPost>> getPosts({
     int perPage = 30,
     int page = 1,
+    int offset = 0,
     bool pages = false,
     PostStatus? status,
     String search = '',
@@ -309,7 +310,9 @@ class WordPressRestClient {
       final query = <String, String>{
         'context': 'edit',
         'per_page': '$perPage',
-        'page': '$page',
+        // P1-5: `offset` drives infinite scroll. When set it takes precedence
+        // over `page`; for the first page (offset 0) we keep the default paging.
+        if (offset > 0) 'offset': '$offset' else 'page': '$page',
         'status': statuses,
         if (search.isNotEmpty) 'search': search,
         if (fields != null) '_fields': fields.join(','),
