@@ -8,6 +8,7 @@ import '../views/editor/editor_toolbar.dart'
     show MediaUploader, mediaUploadErrorText;
 import 'block_document.dart';
 import 'video_placeholder.dart';
+import '../utils/constants.dart';
 
 /// Visual (WYSIWYG) block editor.
 ///
@@ -592,7 +593,9 @@ class _ImageFieldState extends State<_ImageField> {
     final uploader = widget.uploadMedia;
     if (uploader == null) return;
     final xfile = await imgpick.ImagePicker().pickImage(
-        imageQuality: 90, maxWidth: 2560, source: imgpick.ImageSource.gallery);
+        imageQuality: kImageUploadQuality,
+        maxWidth: kImageMaxWidth,
+        source: imgpick.ImageSource.gallery);
     // Picking opens an external activity: the user can back out and pop this
     // route while it is open, so the State may already be disposed here.
     if (xfile == null || !mounted) return;
@@ -1594,7 +1597,9 @@ class _InsertBar extends StatelessWidget {
     if (fromDevice) {
       // Pick, upload, then insert an image block with the result URL.
       final xfile = await imgpick.ImagePicker().pickImage(
-          imageQuality: 90, maxWidth: 2560, source: imgpick.ImageSource.gallery);
+          imageQuality: kImageUploadQuality,
+        maxWidth: kImageMaxWidth,
+        source: imgpick.ImageSource.gallery);
       if (xfile == null || !context.mounted) return;
       showDialog<void>(
         context: context,

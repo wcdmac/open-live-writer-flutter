@@ -2,6 +2,7 @@ import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -12,6 +13,7 @@ import '../services/error_message.dart';
 import '../services/local_draft_store.dart';
 import '../services/post_exporter.dart';
 import '../state/app_state.dart';
+import '../utils/path_util.dart';
 import 'add_account_page.dart';
 import 'post_editor_page.dart';
 
@@ -881,7 +883,10 @@ void showExportedPath(BuildContext context, String path, {String? detail}) {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SelectableText(path),
+          // L13 path desensitization: the UI shows only the file name. The
+          // absolute path (which embeds the OS username) is never rendered —
+          // it is available solely via the copy / share actions below.
+          SelectableText(displayFileName(path)),
           if (detail != null) ...[
             const SizedBox(height: 4),
             Text(detail,
@@ -900,6 +905,19 @@ void showExportedPath(BuildContext context, String path, {String? detail}) {
         TextButton(
             onPressed: () => Navigator.of(context).pop(),
             child: Text(l10n.ok)),
+        TextButton.icon(
+          icon: const Icon(Icons.copy, size: 18),
+          label: Text(l10n.copyPath),
+          onPressed: () async {
+            // The full path is placed on the clipboard here only — it is
+            // never shown in the dialog body.
+            await Clipboard.setData(ClipboardData(text: path));
+            if (!context.mounted) return;
+            final messenger = ScaffoldMessenger.of(context);
+            Navigator.of(context).pop();
+            messenger.showSnackBar(SnackBar(content: Text(l10n.pathCopied)));
+          },
+        ),
         FilledButton.icon(
           icon: const Icon(Icons.ios_share, size: 18),
           label: Text(l10n.shareFile),

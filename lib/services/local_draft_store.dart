@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/blog_post.dart';
+import '../utils/persistence_codec.dart';
 
 /// A locally stored draft — written offline or auto-saved on network
 /// failure, later opened and published to the blog. Stored per account.
@@ -177,11 +178,11 @@ class LocalDraftStore {
     final raw = (await _prefs).getString('$_draftsPrefix$accountId');
     if (raw == null || raw.isEmpty) return null;
     final decoded = jsonDecode(raw);
-    if (decoded is! List) {
-      throw const FormatException('drafts payload is not a JSON list');
-    }
+    // Accepts the versioned envelope and legacy v0 bare arrays; throws on
+    // any other shape so the caller aborts the write rather than overwriting.
+    final entries = unwrapStorePayload(decoded);
     final out = <LocalDraft>[];
-    for (final entry in decoded) {
+    for (final entry in entries) {
       // Entry-level tolerance: skip the unusable record, keep the rest.
       if (entry is! Map) continue;
       final draft = LocalDraft.fromJson(Map<String, dynamic>.from(entry));
@@ -213,7 +214,7 @@ class LocalDraftStore {
           drafts.insert(0, draft);
         }
         await (await _prefs).setString('$_draftsPrefix${draft.accountId}',
-            jsonEncode(drafts.map((d) => d.toJson()).toList()));
+            jsonEncode(wrapStorePayload(drafts.map((d) => d.toJson()).toList())));
       });
 
   Future<void> deleteDraft(String accountId, String draftId) =>
@@ -221,7 +222,7 @@ class LocalDraftStore {
         final drafts = await _readDrafts(accountId) ?? <LocalDraft>[];
         drafts.removeWhere((d) => d.id == draftId);
         await (await _prefs).setString('$_draftsPrefix$accountId',
-            jsonEncode(drafts.map((d) => d.toJson()).toList()));
+            jsonEncode(wrapStorePayload(drafts.map((d) => d.toJson()).toList())));
       });
 
   // --- Crash snapshot --------------------------------------------------------

@@ -5,6 +5,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/blog.dart';
+import '../utils/persistence_codec.dart';
 import 'theme_detector.dart';
 
 /// Persists blog accounts (non-secret metadata in SharedPreferences,
@@ -35,11 +36,11 @@ class AccountStore {
     final raw = p.getString(_accountsKey);
     if (raw == null || raw.isEmpty) return null;
     final decoded = jsonDecode(raw);
-    if (decoded is! List) {
-      throw const FormatException('accounts payload is not a JSON list');
-    }
+    // Accepts the versioned envelope and legacy v0 bare arrays; throws on
+    // any other shape so the caller aborts the write rather than overwriting.
+    final entries = unwrapStorePayload(decoded);
     final out = <BlogAccount>[];
-    for (final entry in decoded) {
+    for (final entry in entries) {
       // Entry-level tolerance: skip the unusable record, keep the rest.
       if (entry is! Map) continue;
       final account = BlogAccount.fromJson(Map<String, dynamic>.from(entry));
@@ -63,8 +64,8 @@ class AccountStore {
 
   Future<void> saveAccounts(List<BlogAccount> accounts) async {
     final p = await prefs;
-    await p.setString(
-        _accountsKey, jsonEncode(accounts.map((a) => a.toJson()).toList()));
+    await p.setString(_accountsKey,
+        jsonEncode(wrapStorePayload(accounts.map((a) => a.toJson()).toList())));
   }
 
   /// Stores / updates the password for an account (keychain).

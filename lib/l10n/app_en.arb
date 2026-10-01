@@ -200,6 +200,8 @@
   "codeBlock": "Code block",
   "moreTag": "More tag (excerpt break)",
   "copyHtml": "Copy HTML",
+  "copyPath": "Copy path",
+  "pathCopied": "Path copied",
   "linkUrl": "Link URL",
   "imageUrl": "Image URL",
   "altText": "Alt text (optional)",

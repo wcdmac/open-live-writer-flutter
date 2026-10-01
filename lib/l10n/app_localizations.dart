@@ -770,6 +770,18 @@ abstract class AppLocalizations {
   /// **'Copy HTML'**
   String get copyHtml;
 
+  /// No description provided for @copyPath.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy path'**
+  String get copyPath;
+
+  /// No description provided for @pathCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Path copied'**
+  String get pathCopied;
+
   /// No description provided for @linkUrl.
   ///
   /// In en, this message translates to:

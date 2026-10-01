@@ -21,8 +21,11 @@ linter:
   # `// ignore_for_file: name_of_lint` syntax on the line or in the file
   # producing the lint.
   rules:
-    # avoid_print: false  # Uncomment to disable the `avoid_print` rule
-    # prefer_single_quotes: true  # Uncomment to enable the `prefer_single_quotes` rule
+    # Privacy/safety: never ship a raw print() of sensitive data (passwords,
+    # absolute paths). Reported as info (non-fatal under --no-fatal-infos).
+    avoid_print: true
+    prefer_single_quotes: true
+    curly_braces_in_flow_control_statements: true
 
 # Additional information about this file can be found at
 # https://dart.dev/guides/language/analysis-options

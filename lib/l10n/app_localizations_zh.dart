@@ -374,6 +374,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get copyHtml => '复制 HTML';
 
   @override
+  String get copyPath => '复制路径';
+
+  @override
+  String get pathCopied => '路径已复制';
+
+  @override
   String get linkUrl => '链接地址';
 
   @override

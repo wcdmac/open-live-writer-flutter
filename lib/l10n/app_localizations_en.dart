@@ -378,6 +378,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get copyHtml => 'Copy HTML';
 
   @override
+  String get copyPath => 'Copy path';
+
+  @override
+  String get pathCopied => 'Path copied';
+
+  @override
   String get linkUrl => 'Link URL';
 
   @override

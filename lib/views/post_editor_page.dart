@@ -10,6 +10,7 @@ import '../services/error_message.dart';
 import '../services/local_draft_store.dart';
 import '../state/app_state.dart';
 import '../state/editor_state.dart';
+import '../utils/constants.dart';
 import 'editor/editor_toolbar.dart';
 import 'editor/live_preview.dart';
 
@@ -325,7 +326,7 @@ class _PostEditorPageState extends State<PostEditorPage>
     if (_applyingHistory) return;
     _updateCharCount();
     _historyDebounce?.cancel();
-    _historyDebounce = Timer(const Duration(milliseconds: 700), _pushHistory);
+    _historyDebounce = Timer(kHistoryDebounce, _pushHistory);
   }
 
   void _pushHistory() {
@@ -334,7 +335,7 @@ class _PostEditorPageState extends State<PostEditorPage>
     final last = _undoStack.lastOrNull;
     if (last != null && last.$1 == snap.$1 && last.$2 == snap.$2) return;
     _undoStack.add(snap);
-    if (_undoStack.length > 100) _undoStack.removeAt(0);
+    if (_undoStack.length > kHistoryStackLimit) _undoStack.removeAt(0);
     _redoStack.clear();
     setState(() {});
     // Crash-recovery autosave: a NEW post's in-progress work is mirrored
@@ -702,7 +703,7 @@ class _PostEditorPageState extends State<PostEditorPage>
     // init) upload service, neither of which requires re-subscription.
     final app = context.read<AppState>();
     final l10n = AppLocalizations.of(context)!;
-    final isWide = MediaQuery.of(context).size.width >= 1000;
+    final isWide = MediaQuery.of(context).size.width >= kWideLayoutBreakpoint;
 
     // The AppBar (live post title + save spinner) reacts to editor changes,
     // while the body is driven by local controllers/state and only rebuilds

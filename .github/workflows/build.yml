@@ -75,7 +75,9 @@ jobs:
           path: dist/*
 
   # ---------------------------------------------------------------------------
-  # iOS (unsigned IPA for sideloading / re-signing)
+  # iOS — intentionally UNSIGNED (flutter build ios --no-codesign).
+  # No code-signing step runs here on purpose: the artifact is an unsigned
+  # IPA for sideloading or local re-signing, never App Store distribution.
   # ---------------------------------------------------------------------------
   build-ios:
     name: Build iOS
@@ -95,11 +97,26 @@ jobs:
       - name: Package unsigned IPA
         run: |
           # flutter build ios --no-codesign outputs build/ios/iphoneos/Runner.app
+          # with NO embedded code signature, so it can only be sideloaded or
+          # re-signed locally — never distributed through the App Store.
           mkdir -p Payload
           cp -R build/ios/iphoneos/Runner.app Payload/
           zip -qry open-live-writer-ios-unsigned.ipa Payload
           mkdir -p "${GITHUB_WORKSPACE}/dist"
           cp open-live-writer-ios-unsigned.ipa "${GITHUB_WORKSPACE}/dist/"
+
+      - name: Verify IPA is unsigned
+        run: |
+          if [ -f Payload/Runner.app/embedded.mobileprovision ]; then
+            echo "::error::Build unexpectedly embeds a provisioning profile (signed)."
+            exit 1
+          fi
+          # An unsigned build has no code signature; codesign -dv must fail.
+          if codesign -dv --verbose=2 Payload/Runner.app >/dev/null 2>&1; then
+            echo "::error::Build is code-signed; expected an unsigned IPA (--no-codesign)."
+            exit 1
+          fi
+          echo "OK: IPA is unsigned (no provisioning profile, no code signature)."
 
       - uses: actions/upload-artifact@v4
         with:

@@ -239,6 +239,9 @@ class AppState extends ChangeNotifier {
   Map<String, String>? _categoryNameCache;
   List<PostCategory>? _categoryNameSource;
 
+  Map<String, String>? _tagNameCache;
+  List<PostTag>? _tagNameSource;
+
   String categoryName(String id) {
     if (!identical(categories, _categoryNameSource)) {
       _categoryNameSource = categories;
@@ -419,10 +422,15 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  /// Resolves tag ids to display names.
+  /// Resolves tag ids to display names (O(1) via a lazily rebuilt id→name
+  /// map, matching [categoryName] — the previous linear scan per call was
+  /// O(n) across every tagged tile on every frame).
   String tagName(String idOrName) {
-    final t = tags.where((t) => t.id == idOrName).firstOrNull;
-    return t?.name ?? idOrName;
+    if (!identical(tags, _tagNameSource)) {
+      _tagNameSource = tags;
+      _tagNameCache = {for (final t in tags) t.id: t.name};
+    }
+    return _tagNameCache![idOrName] ?? idOrName;
   }
 
   /// All known tag names, used for autocomplete in the editor.

@@ -144,6 +144,8 @@
   "codeBlock": "代码块",
   "moreTag": "更多标签（摘要分隔）",
   "copyHtml": "复制 HTML",
+  "copyPath": "复制路径",
+  "pathCopied": "路径已复制",
   "linkUrl": "链接地址",
   "imageUrl": "图片地址",
   "altText": "替代文本（可选）",
