@@ -981,6 +981,7 @@ class _PostEditorPageState extends State<PostEditorPage>
   }
 
   Widget _buildEditorPane(AppState app) {
+    final l10n = AppLocalizations.of(context)!;
     return Column(
       children: [
         _MirroredTitleField(
