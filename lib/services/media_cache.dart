@@ -5,6 +5,8 @@ import 'package:flutter/widgets.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
+import '../utils/lru_map.dart';
+
 /// Disk cache for images referenced by post content. Downloaded once
 /// while online, reused by the visual editor and preview while offline —
 /// an offline copy of a post then opens with working images.
@@ -20,6 +22,22 @@ class MediaCache {
   /// Rough ceiling for the whole cache; the oldest files are evicted when
   /// exceeded so offline copies can't grow the disk usage without bound.
   static const _maxCacheBytes = 200 * 1024 * 1024;
+
+  /// Fixed ceiling for the in-memory recency bookkeeping. Without this the
+  /// map of recently-touched URLs grew for the whole app lifetime (the
+  /// P1-6 audit finding). Bounding it keeps memory flat in long sessions
+  /// while still covering the working set of visible images.
+  static const _maxLruEntries = 2048;
+
+  /// Recency of the last access we recorded for a URL. Drives disk eviction
+  /// (via the file's mtime, see [_touch]) so frequently-viewed images are
+  /// kept while cold ones are evicted first.
+  final LruMap<String, DateTime> _access = LruMap(maxEntries: _maxLruEntries);
+
+  /// How often a hit may rewrite a file's mtime. Touching on every render of
+  /// a cached image would be wasteful, so we only bump recency when the last
+  /// recorded touch is older than this.
+  static const _lruTouchInterval = Duration(minutes: 10);
 
   Directory? _base;
   final Set<String> _downloading = {};
@@ -68,9 +86,30 @@ class MediaCache {
       final dir = await _baseDir();
       final file = File('${dir.path}${Platform.pathSeparator}'
           '${_fileNameFor(url)}');
-      return await file.exists() ? file : null;
+      if (await file.exists()) {
+        _touch(url, file);
+        return file;
+      }
+      return null;
     } catch (_) {
       return null;
+    }
+  }
+
+  /// Records [url] as recently used. We push the recency onto the file's
+  /// mtime so disk eviction (which sorts by mtime) becomes a true LRU: a
+  /// frequently-viewed image survives while a stale-but-once-written one is
+  /// evicted first. Throttled by [_lruTouchInterval] to avoid rewriting mtime
+  /// on every frame; the in-memory [_access] map is bounded by [LruMap].
+  void _touch(String url, File file) {
+    final now = DateTime.now();
+    final last = _access[url];
+    if (last != null && now.difference(last) <= _lruTouchInterval) return;
+    _access[url] = now;
+    try {
+      unawaited(file.setLastModified(now));
+    } catch (_) {
+      // Best-effort: eviction still works on original write time.
     }
   }
 
@@ -107,6 +146,7 @@ class MediaCache {
           unawaited(_evictIfNeeded());
         }
       }
+      _touch(url, file);
       return file;
     } catch (_) {
       _failedAt[url] = DateTime.now();

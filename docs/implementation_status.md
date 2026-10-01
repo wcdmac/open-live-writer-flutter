@@ -52,7 +52,7 @@
 |----|----------|----------|------|
 | P1-4 状态分域 + Selector 收窄 | `AppState` 拆账户/帖子/草稿域；视图 `Selector` 替换 `watch` | 大博客切换/滚动重建量降一量级 | **Done** — `HomePage` 用 `Selector<AppState,_HomeView>`（不可变快照 + `shouldRebuild`）替换 `watch`，仅相关切片变化才重建列表 |
 | P1-5 列表并行加载 + 分页 | `refresh()` 改 `Future.wait`；`getPosts` 分页触底 | 首屏延迟下降；支持任意规模博客 | **Done** — `refresh()` 并发探测主题（`Future.wait`）；`getPosts` 加 `offset` 驱动无限滚动；`AppState.loadMorePosts` 去重追加（`kPostPageSize`）；`HomePage` `ScrollController` 触底 400px 加载 |
-| P1-6 图片 LRU + 磁盘缓存 | `media_cache` 固定上限 LRU + `path_provider` 落盘 | 长会话内存稳定 | **Deferred** — 触碰缓存内部，盲改风险中，需门禁 |
+| P1-6 图片 LRU + 磁盘缓存 | `media_cache` 固定上限 LRU + `path_provider` 落盘 | 长会话内存稳定 | **Done** — 新增 `lib/utils/lru_map.dart`（`LruMap<K,V>` 固定上限）；`MediaCache` 访问时 `_touch` 把最近使用时间落到文件 mtime，磁盘驱逐由"写时间"升级为真正的 LRU（热图留存、冷图先逐）；内存簿记由 `LruMap` 上限 2048 封顶，长会话内存不再增长。`test/lru_map_test.dart` 锁定 LRU 不变量 |
 
 ### P2 — 架构重构与可分发
 
@@ -60,7 +60,7 @@
 |----|----------|----------|------|
 | P2-7 M17 大文件拆分 | `block_editor`/`post_editor_page`/`home_page` 组件化 <400 行 | 单文件可维护；改一处不再漏三处 | **Done** — `block_editor` 拆分为 `lib/editor/blocks/*`（10 个 `part` 文件，最大 281 行）；行为中性，`flutter analyze`/`flutter test` 全绿 |
 | P2-8 协议层策略模式 | `BlogService` 15 处三元分支 → `BlogProtocolClient` 接口 | 新增协议方法只写一处 | **Done** — `BlogService` 改为构造期选定 `BlogProtocolClient`（REST：`RestProtocolClient`；XML-RPC：`XmlRpcProtocolClient`），消除全树三元分支 |
-| P2-9 EditorController 抽取 | 文档模型/上传逻辑与 UI 解耦 | UI 与模型独立可测 | **Deferred** |
+| P2-9 EditorController 抽取 | 文档模型/上传逻辑与 UI 解耦 | UI 与模型独立可测 | **Done** — `lib/editor/editor_controller.dart` 抽出 `EditorController`（`ChangeNotifier`），接管 `_blocks`/`_focusedIndex` 与所有编辑操作（insert/move/delete/updateHtml/updateFromExternal/focus），`BlockEditor` 仅做渲染与委托；编辑逻辑脱离 `BuildContext` 可单测，`test/editor_controller_test.dart` 覆盖全部操作与焦点/emit 语义 |
 | P2-10 iOS 签名/TestFlight | 接证书/TestFlight 真机分发 | 真机可装 | **Done-as-UNSIGNED** — 按用户要求**有意跳过签名**，产物为未签名 IPA（sideload/本地重签） |
 | P2-11 lint 强化 + CI 缓存 | 规则强化；`actions/cache` 缓存 pub/flutter | 低级问题不流入；发版提速 | **Done** — lint 规则启用（info 级，非致命）；`build.yml` 追加 `actions/cache` 缓存 Gradle（`~/.gradle/caches`+`~/.gradle/wrapper`），发版提速 |
 
@@ -75,16 +75,13 @@
 
 ## 明确未在本轮执行（Deferred）的事项与原因
 
-本轮已将 P0-1（widget 门禁）、P1-4（Selector）、P1-5（并行/分页）、P2-7（M17 拆分）、P2-8（协议策略）、P2-11（lint+CI 缓存）、P3-13（冲突精确）全部收口。剩余：
+本轮已将 P0-1（widget 门禁）、P1-4（Selector）、P1-5（并行/分页）、P1-6（图片 LRU）、P2-7（M17 拆分）、P2-8（协议策略）、P2-9（EditorController）、P2-11（lint+CI 缓存）、P3-13（冲突精确）全部收口。剩余：
 
-- **P1-6 图片 LRU 磁盘缓存**：触碰 `media_cache` 内部，中等风险，待门禁更厚后增量。
-- **P2-9 EditorController 抽取**：文档模型/上传逻辑与 UI 解耦，架构重构，待门禁更厚后增量。
 - **P3-12 / P3-14 / P3-15 功能项**：属新功能（富媒体块、SEO/元数据、体验增强），非缺陷修复，按路线图持续迭代。
 
 ## 后续执行路径（建议）
 
-1. **中风险（有门禁兜底）**：P1-6 图片 LRU 落盘；P2-9 EditorController 抽取。
-2. **功能迭代**：P3-12 富媒体块 → P3-14 写作辅助（SEO/元数据/定时发布/多作者）→ P3-15 体验增强。
-3. **门禁保持**：`flutter analyze` + `flutter test` 须在 CI 全绿才允许 `v*` 发版。
+1. **功能迭代**：P3-12 富媒体块 → P3-14 写作辅助（SEO/元数据/定时发布/多作者）→ P3-15 体验增强。
+2. **门禁保持**：`flutter analyze` + `flutter test` 须在 CI 全绿才允许 `v*` 发版。
 
 > 流程约定：仍走 `main` 单分支、打 `v*` tag 发版（沿用当前流程）。P0-1 widget 门禁已做实，重构项须小步增量、CI 全绿才合。

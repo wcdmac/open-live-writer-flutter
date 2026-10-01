@@ -7,6 +7,7 @@ import '../services/media_cache.dart';
 import '../views/editor/editor_toolbar.dart'
     show MediaUploader, mediaUploadErrorText;
 import 'block_document.dart';
+import 'editor_controller.dart';
 import 'video_placeholder.dart';
 import '../utils/constants.dart';
 
@@ -52,86 +53,44 @@ class BlockEditor extends StatefulWidget {
 }
 
 class _BlockEditorState extends State<BlockEditor> {
-  List<ContentBlock> _blocks = [];
-  String _lastEmitted = '';
-  int? _focusedIndex;
+  late final EditorController _controller;
 
   @override
   void initState() {
     super.initState();
-    _blocks = parseBlocks(widget.content);
-    _lastEmitted = serializeBlocks(_blocks);
+    _controller = EditorController(
+      initialContent: widget.content,
+      onChanged: widget.onContentChanged,
+    );
+    _controller.addListener(_onControllerChanged);
   }
+
+  void _onControllerChanged() => setState(() {});
 
   @override
   void didUpdateWidget(BlockEditor oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Compare the raw strings first: trimming before the comparison meant an
-    // external update that differed only in leading/trailing whitespace was
-    // ignored, leaving the card showing stale content.
-    if (widget.content != _lastEmitted &&
-        widget.content.trim() != _lastEmitted.trim()) {
-      setState(() {
-        _blocks = parseBlocks(widget.content);
-        _focusedIndex = null;
-        _lastEmitted = serializeBlocks(_blocks);
-      });
-    }
+    // The controller skips an echo of its own output, so a background-loaded
+    // post that equals what we last emitted won't reset caret/focus.
+    _controller.updateFromExternal(widget.content);
   }
 
-  void _emit() {
-    _lastEmitted = serializeBlocks(_blocks);
-    widget.onContentChanged(_lastEmitted);
-  }
-
-  void _updateHtml(int index, String html) {
-    _blocks[index].html = html;
-    _emit();
-  }
-
-  void _insert(ContentBlock block) {
-    setState(() {
-      final at = _focusedIndex == null ? _blocks.length : _focusedIndex! + 1;
-      _blocks.insert(at, block);
-      _focusedIndex = at;
-    });
-    _emit();
-  }
-
-  void _move(int index, int delta) {
-    final target = index + delta;
-    if (target < 0 || target >= _blocks.length) return;
-    setState(() {
-      final b = _blocks.removeAt(index);
-      _blocks.insert(target, b);
-      if (_focusedIndex == index) {
-        _focusedIndex = target;
-      } else if (_focusedIndex == target) {
-        _focusedIndex = index;
-      }
-    });
-    _emit();
-  }
-
-  void _delete(int index) {
-    setState(() {
-      _blocks.removeAt(index);
-      if (_focusedIndex == index) {
-        _focusedIndex = null;
-      } else if (_focusedIndex != null && _focusedIndex! > index) {
-        _focusedIndex = _focusedIndex! - 1;
-      }
-    });
-    _emit();
+  @override
+  void dispose() {
+    _controller.removeListener(_onControllerChanged);
+    _controller.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final blocks = _controller.blocks;
+    final focusedIndex = _controller.focusedIndex;
     return Column(
       children: [
         Expanded(
-          child: _blocks.isEmpty
+          child: blocks.isEmpty
               ? Center(
                   child: Text(l10n.emptyBlockHint,
                       style: TextStyle(
@@ -139,24 +98,24 @@ class _BlockEditorState extends State<BlockEditor> {
                 )
               : ListView.builder(
                   padding: const EdgeInsets.symmetric(vertical: 8),
-                  itemCount: _blocks.length,
+                  itemCount: blocks.length,
                   itemBuilder: (context, i) => _BlockCard(
-                    key: ObjectKey(_blocks[i]),
-                    block: _blocks[i],
-                    focused: _focusedIndex == i,
+                    key: ObjectKey(blocks[i]),
+                    block: blocks[i],
+                    focused: focusedIndex == i,
                     canMoveUp: i > 0,
-                    canMoveDown: i < _blocks.length - 1,
-                    onFocus: () => setState(() => _focusedIndex = i),
-                    onHtmlChanged: (html) => _updateHtml(i, html),
-                    onMoveUp: () => _move(i, -1),
-                    onMoveDown: () => _move(i, 1),
-                    onDelete: () => _delete(i),
+                    canMoveDown: i < blocks.length - 1,
+                    onFocus: () => _controller.focus(i),
+                    onHtmlChanged: (html) => _controller.updateHtml(i, html),
+                    onMoveUp: () => _controller.move(i, -1),
+                    onMoveDown: () => _controller.move(i, 1),
+                    onDelete: () => _controller.delete(i),
                     uploadMedia: widget.uploadMedia,
                   ),
                 ),
         ),
         const Divider(height: 1),
-        _InsertBar(onInsert: _insert, uploadMedia: widget.uploadMedia),
+        _InsertBar(onInsert: _controller.insert, uploadMedia: widget.uploadMedia),
       ],
     );
   }
