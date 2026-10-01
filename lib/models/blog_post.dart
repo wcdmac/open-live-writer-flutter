@@ -114,6 +114,7 @@ class BlogPost {
     this.pageOrder,
     this.dateCreated,
     this.datePublished,
+    this.modified,
     this.commentsEnabled = true,
     this.pingsEnabled = true,
     List<String>? categories,
