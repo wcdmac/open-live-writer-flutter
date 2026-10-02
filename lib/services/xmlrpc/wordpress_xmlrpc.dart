@@ -1,5 +1,6 @@
 import '../../models/blog.dart';
 import '../../models/blog_post.dart';
+import '../post_meta.dart';
 import 'xmlrpc_client.dart';
 import 'xmlrpc_codec.dart';
 
@@ -640,6 +641,10 @@ class WordPressXmlRpcClient {
     // "pending review") instead of always reverting to draft; the trash→draft
     // downgrade was applied to a local copy (R5) so [post] is never mutated.
     final status = effectiveStatus;
+    // P3-14: SEO / social metadata as `post_meta` custom fields. Computed up
+    // front so it can be conditionally included; omitted entirely when empty
+    // so the server keeps existing values.
+    final meta = buildXmlRpcPostMeta(post);
     return {
       'post_type': post.isPage ? 'page' : 'post',
       'post_status': status.wpValue,
@@ -652,6 +657,7 @@ class WordPressXmlRpcClient {
       if (post.datePublished != null)
         'post_date_gmt': post.datePublished!.toUtc(),
       if (post.password?.isNotEmpty == true) 'post_password': post.password,
+      if (meta.isNotEmpty) 'post_meta': meta,
       if (post.isPage) ...{
         if (post.pageParentId?.isNotEmpty == true)
           'wp_page_parent_id':
@@ -747,6 +753,11 @@ class WordPressXmlRpcClient {
       slug: m['post_name'] == null || '${m['post_name']}'.isEmpty
           ? null
           : '${m['post_name']}',
+      // P3-14: round-trip SEO metadata from `post_meta` custom fields.
+      seoTitle: readXmlRpcMeta(m['post_meta'], PostMetaKeys.seoTitle),
+      seoDescription:
+          readXmlRpcMeta(m['post_meta'], PostMetaKeys.seoDescription),
+      ogImageUrl: readXmlRpcMeta(m['post_meta'], PostMetaKeys.ogImage),
       permalink: m['link'] == null ? null : '${m['link']}',
       status: status,
       isPage: isPage,

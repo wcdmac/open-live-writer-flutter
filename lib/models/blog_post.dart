@@ -104,6 +104,9 @@ class BlogPost {
     this.content = '',
     this.excerpt = '',
     this.slug,
+    this.seoTitle,
+    this.seoDescription,
+    this.ogImageUrl,
     this.password,
     this.authorId,
     this.authorName,
@@ -131,6 +134,16 @@ class BlogPost {
 
   /// URL slug (post_name).
   String? slug;
+
+  /// SEO title (Yoast-style custom field `_yoast_wpseo_title`).
+  /// Empty = fall back to the post title in search/social previews.
+  String? seoTitle;
+
+  /// SEO meta description (Yoast-style `_yoast_wpseo_metadesc`).
+  String? seoDescription;
+
+  /// Open Graph image URL (Yoast-style `_yoast_wpseo_opengraph-image`).
+  String? ogImageUrl;
 
   /// Post password protection (wp_password).
   String? password;
@@ -204,6 +217,9 @@ class BlogPost {
         content: content,
         excerpt: excerpt,
         slug: slug,
+        seoTitle: seoTitle,
+        seoDescription: seoDescription,
+        ogImageUrl: ogImageUrl,
         password: password,
         authorId: authorId,
         authorName: authorName,

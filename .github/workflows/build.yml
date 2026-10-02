@@ -2,7 +2,7 @@ name: Build & Release
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'tmp/**']
     tags: ['v*']
   pull_request:
     branches: [main]
@@ -40,6 +40,7 @@ jobs:
   # ---------------------------------------------------------------------------
   build-android:
     name: Build Android
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
     needs: analyze-test
     runs-on: ubuntu-latest
     steps:
@@ -93,6 +94,7 @@ jobs:
   # ---------------------------------------------------------------------------
   build-ios:
     name: Build iOS
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
     needs: analyze-test
     runs-on: macos-latest
     steps:
@@ -140,6 +142,7 @@ jobs:
   # ---------------------------------------------------------------------------
   build-windows:
     name: Build Windows
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
     needs: analyze-test
     runs-on: windows-latest
     steps:
@@ -171,6 +174,7 @@ jobs:
   # ---------------------------------------------------------------------------
   build-linux:
     name: Build Linux
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
     needs: analyze-test
     runs-on: ubuntu-latest
     steps:
@@ -207,6 +211,7 @@ jobs:
   # ---------------------------------------------------------------------------
   build-macos:
     name: Build macOS
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
     needs: analyze-test
     runs-on: macos-latest
     steps:

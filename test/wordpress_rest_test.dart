@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 import 'package:open_live_writer/models/blog.dart';
+import 'package:open_live_writer/models/blog_post.dart';
 import 'package:open_live_writer/services/rest/wordpress_rest.dart';
 
 /// Builds a [WordPressRestClient] wired to a [MockClient] so no real network
@@ -230,6 +231,76 @@ void main() {
       await c.getPosts(); // posts: cached-free, should probe (not reuse pages cache)
       expect(seen.contains('/wp-json/wp/v2/posts'), isTrue,
           reason: 'posts fetch must run independently of the pages cache');
+    });
+
+    // ----------------------------------------------------------------- P3-14
+    test('newPost sends SEO meta when set (P3-14)', () async {
+      Map<String, dynamic>? body;
+      final c = _client(
+        'https://a13.test/wp-json',
+        (req) async {
+          if (req.method == 'POST' && req.url.path.contains('/posts')) {
+            body = jsonDecode(req.body) as Map<String, dynamic>;
+            return http.Response(jsonEncode({'id': 99, 'status': 'draft'}), 200);
+          }
+          return http.Response(jsonEncode([]), 200);
+        },
+      );
+      await c.newPost(
+        BlogPost(
+          title: 'T',
+          content: 'C',
+          seoTitle: 'My Title',
+          seoDescription: 'My Desc',
+          ogImageUrl: 'https://x/y.png',
+        ),
+        publish: false,
+      );
+      expect(body, isNotNull);
+      final meta = body!['meta'] as Map<String, dynamic>;
+      expect(meta['_yoast_wpseo_title'], 'My Title');
+      expect(meta['_yoast_wpseo_metadesc'], 'My Desc');
+      expect(meta['_yoast_wpseo_opengraph-image'], 'https://x/y.png');
+    });
+
+    test('newPost omits meta when SEO fields empty (P3-14)', () async {
+      Map<String, dynamic>? body;
+      final c = _client(
+        'https://a14.test/wp-json',
+        (req) async {
+          if (req.method == 'POST' && req.url.path.contains('/posts')) {
+            body = jsonDecode(req.body) as Map<String, dynamic>;
+            return http.Response(jsonEncode({'id': 1, 'status': 'draft'}), 200);
+          }
+          return http.Response(jsonEncode([]), 200);
+        },
+      );
+      await c.newPost(BlogPost(title: 'T', content: 'C'), publish: false);
+      expect(body!.containsKey('meta'), isFalse);
+    });
+
+    test('getPost reads SEO meta back (P3-14)', () async {
+      final c = _client(
+        'https://a15.test/wp-json',
+        (req) async => http.Response(
+          jsonEncode({
+            'id': 1,
+            'title': {'rendered': 'Hi'},
+            'status': 'publish',
+            'date_gmt': '2024-01-01T00:00:00',
+            'meta': {
+              '_yoast_wpseo_title': 'SEO',
+              '_yoast_wpseo_metadesc': 'DESC',
+              '_yoast_wpseo_opengraph-image': 'https://x/y.png',
+            },
+          }),
+          200,
+        ),
+      );
+      final post = await c.getPost('1');
+      expect(post.seoTitle, 'SEO');
+      expect(post.seoDescription, 'DESC');
+      expect(post.ogImageUrl, 'https://x/y.png');
     });
   });
 }

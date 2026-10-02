@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 
 import '../../models/blog.dart';
 import '../../models/blog_post.dart';
+import '../post_meta.dart';
 
 /// Exception carrying HTTP status + REST API error payload.
 class WordPressRestException implements Exception {
@@ -782,6 +783,10 @@ class WordPressRestClient {
     // trash→draft downgrade was already applied to a LOCAL copy (R5), so
     // [post] is never mutated here.
     final status = effectiveStatus;
+    // P3-14: SEO / social metadata (Yoast-compatible). Computed up front so
+    // it can be conditionally included; only non-empty maps are sent so an
+    // untouched post never overwrites server SEO values.
+    final meta = buildPostMeta(post);
     return {
       'title': post.title,
       'content': post.content,
@@ -793,6 +798,7 @@ class WordPressRestClient {
         'date': post.datePublished!.toUtc().toIso8601String(),
       if (post.slug?.isNotEmpty == true) 'slug': post.slug,
       if (post.password?.isNotEmpty == true) 'password': post.password,
+      if (meta.isNotEmpty) 'meta': meta,
       if (!post.isPage) ...{
         'categories': post.categories
             .map(int.tryParse)
@@ -848,6 +854,12 @@ class WordPressRestClient {
       slug: raw['slug'] == null || '${raw['slug']}'.isEmpty
           ? null
           : '${raw['slug']}',
+      // P3-14: round-trip SEO metadata so a background full-content fetch
+      // (which the editor uses to refresh the open post) keeps the values
+      // the user already set, rather than wiping them.
+      seoTitle: readRestMeta(raw['meta'], PostMetaKeys.seoTitle),
+      seoDescription: readRestMeta(raw['meta'], PostMetaKeys.seoDescription),
+      ogImageUrl: readRestMeta(raw['meta'], PostMetaKeys.ogImage),
       permalink: raw['link'] == null ? null : '${raw['link']}',
       status: status,
       isPage: isPage,

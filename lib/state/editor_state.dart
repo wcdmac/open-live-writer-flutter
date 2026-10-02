@@ -59,6 +59,12 @@ class EditorState extends ChangeNotifier {
     if (fresh.content.trim().isNotEmpty) post.content = fresh.content;
     if (fresh.excerpt.trim().isNotEmpty) post.excerpt = fresh.excerpt;
     post.slug = fresh.slug ?? post.slug;
+    // P3-14: keep SEO values on a server refresh. Unlike the slug these are
+    // user-authored metadata, so a server copy that simply omits them must
+    // not wipe the local edits.
+    post.seoTitle = fresh.seoTitle ?? post.seoTitle;
+    post.seoDescription = fresh.seoDescription ?? post.seoDescription;
+    post.ogImageUrl = fresh.ogImageUrl ?? post.ogImageUrl;
     // Don't let the server's default status clobber an explicit local
     // choice — e.g. the user picked "pending"/"private", then a background
     // full-content fetch returned "draft". Preserve the explicit pick.
@@ -83,6 +89,27 @@ class EditorState extends ChangeNotifier {
 
   void updateSlug(String slug) {
     post.slug = slug;
+    _dirty = true;
+    notifyListeners();
+  }
+
+  /// Updates SEO / social metadata (P3-14). Only the supplied fields change;
+  /// whitespace-only values are cleared so an accidental paste of spaces
+  /// doesn't ship a blank SEO title to the server.
+  void updateSeo({
+    String? seoTitle,
+    String? seoDescription,
+    String? ogImageUrl,
+  }) {
+    String? norm(String? v) {
+      if (v == null) return null;
+      final t = v.trim();
+      return t.isEmpty ? null : t;
+    }
+
+    if (seoTitle != null) post.seoTitle = norm(seoTitle);
+    if (seoDescription != null) post.seoDescription = norm(seoDescription);
+    if (ogImageUrl != null) post.ogImageUrl = norm(ogImageUrl);
     _dirty = true;
     notifyListeners();
   }
