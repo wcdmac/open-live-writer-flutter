@@ -215,7 +215,7 @@ void main() {
 
   group('cover image block', () {
     test('build + parse round-trip with overlay text', () {
-      const html = buildCoverHtml(
+      final html = buildCoverHtml(
           CoverData(url: 'https://x/c.jpg', overlay: 'Hello world'));
       expect(
         html,
@@ -253,7 +253,7 @@ void main() {
 
   group('gallery block', () {
     test('build + parse round-trip preserves images and column count', () {
-      const html = buildGalleryHtml(GalleryData(images: [
+      final html = buildGalleryHtml(GalleryData(images: [
         GalleryImage(url: 'https://x/a.jpg', alt: 'A'),
         GalleryImage(url: 'https://x/b.jpg'),
       ], columns: 3));
@@ -289,7 +289,7 @@ void main() {
 
   group('button block', () {
     test('build + parse round-trip label and url', () {
-      const html = buildButtonHtml(
+      final html = buildButtonHtml(
           ButtonData(label: 'Click me', url: 'https://x/target'));
       expect(
         html,
@@ -321,7 +321,7 @@ void main() {
 
   group('columns block', () {
     test('build + parse round-trip column content', () {
-      const html = buildColumnsHtml(
+      final html = buildColumnsHtml(
           ColumnsData(columns: ['<p>One</p>', '<p>Two</p>']));
       expect(
         html,

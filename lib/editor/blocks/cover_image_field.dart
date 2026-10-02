@@ -57,8 +57,8 @@ class _CoverImageFieldState extends State<_CoverImageField> {
     setState(() => _uploading = true);
     try {
       final bytes = await xfile.readAsBytes();
-      final (name, mime) = normalizeImageUpload(
-          xfile.name, xfile.mimeType ?? 'image/jpeg');
+      final (name, mime) =
+          normalizeImageUpload(xfile.name, xfile.mimeType ?? 'image/jpeg');
       final result = await uploader(name, bytes, mime);
       if (!mounted) return;
       setState(() {
@@ -103,10 +103,10 @@ class _CoverImageFieldState extends State<_CoverImageField> {
                 ? const Padding(
                     padding: EdgeInsets.all(10),
                     child: SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2)),
-                  ),
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
                   )
                 : (widget.uploadMedia == null
                     ? null

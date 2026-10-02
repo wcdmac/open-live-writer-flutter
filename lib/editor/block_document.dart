@@ -760,9 +760,10 @@ GalleryData? parseGallery(String html) {
 String buildGalleryHtml(GalleryData gallery) {
   final cols = gallery.columns.clamp(1, 8);
   final items = gallery.images.map((img) {
-    final fig =
-        '<figure class="wp-block-image"><img src="${_htmlAttr(img.url)}"'
-        "${img.alt.isEmpty ? '' : ' alt="${_htmlAttr(img.alt)}"'}/></figure>';
+    final altAttr =
+        img.alt.isEmpty ? '' : ' alt="${_htmlAttr(img.alt)}"';
+    final fig = '<figure class="wp-block-image">'
+        '<img src="${_htmlAttr(img.url)}"$altAttr/></figure>';
     return '<!-- wp:image -->\n$fig\n<!-- /wp:image -->';
   }).join();
   return '<figure class="wp-block-gallery has-nested-images columns-$cols">'
