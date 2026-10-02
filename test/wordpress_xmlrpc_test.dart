@@ -89,10 +89,29 @@ void main() {
       );
       final content = fake.newPostParams![3] as Map<String, dynamic>;
       final meta = content['post_meta'] as List<Map<String, String>>;
-      expect(meta, contains({'key': '_yoast_wpseo_title', 'value': 'My Title'}));
-      expect(meta, contains({'key': '_yoast_wpseo_metadesc', 'value': 'My Desc'}));
-      expect(meta,
-          contains({'key': '_yoast_wpseo_opengraph-image', 'value': 'https://x/y.png'}));
+      // NOTE: assert via field equality, not `contains({...})` — `contains`
+      // on a List of Maps uses Map identity (`==`), so two distinct but
+      // identical map literals never match.
+      expect(meta, hasLength(3));
+      expect(
+        meta.any((m) =>
+            m['key'] == '_yoast_wpseo_title' && m['value'] == 'My Title'),
+        isTrue,
+        reason: 'seoTitle meta must be sent',
+      );
+      expect(
+        meta.any((m) =>
+            m['key'] == '_yoast_wpseo_metadesc' && m['value'] == 'My Desc'),
+        isTrue,
+        reason: 'seoDescription meta must be sent',
+      );
+      expect(
+        meta.any((m) =>
+            m['key'] == '_yoast_wpseo_opengraph-image' &&
+            m['value'] == 'https://x/y.png'),
+        isTrue,
+        reason: 'ogImage meta must be sent',
+      );
     });
 
     test('newPost omits post_meta when SEO fields empty (P3-14)', () async {
