@@ -33,6 +33,10 @@ const _postJson = {
   'link': 'https://example.com/hi',
 };
 
+/// Builds [n] term-shaped maps (id/name/slug) for paging tests.
+List<Map<String, dynamic>> _termPage(int n, [String kind = 'C']) =>
+    [for (var i = 0; i < n; i++) <String, dynamic>{'id': i, 'name': '$kind$i', 'slug': '$kind$i'}];
+
 void main() {
   group('WordPressRestClient', () {
     // ----------------------------------------------------------------- P-01
@@ -355,6 +359,64 @@ void main() {
       );
       final post = await c.getPost('1');
       expect(post.authorId, '7');
+    });
+
+    // ----------------------------------------------------------------- P3-16
+    test('getCategories pages through all categories (P3-16)', () async {
+      final seenPages = <String>{};
+      final c = _client('https://p1.test/wp-json', (req) async {
+        seenPages.add(req.url.queryParameters['page'] ?? '1');
+        final page = int.parse(req.url.queryParameters['page'] ?? '1');
+        // Page 1 → 100 items, page 2 → 50 (total 150 > per_page cap).
+        return http.Response(
+          jsonEncode(page == 1 ? _termPage(100) : _termPage(50)),
+          200,
+        );
+      });
+      final cats = await c.getCategories();
+      expect(cats.length, 150, reason: 'must not be truncated at 100');
+      expect(seenPages, containsAll(['1', '2']));
+    });
+
+    test('getCategories stops after one page when short (P3-16)', () async {
+      var calls = 0;
+      final c = _client('https://p2.test/wp-json', (req) async {
+        calls++;
+        return http.Response(jsonEncode(_termPage(40)), 200);
+      });
+      final cats = await c.getCategories();
+      expect(cats.length, 40);
+      expect(calls, 1, reason: 'no extra page when < per_page');
+    });
+
+    test('getTags pages through all tags (P3-16)', () async {
+      var calls = 0;
+      final c = _client('https://p3.test/wp-json', (req) async {
+        calls++;
+        final page = int.parse(req.url.queryParameters['page'] ?? '1');
+        return http.Response(
+          jsonEncode(page == 1 ? _termPage(100, 'T') : _termPage(25, 'T')),
+          200,
+        );
+      });
+      final tags = await c.getTags();
+      expect(tags.length, 125);
+      expect(calls, 2);
+    });
+
+    test('getAuthors pages through all users (P3-16)', () async {
+      var calls = 0;
+      final c = _client('https://p4.test/wp-json', (req) async {
+        calls++;
+        final page = int.parse(req.url.queryParameters['page'] ?? '1');
+        final body = page == 1
+            ? [for (var i = 0; i < 100; i++) <String, dynamic>{'id': i, 'name': 'U$i', 'slug': 'u$i'}]
+            : [for (var i = 0; i < 10; i++) <String, dynamic>{'id': 100 + i, 'name': 'U${100 + i}', 'slug': 'u${100 + i}'}];
+        return http.Response(jsonEncode(body), 200);
+      });
+      final authors = await c.getAuthors();
+      expect(authors.length, 110);
+      expect(calls, 2);
     });
   });
 }

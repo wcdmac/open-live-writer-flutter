@@ -291,18 +291,45 @@ class WordPressRestClient {
     throw WordPressRestException(500, 'invalid_profile', 'Bad profile payload');
   }
 
+  /// Fetches a REST collection endpoint across every page.
+  ///
+  /// WordPress caps `per_page` at 100, so a single request silently truncates
+  /// blogs with more than 100 categories/tags/authors. We page with `page`
+  /// until a page returns fewer than a full page (or empty), matching the
+  /// all-items behaviour XML-RPC already gives for `wp.getCategories` /
+  /// `wp.getTags` / `wp.getAuthors`. A page ceiling guards against a server
+  /// that never returns a short page.
+  static const int _listPageSize = 100;
+  static const int _listMaxPages = 100; // 10k-item safety ceiling.
+
+  Future<List<Map<String, dynamic>>> _fetchAllPages(
+    String path, {
+    Map<String, String> extraQuery = const {},
+  }) async {
+    final out = <Map<String, dynamic>>[];
+    for (var page = 1; page <= _listMaxPages; page++) {
+      final data = await _request('GET', path, query: {
+        'per_page': '$_listPageSize',
+        'page': '$page',
+        ...extraQuery,
+      });
+      if (data is! List || data.isEmpty) break;
+      out.addAll(data.cast<Map<String, dynamic>>());
+      if (data.length < _listPageSize) break;
+    }
+    return out;
+  }
+
   /// GET /wp/v2/users — lists blog authors for the multi-author picker
   /// (P3-14). `context=view` is enough for id/name/slug and avoids 401 on
-  /// sites where the current role can't read `edit` context.
+  /// sites where the current role can't read `edit` context. Paged so a site
+  /// with >100 authors is fully enumerated (P3-16).
   Future<List<BlogAuthor>> getAuthors() async {
-    final data = await _request(
-      'GET',
+    final rows = await _fetchAllPages(
       '/wp/v2/users',
-      query: {'context': 'view', 'per_page': '100'},
+      extraQuery: {'context': 'view'},
     );
-    if (data is! List) return const [];
-    return data.map((raw) {
-      final m = raw as Map<String, dynamic>;
+    return rows.map((m) {
       final id = '${m['id']}';
       final name = '${m['name'] ?? m['slug'] ?? ''}';
       final slug = m['slug'] == null ? null : '${m['slug']}';
@@ -626,14 +653,13 @@ class WordPressRestClient {
   // Categories & tags
   // ---------------------------------------------------------------------------
 
+  /// Paged so a site with >100 categories is fully enumerated (P3-16).
   Future<List<PostCategory>> getCategories() async {
-    final data = await _request(
-      'GET',
+    final rows = await _fetchAllPages(
       '/wp/v2/categories',
-      query: {'per_page': '100', 'orderby': 'count', 'order': 'desc'},
+      extraQuery: {'orderby': 'count', 'order': 'desc'},
     );
-    if (data is! List) return const [];
-    return data
+    return rows
         .map(
           (raw) => PostCategory(
             id: '${raw['id']}',
@@ -677,14 +703,13 @@ class WordPressRestClient {
     );
   }
 
+  /// Paged so a site with >100 tags is fully enumerated (P3-16).
   Future<List<PostTag>> getTags() async {
-    final data = await _request(
-      'GET',
+    final rows = await _fetchAllPages(
       '/wp/v2/tags',
-      query: {'per_page': '100', 'orderby': 'count', 'order': 'desc'},
+      extraQuery: {'orderby': 'count', 'order': 'desc'},
     );
-    if (data is! List) return const [];
-    final tags = data
+    final tags = rows
         .map(
           (raw) => PostTag(
             id: '${raw['id']}',
