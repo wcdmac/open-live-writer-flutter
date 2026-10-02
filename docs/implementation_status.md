@@ -68,20 +68,18 @@
 
 | 项 | 功能范围 | 交付标准 | 状态 |
 |----|----------|----------|------|
-| P3-12 富媒体/块类型扩展 | 封面图、画廊、按钮、分栏 | Gutenberg 块可编辑导出 | **Deferred** |
+| P3-12 富媒体/块类型扩展 | 封面图、画廊、按钮、分栏 | Gutenberg 块可编辑导出 | **Done** — `BlockType` 新增 `coverImage`/`gallery`/`button`/`columns` 四类；`block_document` 提供 `CoverData`/`GalleryData`/`GalleryImage`/`ButtonData`/`ColumnsData` + `parse`/`build` 往返助手（`_classifyType` 中画廊须在通用 `<figure>..<img>` 图片规则前判定；分栏正则用 `\bwp-block-column\b` 避免误匹配 `wp-block-columns` 容器）；封面/画廊/按钮导出 Gutenberg 规范标记，按钮 `href` 过滤 `javascript:`/`data:` 危险协议；四个聚焦编辑组件（`cover_image_field`/`gallery_field`/`button_field`/`columns_field`，含设备上传与 1–8 栏/2–6 分栏调节）；插入条 `ActionChip` + 本地化 `coverImage`/`coverOverlay`/`gallery`/`galleryAddImage`/`button`/`buttonLabel`/`columns`/`columnsCount`/`coverImageBlock`/`galleryBlock`/`buttonBlock`/`columnsBlock`（en+zh）；`test/block_document_test.dart` 四类块往返覆盖 |
 | P3-13 离线同步增强 | 双向冲突三向合并（取代 1 秒容差 best-effort） | 高频编辑不误覆盖 | **Done** — 冲突判定由 1s 容差改为 `modified_gmt` 精确比对 + `kConflictClockSkew`（1s）容差常量；离线副本基线取 `post.modified` |
 | P3-14 写作辅助 | SEO/元数据（excerpt/slug/OG）、定时发布、多作者 | 元数据可编辑并随导出 | **Done** — SEO 元数据（seoTitle/seoDescription/ogImageUrl）经 REST `meta` + XML-RPC `post_meta`（Yoast 兼容）双向同步；excerpt/slug 可编辑、定时发布经 `datePublished`+`scheduled` 已落地；多作者经 `BlogAuthor` 模型 + REST `GET /wp/v2/users` / XML-RPC `wp.getAuthors` 拉取 + 发布时 `author`/`post_author` 写入 + 编辑器「作者」下拉选择，已落地（并修复 wp.getPost 解析丢失 `authorName` 的潜在缺陷） |
 | P3-15 体验 | 暗色跟随系统、本地化补全、撤销重做增强 | 体验一致 | **Done** — ① 主题：新增 `ThemeMode` light/dark/system 偏好，持久化于 `olw.themeMode`，`AppShell` 经 `context.select<AppState,ThemeMode>` 应用 `themeMode`（仅主题变更时重建 `MaterialApp`）；入口在首页「账户与设置」底部弹层（跟随系统/浅色/深色）。② 撤销重做：编辑器新增全局快捷键 Ctrl/Cmd+Z、Ctrl/Cmd+Shift+Z、Ctrl+Y（平台级 `HardwareKeyboard` 拦截，文本框聚焦时也生效，覆盖其字段内字符级撤销）；工具栏 tooltip 标注快捷键。③ 本地化：补 `appearance`/`themeLight`/`themeDark`/`themeSystem`（en+zh）；既有 UI 文案已全量本地化 |
 
 ## 明确未在本轮执行（Deferred）的事项与原因
 
-本轮已将 P0-1（widget 门禁）、P1-4（Selector）、P1-5（并行/分页）、P1-6（图片 LRU）、P2-7（M17 拆分）、P2-8（协议策略）、P2-9（EditorController）、P2-11（lint+CI 缓存）、P3-13（冲突精确）全部收口。剩余：
-
-- **P3-12 功能项**：属新功能（富媒体块），非缺陷修复，按路线图持续迭代。P3-14 写作辅助、P3-15 体验增强已全部收口。
+本轮已将 P0-1（widget 门禁）、P1-4（Selector）、P1-5（并行/分页）、P1-6（图片 LRU）、P2-7（M17 拆分）、P2-8（协议策略）、P2-9（EditorController）、P2-11（lint+CI 缓存）、P3-13（冲突精确）、P3-12（富媒体块）、P3-14（多作者）、P3-15（体验增强）全部收口。
 
 ## 后续执行路径（建议）
 
-1. **功能迭代**：P3-12 富媒体块（封面图、画廊、按钮、分栏）。P3-14、P3-15 已收口。
+1. **P0–P3 已全量收口**：P3-12 富媒体块（封面图、画廊、按钮、分栏）、P3-14 写作辅助、P3-15 体验增强均已落地并经 CI 验证。
 2. **门禁保持**：`flutter analyze` + `flutter test` 须在 CI 全绿才允许 `v*` 发版。
 
 > 流程约定：仍走 `main` 单分支、打 `v*` tag 发版（沿用当前流程）。P0-1 widget 门禁已做实，重构项须小步增量、CI 全绿才合。
