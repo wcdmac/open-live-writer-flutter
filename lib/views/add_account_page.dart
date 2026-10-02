@@ -5,7 +5,6 @@ import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
 import '../models/blog.dart';
 import '../services/blog_service.dart';
-import '../widgets/radio_group.dart';
 import '../services/rest/wordpress_rest.dart';
 import '../services/rsd_detector.dart';
 import '../state/app_state.dart';
@@ -365,19 +364,15 @@ class _AddAccountPageState extends State<AddAccountPage> {
             if (value == BlogProtocol.rest && d.restRoot == null) return;
             setState(() => _protocol = value);
           },
-          builder: (context) => Column(
+          child: Column(
             children: [
               RadioListTile<BlogProtocol>(
                 value: BlogProtocol.xmlrpc,
-                groupValue: RadioGroup.of<BlogProtocol>(context).groupValue,
-                onChanged: RadioGroup.of<BlogProtocol>(context).onChanged,
                 title: Text(l10n.xmlrpcClassic),
                 subtitle: Text('${l10n.flavor}: ${flavorLabel(l10n, _flavor)}'),
               ),
               RadioListTile<BlogProtocol>(
                 value: BlogProtocol.rest,
-                groupValue: RadioGroup.of<BlogProtocol>(context).groupValue,
-                onChanged: RadioGroup.of<BlogProtocol>(context).onChanged,
                 title: Text(l10n.restV2),
                 subtitle: Text(
                   '${l10n.endpoint}: ${d.restRoot ?? l10n.notAvailable}',
@@ -456,13 +451,11 @@ class _AddAccountPageState extends State<AddAccountPage> {
           );
         });
       },
-      builder: (context) => Column(
+      child: Column(
         children: _blogs
             .map(
               (blog) => RadioListTile<String>(
                 value: blog.blogId,
-                groupValue: RadioGroup.of<String>(context).groupValue,
-                onChanged: RadioGroup.of<String>(context).onChanged,
                 title: Text(blog.name),
                 subtitle: Text(blog.url),
               ),
