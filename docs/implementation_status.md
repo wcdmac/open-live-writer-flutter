@@ -70,14 +70,14 @@
 |----|----------|----------|------|
 | P3-12 富媒体/块类型扩展 | 封面图、画廊、按钮、分栏 | Gutenberg 块可编辑导出 | **Deferred** |
 | P3-13 离线同步增强 | 双向冲突三向合并（取代 1 秒容差 best-effort） | 高频编辑不误覆盖 | **Done** — 冲突判定由 1s 容差改为 `modified_gmt` 精确比对 + `kConflictClockSkew`（1s）容差常量；离线副本基线取 `post.modified` |
-| P3-14 写作辅助 | SEO/元数据（excerpt/slug/OG）、定时发布、多作者 | 元数据可编辑并随导出 | **Done** — SEO 元数据（seoTitle/seoDescription/ogImageUrl）经 REST `meta` + XML-RPC `post_meta`（Yoast 兼容）双向同步；excerpt/slug 可编辑、定时发布经 `datePublished`+`scheduled` 已落地；多作者一项未做 |
+| P3-14 写作辅助 | SEO/元数据（excerpt/slug/OG）、定时发布、多作者 | 元数据可编辑并随导出 | **Done** — SEO 元数据（seoTitle/seoDescription/ogImageUrl）经 REST `meta` + XML-RPC `post_meta`（Yoast 兼容）双向同步；excerpt/slug 可编辑、定时发布经 `datePublished`+`scheduled` 已落地；多作者经 `BlogAuthor` 模型 + REST `GET /wp/v2/users` / XML-RPC `wp.getAuthors` 拉取 + 发布时 `author`/`post_author` 写入 + 编辑器「作者」下拉选择，已落地（并修复 wp.getPost 解析丢失 `authorName` 的潜在缺陷） |
 | P3-15 体验 | 暗色跟随系统、本地化补全、撤销重做增强 | 体验一致 | **Partial** — 轻微清理（L11/L12/L14/L15）此前已完成；主题跟随已有 `theme_detector` |
 
 ## 明确未在本轮执行（Deferred）的事项与原因
 
 本轮已将 P0-1（widget 门禁）、P1-4（Selector）、P1-5（并行/分页）、P1-6（图片 LRU）、P2-7（M17 拆分）、P2-8（协议策略）、P2-9（EditorController）、P2-11（lint+CI 缓存）、P3-13（冲突精确）全部收口。剩余：
 
-- **P3-12 / P3-14 / P3-15 功能项**：属新功能（富媒体块、SEO/元数据、体验增强），非缺陷修复，按路线图持续迭代。
+- **P3-12 / P3-15 功能项**：属新功能（富媒体块、体验增强），非缺陷修复，按路线图持续迭代。P3-14 写作辅助已全部收口（SEO/元数据 + 定时发布 + 多作者）。
 
 ## 后续执行路径（建议）
 
