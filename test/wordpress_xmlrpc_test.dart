@@ -140,6 +140,41 @@ void main() {
       expect(post.seoDescription, 'DESC');
       expect(post.ogImageUrl, 'https://x/y.png');
     });
+
+    // --------------------------------------------------------------- P3-14 (multi-author)
+    test('newPost sends post_author when set (P3-14 multi-author)', () async {
+      final fake = _CaptureXmlRpcClient();
+      final c = _captureClient(fake);
+      await c.newPost(
+        BlogPost(title: 'T', content: 'C', authorId: '7', authorName: 'Bob'),
+        publish: false,
+      );
+      final content = fake.newPostParams![3] as Map<String, dynamic>;
+      expect(content['post_author'], '7');
+    });
+
+    test('newPost omits post_author when empty (P3-14 multi-author)', () async {
+      final fake = _CaptureXmlRpcClient();
+      final c = _captureClient(fake);
+      await c.newPost(BlogPost(title: 'T', content: 'C'), publish: false);
+      final content = fake.newPostParams![3] as Map<String, dynamic>;
+      expect(content.containsKey('post_author'), isFalse);
+    });
+
+    test('getPost reads post_author back (P3-14 multi-author)', () async {
+      final fake = _CaptureXmlRpcClient()
+        ..getPostOverride = {
+          'post_id': 1,
+          'post_title': 'Hi',
+          'post_status': 'publish',
+          'post_author': 7,
+          'userid': 7,
+        };
+      final c = _captureClient(fake);
+      final post = await c.getPost('1');
+      expect(post.authorId, '7');
+      expect(post.authorName, '7');
+    });
   });
 }
 

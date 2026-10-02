@@ -302,5 +302,59 @@ void main() {
       expect(post.seoDescription, 'DESC');
       expect(post.ogImageUrl, 'https://x/y.png');
     });
+
+    // ----------------------------------------------------------------- P3-14 (multi-author)
+    test('newPost sends author when set (P3-14)', () async {
+      Map<String, dynamic>? body;
+      final c = _client(
+        'https://a16.test/wp-json',
+        (req) async {
+          if (req.method == 'POST' && req.url.path.contains('/posts')) {
+            body = jsonDecode(req.body) as Map<String, dynamic>;
+            return http.Response(jsonEncode({'id': 1, 'status': 'draft'}), 200);
+          }
+          return http.Response(jsonEncode([]), 200);
+        },
+      );
+      await c.newPost(
+        BlogPost(title: 'T', content: 'C', authorId: '7', authorName: 'Bob'),
+        publish: false,
+      );
+      expect(body!['author'], '7');
+    });
+
+    test('newPost omits author when empty (P3-14)', () async {
+      Map<String, dynamic>? body;
+      final c = _client(
+        'https://a17.test/wp-json',
+        (req) async {
+          if (req.method == 'POST' && req.url.path.contains('/posts')) {
+            body = jsonDecode(req.body) as Map<String, dynamic>;
+            return http.Response(jsonEncode({'id': 1, 'status': 'draft'}), 200);
+          }
+          return http.Response(jsonEncode([]), 200);
+        },
+      );
+      await c.newPost(BlogPost(title: 'T', content: 'C'), publish: false);
+      expect(body!.containsKey('author'), isFalse);
+    });
+
+    test('getPost reads author back (P3-14)', () async {
+      final c = _client(
+        'https://a18.test/wp-json',
+        (req) async => http.Response(
+          jsonEncode({
+            'id': 1,
+            'title': {'rendered': 'Hi'},
+            'status': 'publish',
+            'date_gmt': '2024-01-01T00:00:00',
+            'author': 7,
+          }),
+          200,
+        ),
+      );
+      final post = await c.getPost('1');
+      expect(post.authorId, '7');
+    });
   });
 }

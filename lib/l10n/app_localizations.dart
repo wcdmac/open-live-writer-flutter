@@ -1082,6 +1082,12 @@ abstract class AppLocalizations {
   /// **'Readers must enter this password to view the post (empty = no protection)'**
   String get postPasswordHelp;
 
+  /// No description provided for @author.
+  ///
+  /// In en, this message translates to:
+  /// **'Author'**
+  String get author;
+
   /// No description provided for @seoMetadata.
   ///
   /// In en, this message translates to:

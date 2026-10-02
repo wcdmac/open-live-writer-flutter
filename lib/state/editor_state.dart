@@ -114,6 +114,16 @@ class EditorState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Sets/clears the post author (P3-14 multi-author). Selecting an author
+  /// from the picker records both id and display name; an empty id clears the
+  /// selection so the server keeps its default author.
+  void updateAuthor(String? id, String? name) {
+    post.authorId = id?.trim().isEmpty == true ? null : id?.trim();
+    post.authorName = name?.trim().isEmpty == true ? null : name?.trim();
+    _dirty = true;
+    notifyListeners();
+  }
+
   /// Sets/clears the post password. An empty string clears protection —
   /// both protocols already serialize `post.password`.
   void updatePassword(String password) {

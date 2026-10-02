@@ -535,6 +535,9 @@ class AppLocalizationsEn extends AppLocalizations {
       'Readers must enter this password to view the post (empty = no protection)';
 
   @override
+  String get author => 'Author';
+
+  @override
   String get seoMetadata => 'SEO & Social';
 
   @override

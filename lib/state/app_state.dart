@@ -30,6 +30,7 @@ class AppState extends ChangeNotifier {
 
   List<PostCategory> categories = [];
   List<PostTag> tags = [];
+  List<BlogAuthor> authors = [];
   List<BlogPost> posts = [];
   List<LocalDraft> localDrafts = [];
   BlogTheme? theme;
@@ -138,6 +139,7 @@ class AppState extends ChangeNotifier {
       posts = [];
       categories = [];
       tags = [];
+      authors = [];
       error = null;
       await _loadLocalDrafts();
       // refresh() already notifies in its finally block, so a single
@@ -191,6 +193,13 @@ class AppState extends ChangeNotifier {
       debugPrint('getTags failed: $e');
       return <PostTag>[];
     });
+    // P3-14 multi-author: author list for the settings-sheet picker. Best-
+    // effort — servers without wp.getAuthors / users endpoint just leave the
+    // picker hidden rather than failing the dashboard load.
+    final authorsFuture = svc.getAuthors().catchError((Object e) {
+      debugPrint('getAuthors failed: $e');
+      return <BlogAuthor>[];
+    });
     // Theme probe runs concurrently with the list load (P1-5): it used to
     // wait for the whole post list first, adding a full extra round-trip to
     // every refresh. Non-fatal, so a failure just returns the current theme.
@@ -226,6 +235,7 @@ class AppState extends ChangeNotifier {
 
     categories = await catsFuture;
     tags = await tagsFuture;
+    authors = await authorsFuture;
     theme = await themeFuture;
     // A full first page implies there may be more posts to load.
     canLoadMore = posts.length >= kPostPageSize;

@@ -530,6 +530,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get postPasswordHelp => '读者需输入此密码才能查看文章（留空 = 不加保护）';
 
   @override
+  String get author => '作者';
+
+  @override
   String get seoMetadata => 'SEO 与社交分享';
 
   @override

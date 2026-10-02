@@ -197,6 +197,7 @@
   "addParagraph": "添加段落",
   "postPassword": "文章密码",
   "postPasswordHelp": "读者需输入此密码才能查看文章（留空 = 不加保护）",
+  "author": "作者",
   "seoMetadata": "SEO 与社交分享",
   "seoTitle": "SEO 标题",
   "seoTitleHelp": "覆盖浏览器标签 / 搜索结果中的标题（留空则使用文章标题）",

@@ -291,6 +291,25 @@ class WordPressRestClient {
     throw WordPressRestException(500, 'invalid_profile', 'Bad profile payload');
   }
 
+  /// GET /wp/v2/users — lists blog authors for the multi-author picker
+  /// (P3-14). `context=view` is enough for id/name/slug and avoids 401 on
+  /// sites where the current role can't read `edit` context.
+  Future<List<BlogAuthor>> getAuthors() async {
+    final data = await _request(
+      'GET',
+      '/wp/v2/users',
+      query: {'context': 'view', 'per_page': '100'},
+    );
+    if (data is! List) return const [];
+    return data.map((raw) {
+      final m = raw as Map<String, dynamic>;
+      final id = '${m['id']}';
+      final name = '${m['name'] ?? m['slug'] ?? ''}';
+      final slug = m['slug'] == null ? null : '${m['slug']}';
+      return BlogAuthor(id: id, name: name, slug: slug);
+    }).toList();
+  }
+
   // ---------------------------------------------------------------------------
   // Posts & pages
   // ---------------------------------------------------------------------------
@@ -799,6 +818,9 @@ class WordPressRestClient {
       if (post.slug?.isNotEmpty == true) 'slug': post.slug,
       if (post.password?.isNotEmpty == true) 'password': post.password,
       if (meta.isNotEmpty) 'meta': meta,
+      // P3-14: multi-author — only send when explicitly set, so posts left
+      // at the server default author aren't overwritten on every save.
+      if (post.authorId?.isNotEmpty == true) 'author': post.authorId,
       if (!post.isPage) ...{
         'categories': post.categories
             .map(int.tryParse)

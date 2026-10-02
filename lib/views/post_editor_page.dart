@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../editor/block_editor.dart';
 import '../l10n/app_localizations.dart';
+import '../models/blog.dart';
 import '../models/blog_post.dart';
 import '../services/error_message.dart';
 import '../services/local_draft_store.dart';
@@ -1395,6 +1396,47 @@ class _PostSettingsSheetState extends State<_PostSettingsSheet> {
             onChanged: (v) => editor.updateSeo(ogImageUrl: v),
           ),
           const SizedBox(height: 16),
+
+          // --- Author (P3-14 multi-author) -------------------------------
+          if (app.authors.isNotEmpty) ...[
+            Text(
+              l10n.author,
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            const SizedBox(height: 8),
+            Builder(
+              builder: (context) {
+                final current = editor.post.authorId;
+                // Surface the current author even if it isn't in the fetched
+                // list (e.g. the server omitted it) so the picker never errors
+                // on a value that matches no item.
+                final items = <BlogAuthor>[
+                  if (current != null &&
+                      !app.authors.any((a) => a.id == current))
+                    BlogAuthor(
+                      id: current,
+                      name: editor.post.authorName ?? current,
+                    ),
+                  ...app.authors,
+                ];
+                return DropdownButtonFormField<BlogAuthor>(
+                  key: ValueKey<String?>(current),
+                  value: items.where((a) => a.id == current).firstOrNull,
+                  decoration: InputDecoration(labelText: l10n.author),
+                  items: items
+                      .map(
+                        (a) => DropdownMenuItem(
+                          value: a,
+                          child: Text(a.name),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (a) => editor.updateAuthor(a?.id, a?.name),
+                );
+              },
+            ),
+            const SizedBox(height: 16),
+          ],
 
           // --- Discussion --------------------------------------------------
           SwitchListTile(

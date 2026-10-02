@@ -49,6 +49,8 @@ class BlogService {
 
   Future<Map<String, dynamic>> getProfile() => _client.getProfile();
 
+  Future<List<BlogAuthor>> getAuthors() => _client.getAuthors();
+
   // -------------------------------------------------------------------------
   // Posts
   // -------------------------------------------------------------------------

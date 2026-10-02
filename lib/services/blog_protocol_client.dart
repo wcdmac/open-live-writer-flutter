@@ -17,6 +17,8 @@ abstract class BlogProtocolClient {
 
   Future<Map<String, dynamic>> getProfile();
 
+  Future<List<BlogAuthor>> getAuthors();
+
   Future<List<BlogPost>> getPosts({
     int count = 30,
     int offset = 0,
@@ -78,6 +80,9 @@ class RestProtocolClient implements BlogProtocolClient {
 
   @override
   Future<Map<String, dynamic>> getProfile() => _rest.getProfile();
+
+  @override
+  Future<List<BlogAuthor>> getAuthors() => _rest.getAuthors();
 
   @override
   Future<List<BlogPost>> getPosts({
@@ -164,6 +169,9 @@ class XmlRpcProtocolClient implements BlogProtocolClient {
 
   @override
   Future<Map<String, dynamic>> getProfile() => _xmlrpc.getProfile();
+
+  @override
+  Future<List<BlogAuthor>> getAuthors() => _xmlrpc.getAuthors();
 
   @override
   Future<List<BlogPost>> getPosts({

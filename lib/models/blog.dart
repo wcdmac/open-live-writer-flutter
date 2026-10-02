@@ -87,6 +87,26 @@ class BlogInfo {
       );
 }
 
+/// A WordPress user who can be set as a post's author (P3-14 multi-author).
+class BlogAuthor {
+  const BlogAuthor({
+    required this.id,
+    required this.name,
+    this.slug,
+  });
+
+  final String id;
+  final String name;
+  final String? slug;
+
+  @override
+  bool operator ==(Object other) =>
+      other is BlogAuthor && other.id == id && other.name == name;
+
+  @override
+  int get hashCode => Object.hash(id, name);
+}
+
 /// A locally stored blog account. Credentials live in secure storage
 /// keyed by [id]; they are never persisted inside this model.
 class BlogAccount {

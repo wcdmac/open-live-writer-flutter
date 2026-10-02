@@ -95,6 +95,25 @@ class WordPressXmlRpcClient {
     return blogs;
   }
 
+  /// wp.getAuthors — lists users who can author posts (P3-14 multi-author).
+  /// Returns [] on servers that don't expose the method so the picker simply
+  /// stays hidden rather than failing the whole editor open.
+  Future<List<BlogAuthor>> getAuthors() async {
+    final result = await _client.callMethod('wp.getAuthors', [
+      _blogId,
+      _client.username,
+      _client.password,
+    ]);
+    final rows = result is List ? result : [result];
+    return rows.whereType<Map>().map((m) {
+      return BlogAuthor(
+        id: '${m['user_id']}',
+        name: '${m['display_name'] ?? m['user_login'] ?? ''}',
+        slug: m['user_login'] == null ? null : '${m['user_login']}',
+      );
+    }).toList();
+  }
+
   // ---------------------------------------------------------------------------
   // Posts (WordPress API with MetaWeblog fallback)
   // ---------------------------------------------------------------------------
@@ -658,6 +677,9 @@ class WordPressXmlRpcClient {
         'post_date_gmt': post.datePublished!.toUtc(),
       if (post.password?.isNotEmpty == true) 'post_password': post.password,
       if (meta.isNotEmpty) 'post_meta': meta,
+      // P3-14: multi-author — only send when explicitly set so the server
+      // default author isn't overwritten on every save.
+      if (post.authorId?.isNotEmpty == true) 'post_author': post.authorId,
       if (post.isPage) ...{
         if (post.pageParentId?.isNotEmpty == true)
           'wp_page_parent_id':
