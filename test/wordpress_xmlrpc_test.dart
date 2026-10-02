@@ -172,6 +172,12 @@ void main() {
         };
       final c = _captureClient(fake);
       final post = await c.getPost('1');
+      // DEBUG: confirm which struct was parsed.
+      debugPrint(
+        'AUTHOR DEBUG id=${post.id} authorId=${post.authorId} '
+        'authorName=${post.authorName}',
+      );
+      expect(post.id, '1', reason: 'override must be parsed');
       expect(post.authorId, '7');
       expect(post.authorName, '7');
     });
