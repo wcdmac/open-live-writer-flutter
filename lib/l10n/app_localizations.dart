@@ -1369,6 +1369,78 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Follow system'**
   String get themeSystem;
+
+  /// No description provided for @coverImage.
+  ///
+  /// In en, this message translates to:
+  /// **'Cover image'**
+  String get coverImage;
+
+  /// No description provided for @coverOverlay.
+  ///
+  /// In en, this message translates to:
+  /// **'Overlay text'**
+  String get coverOverlay;
+
+  /// No description provided for @gallery.
+  ///
+  /// In en, this message translates to:
+  /// **'Gallery'**
+  String get gallery;
+
+  /// No description provided for @galleryAddImage.
+  ///
+  /// In en, this message translates to:
+  /// **'Add image'**
+  String get galleryAddImage;
+
+  /// No description provided for @button.
+  ///
+  /// In en, this message translates to:
+  /// **'Button'**
+  String get button;
+
+  /// No description provided for @buttonLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Button text'**
+  String get buttonLabel;
+
+  /// No description provided for @columns.
+  ///
+  /// In en, this message translates to:
+  /// **'Columns'**
+  String get columns;
+
+  /// No description provided for @columnsCount.
+  ///
+  /// In en, this message translates to:
+  /// **'Number of columns'**
+  String get columnsCount;
+
+  /// No description provided for @coverImageBlock.
+  ///
+  /// In en, this message translates to:
+  /// **'Cover image'**
+  String get coverImageBlock;
+
+  /// No description provided for @galleryBlock.
+  ///
+  /// In en, this message translates to:
+  /// **'Gallery'**
+  String get galleryBlock;
+
+  /// No description provided for @buttonBlock.
+  ///
+  /// In en, this message translates to:
+  /// **'Button'**
+  String get buttonBlock;
+
+  /// No description provided for @columnsBlock.
+  ///
+  /// In en, this message translates to:
+  /// **'Columns'**
+  String get columnsBlock;
 }
 
 class _AppLocalizationsDelegate

@@ -696,4 +696,40 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get themeSystem => 'Follow system';
+
+  @override
+  String get coverImage => 'Cover image';
+
+  @override
+  String get coverOverlay => 'Overlay text';
+
+  @override
+  String get gallery => 'Gallery';
+
+  @override
+  String get galleryAddImage => 'Add image';
+
+  @override
+  String get button => 'Button';
+
+  @override
+  String get buttonLabel => 'Button text';
+
+  @override
+  String get columns => 'Columns';
+
+  @override
+  String get columnsCount => 'Number of columns';
+
+  @override
+  String get coverImageBlock => 'Cover image';
+
+  @override
+  String get galleryBlock => 'Gallery';
+
+  @override
+  String get buttonBlock => 'Button';
+
+  @override
+  String get columnsBlock => 'Columns';
 }

@@ -212,4 +212,153 @@ void main() {
     expect(blocks.single.type, BlockType.html);
     expect(serializeBlocks(blocks), src);
   });
+
+  group('cover image block', () {
+    test('build + parse round-trip with overlay text', () {
+      const html = buildCoverHtml(
+          CoverData(url: 'https://x/c.jpg', overlay: 'Hello world'));
+      expect(
+        html,
+        '<div class="wp-block-cover">'
+        '<img class="wp-block-cover__image-background" src="https://x/c.jpg" />'
+        '<span aria-hidden="true" class="wp-block-cover__background has-background-dim"></span>'
+        '<div class="wp-block-cover__inner-container">'
+        '<!-- wp:paragraph --><p>Hello world</p><!-- /wp:paragraph -->'
+        '</div></div>',
+      );
+      final data = parseCover(html);
+      expect(data, isNotNull);
+      expect(data!.url, 'https://x/c.jpg');
+      expect(data.overlay, 'Hello world');
+    });
+
+    test('classifies a wp:cover block and round-trips the comments', () {
+      const src = '<!-- wp:cover -->\n'
+          '<div class="wp-block-cover">'
+          '<img class="wp-block-cover__image-background" src="https://x/c.jpg" />'
+          '<span aria-hidden="true" class="wp-block-cover__background has-background-dim"></span>'
+          '</div>\n'
+          '<!-- /wp:cover -->';
+      final blocks = parseBlocks(src);
+      expect(blocks.single.type, BlockType.coverImage);
+      expect(serializeBlocks(blocks), src);
+    });
+
+    test('cover without overlay emits no inner container', () {
+      final html = buildCoverHtml(CoverData(url: 'https://x/c.jpg'));
+      expect(html, isNot(contains('inner-container')));
+      expect(parseCover(html)!.overlay, isEmpty);
+    });
+  });
+
+  group('gallery block', () {
+    test('build + parse round-trip preserves images and column count', () {
+      const html = buildGalleryHtml(GalleryData(images: [
+        GalleryImage(url: 'https://x/a.jpg', alt: 'A'),
+        GalleryImage(url: 'https://x/b.jpg'),
+      ], columns: 3));
+      expect(
+        html,
+        '<figure class="wp-block-gallery has-nested-images columns-3">'
+        '<!-- wp:image -->\n'
+        '<figure class="wp-block-image"><img src="https://x/a.jpg" alt="A"/></figure>\n'
+        '<!-- /wp:image -->'
+        '<!-- wp:image -->\n'
+        '<figure class="wp-block-image"><img src="https://x/b.jpg"/></figure>\n'
+        '<!-- /wp:image -->'
+        '</figure>',
+      );
+      final data = parseGallery(html);
+      expect(data, isNotNull);
+      expect(data!.images.length, 2);
+      expect(data.images[0].url, 'https://x/a.jpg');
+      expect(data.images[0].alt, 'A');
+      expect(data.images[1].url, 'https://x/b.jpg');
+      expect(data.columns, 3);
+    });
+
+    test('classifies a wp:gallery block', () {
+      const src = '<!-- wp:gallery -->\n'
+          '<figure class="wp-block-gallery has-nested-images columns-2">'
+          '<!-- wp:image --><figure class="wp-block-image">'
+          '<img src="https://x/a.jpg"/></figure><!-- /wp:image -->'
+          '</figure>\n<!-- /wp:gallery -->';
+      expect(parseBlocks(src).single.type, BlockType.gallery);
+    });
+  });
+
+  group('button block', () {
+    test('build + parse round-trip label and url', () {
+      const html = buildButtonHtml(
+          ButtonData(label: 'Click me', url: 'https://x/target'));
+      expect(
+        html,
+        '<div class="wp-block-buttons"><div class="wp-block-button">'
+        '<a class="wp-block-button__link wp-element-button" href="https://x/target">'
+        'Click me</a></div></div>',
+      );
+      final data = parseButton(html);
+      expect(data, isNotNull);
+      expect(data!.label, 'Click me');
+      expect(data.url, 'https://x/target');
+    });
+
+    test('dangerous href collapses to #', () {
+      final html = buildButtonHtml(
+          ButtonData(label: 'X', url: 'javascript:alert(1)'));
+      expect(html, contains('href="#"'));
+      expect(html, isNot(contains('javascript:')));
+    });
+
+    test('classifies a wp:buttons block', () {
+      const src = '<!-- wp:buttons -->\n'
+          '<div class="wp-block-buttons"><div class="wp-block-button">'
+          '<a class="wp-block-button__link wp-element-button" href="https://x">Go</a>'
+          '</div></div>\n<!-- /wp:buttons -->';
+      expect(parseBlocks(src).single.type, BlockType.button);
+    });
+  });
+
+  group('columns block', () {
+    test('build + parse round-trip column content', () {
+      const html = buildColumnsHtml(
+          ColumnsData(columns: ['<p>One</p>', '<p>Two</p>']));
+      expect(
+        html,
+        '<div class="wp-block-columns">'
+        '<div class="wp-block-column"><p>One</p></div>'
+        '<div class="wp-block-column"><p>Two</p></div>'
+        '</div>',
+      );
+      final data = parseColumns(html);
+      expect(data, isNotNull);
+      expect(data!.count, 2);
+      expect(data.columns[0], '<p>One</p>');
+      expect(data.columns[1], '<p>Two</p>');
+    });
+
+    test('bare text column is wrapped in a wp:paragraph inner block', () {
+      final html = buildColumnsHtml(ColumnsData(columns: ['plain', '']));
+      expect(
+        html,
+        '<div class="wp-block-columns">'
+        '<div class="wp-block-column">'
+        '<!-- wp:paragraph -->\n<p>plain</p>\n<!-- /wp:paragraph -->'
+        '</div>'
+        '<div class="wp-block-column">'
+        '<!-- wp:paragraph -->\n<p></p>\n<!-- /wp:paragraph -->'
+        '</div>'
+        '</div>',
+      );
+    });
+
+    test('classifies a wp:columns block', () {
+      const src = '<!-- wp:columns -->\n'
+          '<div class="wp-block-columns">'
+          '<div class="wp-block-column"><p>A</p></div>'
+          '<div class="wp-block-column"><p>B</p></div>'
+          '</div>\n<!-- /wp:columns -->';
+      expect(parseBlocks(src).single.type, BlockType.columns);
+    });
+  });
 }

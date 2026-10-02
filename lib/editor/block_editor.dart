@@ -23,6 +23,10 @@ part 'blocks/table_field.dart';
 part 'blocks/code_field.dart';
 part 'blocks/list_field.dart';
 part 'blocks/quote_field.dart';
+part 'blocks/cover_image_field.dart';
+part 'blocks/gallery_field.dart';
+part 'blocks/button_field.dart';
+part 'blocks/columns_field.dart';
 part 'blocks/insert_bar.dart';
 
 /// Visual (WYSIWYG) block editor.

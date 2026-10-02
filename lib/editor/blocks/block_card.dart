@@ -142,6 +142,18 @@ class _BlockCardState extends State<_BlockCard> {
           block: widget.block, onChanged: widget.onHtmlChanged),
       BlockType.quote => _QuoteField(
           block: widget.block, onChanged: widget.onHtmlChanged),
+      BlockType.coverImage => _CoverImageField(
+          block: widget.block,
+          onChanged: widget.onHtmlChanged,
+          uploadMedia: widget.uploadMedia),
+      BlockType.gallery => _GalleryField(
+          block: widget.block,
+          onChanged: widget.onHtmlChanged,
+          uploadMedia: widget.uploadMedia),
+      BlockType.button => _ButtonField(
+          block: widget.block, onChanged: widget.onHtmlChanged),
+      BlockType.columns => _ColumnsField(
+          block: widget.block, onChanged: widget.onHtmlChanged),
       // Lists, quotes and unknown markup edit their raw HTML — the
       // only lossless option — while unfocused rendering stays WYSIWYG.
       _ => _TextBlockField(

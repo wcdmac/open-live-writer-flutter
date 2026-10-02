@@ -683,4 +683,40 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get themeSystem => '跟随系统';
+
+  @override
+  String get coverImage => '封面图';
+
+  @override
+  String get coverOverlay => '叠层文字';
+
+  @override
+  String get gallery => '画廊';
+
+  @override
+  String get galleryAddImage => '添加图片';
+
+  @override
+  String get button => '按钮';
+
+  @override
+  String get buttonLabel => '按钮文字';
+
+  @override
+  String get columns => '分栏';
+
+  @override
+  String get columnsCount => '栏数';
+
+  @override
+  String get coverImageBlock => '封面图';
+
+  @override
+  String get galleryBlock => '画廊';
+
+  @override
+  String get buttonBlock => '按钮';
+
+  @override
+  String get columnsBlock => '分栏';
 }

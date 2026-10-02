@@ -274,8 +274,61 @@ class _InsertBar extends StatelessWidget {
             label: Text(l10n.videoBlock),
             onPressed: () => _insertVideo(context),
           ),
+          const SizedBox(width: 6),
+          ActionChip(
+            avatar: const Icon(Icons.photo, size: 18),
+            label: Text(l10n.coverImageBlock),
+            onPressed: () => _insertCover(context),
+          ),
+          const SizedBox(width: 6),
+          ActionChip(
+            avatar: const Icon(Icons.collections, size: 18),
+            label: Text(l10n.galleryBlock),
+            onPressed: () => onInsert(ContentBlock(
+              type: BlockType.gallery,
+              html: buildGalleryHtml(GalleryData(images: const [])),
+              wpOpen: '<!-- wp:gallery -->',
+              wpClose: '<!-- /wp:gallery -->',
+            )),
+          ),
+          const SizedBox(width: 6),
+          ActionChip(
+            avatar: const Icon(Icons.smart_button, size: 18),
+            label: Text(l10n.buttonBlock),
+            onPressed: () => onInsert(ContentBlock(
+              type: BlockType.button,
+              html: buildButtonHtml(ButtonData(label: l10n.button)),
+              wpOpen: '<!-- wp:buttons -->',
+              wpClose: '<!-- /wp:buttons -->',
+            )),
+          ),
+          const SizedBox(width: 6),
+          ActionChip(
+            avatar: const Icon(Icons.view_column, size: 18),
+            label: Text(l10n.columnsBlock),
+            onPressed: () => onInsert(ContentBlock(
+              type: BlockType.columns,
+              html: buildColumnsHtml(ColumnsData(columns: ['', ''])),
+              wpOpen: '<!-- wp:columns -->',
+              wpClose: '<!-- /wp:columns -->',
+            )),
+          ),
         ],
       ),
     );
+  }
+
+  /// Cover image insert: prompt for the background image URL, then insert a
+  /// cover block. Overlay text is added later in the focused field.
+  Future<void> _insertCover(BuildContext context) async {
+    final l10n = AppLocalizations.of(context)!;
+    final url = await _prompt(context, l10n.imageUrl, 'https://');
+    if (url == null || url.trim().isEmpty || !context.mounted) return;
+    onInsert(ContentBlock(
+      type: BlockType.coverImage,
+      html: buildCoverHtml(CoverData(url: url.trim())),
+      wpOpen: '<!-- wp:cover -->',
+      wpClose: '<!-- /wp:cover -->',
+    ));
   }
 }

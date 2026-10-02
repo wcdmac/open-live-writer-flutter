@@ -47,6 +47,10 @@ enum BlockType {
   list,
   quote,
   code,
+  coverImage,
+  gallery,
+  button,
+  columns,
   html,
 }
 
@@ -190,6 +194,36 @@ BlockType _classifyType(String html) {
   // Code blocks.
   if (RegExp(r'^<pre\b', caseSensitive: false).hasMatch(h)) {
     return BlockType.code;
+  }
+
+  // Cover image (wp:cover): a div with the wp-block-cover class. Must be
+  // detected before the paragraph fallback, which would otherwise swallow
+  // any other <div> as raw html.
+  if (RegExp(r'^<div\b[^>]*class="[^"]*wp-block-cover',
+          caseSensitive: false)
+      .hasMatch(h)) {
+    return BlockType.coverImage;
+  }
+
+  // Gallery (wp:gallery): a figure with the wp-block-gallery class.
+  if (RegExp(r'^<figure\b[^>]*class="[^"]*wp-block-gallery',
+          caseSensitive: false)
+      .hasMatch(h)) {
+    return BlockType.gallery;
+  }
+
+  // Buttons (wp:buttons / wp:button): a div with the wp-block-buttons class.
+  if (RegExp(r'^<div\b[^>]*class="[^"]*wp-block-buttons',
+          caseSensitive: false)
+      .hasMatch(h)) {
+    return BlockType.button;
+  }
+
+  // Columns (wp:columns): a div with the wp-block-columns class.
+  if (RegExp(r'^<div\b[^>]*class="[^"]*wp-block-columns',
+          caseSensitive: false)
+      .hasMatch(h)) {
+    return BlockType.columns;
   }
 
   // Everything else with a single <p> wrapper (or plain text) is a paragraph.
@@ -617,6 +651,256 @@ String buildQuoteHtml(QuoteData quote) {
       .map((p) => '<!-- wp:paragraph -->\n<p>$p</p>\n<!-- /wp:paragraph -->')
       .join();
   return '$open$inner</blockquote>';
+}
+
+// ---------------------------------------------------------------------------
+// Cover image block (core/cover): a full-width background image with optional
+// centered overlay text. The overlay is wrapped in a wp:paragraph inner block
+// so the block editor treats it as real editable content.
+// ---------------------------------------------------------------------------
+
+/// Editable cover-image payload.
+class CoverData {
+  CoverData({required this.url, this.overlay = ''});
+
+  /// Background image URL.
+  String url;
+
+  /// Optional centered text shown over the (dimmed) image.
+  String overlay;
+}
+
+/// Parses a `wp:cover` inner div (or a tolerant subset) into its payload.
+/// Returns null when [html] has no image.
+CoverData? parseCover(String html) {
+  final src = firstImgSrc(html);
+  if (src == null || src.isEmpty) return null;
+  String overlay = '';
+  final inner = RegExp(
+          r'<div[^>]*class="[^"]*wp-block-cover__inner-container[^"]*"[^>]*>([\s\S]*?)</div>',
+          caseSensitive: false)
+      .firstMatch(html);
+  if (inner != null) {
+    overlay = _stripTags(inner.group(1)!).trim();
+  }
+  return CoverData(url: src, overlay: overlay);
+}
+
+/// Builds canonical core/cover markup. A `has-background-dim` span darkens
+/// the image so the overlay text stays legible, matching Gutenberg output.
+String buildCoverHtml(CoverData cover) {
+  final url = cover.url.trim();
+  final overlay = cover.overlay.trim();
+  final innerContainer = overlay.isEmpty
+      ? ''
+      : '<div class="wp-block-cover__inner-container">'
+        '<!-- wp:paragraph -->'
+        '<p>${_encodeEntities(overlay)}</p>'
+        '<!-- /wp:paragraph -->'
+        '</div>';
+  return '<div class="wp-block-cover">'
+      '<img class="wp-block-cover__image-background" src="${_htmlAttr(url)}" />'
+      '<span aria-hidden="true" class="wp-block-cover__background has-background-dim"></span>'
+      '$innerContainer'
+      '</div>';
+}
+
+// ---------------------------------------------------------------------------
+// Gallery block (core/gallery): a responsive grid of images. Column count
+// rides along as `columns-N` on the figure class (Gutenberg's own scheme).
+// ---------------------------------------------------------------------------
+
+/// One gallery image.
+class GalleryImage {
+  GalleryImage({required this.url, this.alt = ''});
+
+  String url;
+  String alt;
+}
+
+/// Editable gallery payload.
+class GalleryData {
+  GalleryData({required this.images, this.columns = 3})
+      : assert(columns >= 1, 'columns must be >= 1'),
+        assert(columns <= 8, 'columns must be <= 8');
+
+  List<GalleryImage> images;
+
+  /// Responsive column count (1–8).
+  int columns;
+}
+
+/// Parses a `wp:gallery` figure (or a tolerant subset) into its payload.
+/// Returns null when no images are found.
+GalleryData? parseGallery(String html) {
+  final imgs = RegExp(r'<img\b[^>]*>', caseSensitive: false)
+      .allMatches(html)
+      .map((m) {
+        final tag = m.group(0)!;
+        final url = firstImgSrc(tag) ?? '';
+        final alt = RegExp(r'\balt="([^"]*)"', caseSensitive: false)
+            .firstMatch(tag)
+            ?.group(1) ??
+            '';
+        return GalleryImage(url: url, alt: alt);
+      })
+      .where((img) => img.url.isNotEmpty)
+      .toList();
+  if (imgs.isEmpty) return null;
+  // Column count: Gutenberg uses `columns-N` on the figure class.
+  final cols = RegExp(r'columns-(\d+)', caseSensitive: false)
+      .firstMatch(html);
+  final count = cols == null ? 3 : int.parse(cols.group(1)!);
+  return GalleryData(images: imgs, columns: count.clamp(1, 8));
+}
+
+/// Builds canonical core/gallery markup: a `wp-block-gallery has-nested-images
+/// columns-N` figure wrapping one `wp:image` figure per image so each stays
+/// independently editable in the block editor.
+String buildGalleryHtml(GalleryData gallery) {
+  final cols = gallery.columns.clamp(1, 8);
+  final items = gallery.images.map((img) {
+    final fig =
+        '<figure class="wp-block-image"><img src="${_htmlAttr(img.url)}"'
+        "${img.alt.isEmpty ? '' : ' alt="${_htmlAttr(img.alt)}"'}/></figure>';
+    return '<!-- wp:image -->\n$fig\n<!-- /wp:image -->';
+  }).join();
+  return '<figure class="wp-block-gallery has-nested-images columns-$cols">'
+      '$items</figure>';
+}
+
+// ---------------------------------------------------------------------------
+// Button block (core/buttons → core/button): a single styled link.
+// ---------------------------------------------------------------------------
+
+/// Editable button payload.
+class ButtonData {
+  ButtonData({required this.label, this.url = ''});
+
+  /// Visible button text.
+  String label;
+
+  /// Link target (empty falls back to '#').
+  String url;
+}
+
+/// Parses a `wp:buttons`/`wp:button` block into its payload. Returns null
+/// when no anchor is present.
+ButtonData? parseButton(String html) {
+  final a = RegExp(r'<a\b[^>]*>', caseSensitive: false).firstMatch(html);
+  if (a == null) return null;
+  final href = RegExp(r'\bhref="([^"]*)"', caseSensitive: false)
+      .firstMatch(a.group(0)!)
+      ?.group(1) ??
+      '';
+  final labelRaw = RegExp(r'<a\b[^>]*>([\s\S]*?)</a>', caseSensitive: false)
+      .firstMatch(html)
+      ?.group(1) ?? '';
+  return ButtonData(label: _stripTags(labelRaw).trim(), url: href);
+}
+
+/// Builds canonical core/buttons markup with a single styled wp:button.
+/// A safe fallback href ('#') is used when [ButtonData.url] is empty or a
+/// dangerous scheme (`javascript:`/`data:`), so the generated link is never
+/// a vector for script execution.
+String buildButtonHtml(ButtonData button) {
+  final href = _safeHref(button.url);
+  final label =
+      button.label.trim().isEmpty ? 'Button' : _encodeEntities(button.label);
+  return '<div class="wp-block-buttons">'
+      '<div class="wp-block-button">'
+      '<a class="wp-block-button__link wp-element-button" href="${_htmlAttr(href)}">'
+      '$label</a></div></div>';
+}
+
+// ---------------------------------------------------------------------------
+// Columns block (core/columns): a row of independently-editable columns, each
+// seeded from / rebuilt to a single paragraph for the common case. Richer
+// existing column content is preserved verbatim on load.
+// ---------------------------------------------------------------------------
+
+/// Editable columns payload. Each entry is one column's inner HTML.
+class ColumnsData {
+  ColumnsData({required this.columns})
+      : assert(columns.length >= 2, 'columns needs >= 2');
+
+  List<String> columns;
+
+  int get count => columns.length;
+}
+
+/// Parses a `wp:columns` block into per-column inner HTML. Returns null when
+/// fewer than two columns are found. The non-greedy match closes each column
+/// at its first `</div>`, which is correct for the simple `<p>`-per-column
+/// shape this editor produces; deeply nested column content should be
+/// authored in the block editor.
+ColumnsData? parseColumns(String html) {
+  final cols = RegExp(
+          r'<div[^>]*class="[^"]*wp-block-column[^"]*"[^>]*>([\s\S]*?)</div>',
+          caseSensitive: false)
+      .allMatches(html)
+      .map((m) => m.group(1)!.trim())
+      .where((c) => c.isNotEmpty)
+      .toList();
+  if (cols.length < 2) return null;
+  return ColumnsData(columns: cols);
+}
+
+/// Builds canonical core/columns markup: a `wp-block-columns` container with
+/// one `wp-block-column` div per column. A column whose inner HTML is bare
+/// text (or empty) gets a `wp:paragraph` inner block so it round-trips as
+/// editable content the way the block editor saves it.
+String buildColumnsHtml(ColumnsData columns) {
+  final buf = StringBuffer('<div class="wp-block-columns">');
+  for (final inner in columns.columns) {
+    buf.write('<div class="wp-block-column">');
+    buf.write(wrapColumnInner(inner));
+    buf.write('</div>');
+  }
+  buf.write('</div>');
+  return buf.toString();
+}
+
+/// Ensures a column's inner HTML is block-level: wraps bare text/empty inner
+/// in a `wp:paragraph` inner block, keeps an existing block element as-is.
+/// Public so the columns field widget (a different library part) can reuse it.
+String wrapColumnInner(String inner) {
+  final trimmed = inner.trim();
+  if (trimmed.isEmpty) {
+    return '<!-- wp:paragraph -->\n<p></p>\n<!-- /wp:paragraph -->';
+  }
+  if (RegExp(r'^<(p|h[1-6]|ul|ol|blockquote|figure|pre|table)\b',
+          caseSensitive: false)
+      .hasMatch(trimmed)) {
+    return trimmed;
+  }
+  return '<!-- wp:paragraph -->\n<p>$trimmed</p>\n<!-- /wp:paragraph -->';
+}
+
+/// Extracts the editable plain-text content of a column's inner HTML — the
+/// text inside its first `<p>`, or the stripped text of the whole inner when
+/// it has no `<p>` wrapper. Seeds the per-column text field.
+String columnInnerText(String inner) {
+  final p = RegExp(r'<p[^>]*>([\s\S]*?)</p>', caseSensitive: false)
+      .firstMatch(inner);
+  if (p != null) return _stripTags(p.group(1)!).trim();
+  return _stripTags(inner).trim();
+}
+
+/// Strips all HTML tags and decodes entities, leaving plain text.
+String _stripTags(String html) =>
+    _decodeEntities(html.replaceAll(RegExp(r'<[^>]+>', caseSensitive: false), ' '))
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+
+/// Normalizes a button href: empties and dangerous schemes (`javascript:`/
+/// `data:`) collapse to '#'; everything else is passed through.
+String _safeHref(String raw) {
+  final t = raw.trim();
+  if (t.isEmpty) return '#';
+  final lower = t.toLowerCase();
+  if (lower.startsWith('javascript:') || lower.startsWith('data:')) return '#';
+  return t;
 }
 
 String _decodeEntities(String s) => s
