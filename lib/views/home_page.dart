@@ -30,21 +30,41 @@ class HomePage extends StatefulWidget {
 ///
 /// A [Selector] rebuilds [HomePage] only when one of these fields changes, so
 /// unrelated mutations (theme/tags/categories) don't redraw the post list.
-/// [app] is kept for fire-and-forget callbacks that must never subscribe.
+///
+/// Crucially, the values are **captured at construction time**, not read live
+/// from [AppState]. A [Selector]'s [Selector.shouldRebuild] compares the
+/// previously selected value with the next one; if both wrappers held a live
+/// reference to the same [AppState], every comparison would read the already
+/// mutated current state and report "no change" — so the dashboard would
+/// never repaint (and login could never advance past the account-setup
+/// screen). Snapshotting makes [operator ==] meaningful.
 class _HomeView {
-  _HomeView(this.app);
+  _HomeView(this.app)
+      : hasAccount = app.hasAccount,
+        error = app.error,
+        loading = app.loading,
+        loadingMore = app.loadingMore,
+        canLoadMore = app.canLoadMore,
+        posts = app.posts,
+        localDrafts = app.localDrafts,
+        currentAccountId = app.currentAccount?.id,
+        accounts = app.accounts;
 
+  /// Live [AppState] reference kept only for fire-and-forget callbacks
+  /// (e.g. refresh, account switching) that must never subscribe. It is
+  /// intentionally excluded from [operator ==] / [hashCode] — those compare
+  /// the frozen snapshot fields above so the [Selector] can detect changes.
   final AppState app;
 
-  bool get hasAccount => app.hasAccount;
-  String? get error => app.error;
-  bool get loading => app.loading;
-  bool get loadingMore => app.loadingMore;
-  bool get canLoadMore => app.canLoadMore;
-  List<BlogPost> get posts => app.posts;
-  List<LocalDraft> get localDrafts => app.localDrafts;
-  String? get currentAccountId => app.currentAccount?.id;
-  List<BlogAccount> get accounts => app.accounts;
+  final bool hasAccount;
+  final String? error;
+  final bool loading;
+  final bool loadingMore;
+  final bool canLoadMore;
+  final List<BlogPost> posts;
+  final List<LocalDraft> localDrafts;
+  final String? currentAccountId;
+  final List<BlogAccount> accounts;
 
   @override
   bool operator ==(Object other) =>
