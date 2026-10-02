@@ -151,6 +151,15 @@ BlockType _classifyType(String html) {
   final h = html.trim();
   if (h.isEmpty) return BlockType.html;
 
+  // Gallery (wp:gallery): a figure with the wp-block-gallery class. Must run
+  // before the generic image rule — a gallery figure also contains <img>, so
+  // the image classifier would otherwise swallow it as BlockType.image.
+  if (RegExp(r'^<figure\b[^>]*class="[^"]*wp-block-gallery',
+          caseSensitive: false)
+      .hasMatch(h)) {
+    return BlockType.gallery;
+  }
+
   // Images: bare <img>, <figure> wrapping an img, or wp image blocks.
   if (RegExp(r'^<img\b', caseSensitive: false).hasMatch(h) ||
       (RegExp(r'^<figure\b', caseSensitive: false).hasMatch(h) &&
@@ -203,13 +212,6 @@ BlockType _classifyType(String html) {
           caseSensitive: false)
       .hasMatch(h)) {
     return BlockType.coverImage;
-  }
-
-  // Gallery (wp:gallery): a figure with the wp-block-gallery class.
-  if (RegExp(r'^<figure\b[^>]*class="[^"]*wp-block-gallery',
-          caseSensitive: false)
-      .hasMatch(h)) {
-    return BlockType.gallery;
   }
 
   // Buttons (wp:buttons / wp:button): a div with the wp-block-buttons class.
@@ -837,7 +839,7 @@ class ColumnsData {
 /// authored in the block editor.
 ColumnsData? parseColumns(String html) {
   final cols = RegExp(
-          r'<div[^>]*class="[^"]*wp-block-column[^"]*"[^>]*>([\s\S]*?)</div>',
+          r'<div[^>]*class="[^"]*\bwp-block-column\b[^"]*"[^>]*>([\s\S]*?)</div>',
           caseSensitive: false)
       .allMatches(html)
       .map((m) => m.group(1)!.trim())
