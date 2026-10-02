@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 
 import '../models/blog.dart';
 import '../models/blog_post.dart';
@@ -34,6 +35,11 @@ class AppState extends ChangeNotifier {
   List<BlogPost> posts = [];
   List<LocalDraft> localDrafts = [];
   BlogTheme? theme;
+
+  /// App-wide color scheme preference (P3-15). Defaults to following the
+  /// OS setting so behavior is unchanged for users who never open the
+  /// preference; persisted via SharedPreferences so it survives restarts.
+  ThemeMode themeMode = ThemeMode.system;
   bool loading = false;
   bool loadingMore = false;
   bool canLoadMore = false;
@@ -66,8 +72,9 @@ class AppState extends ChangeNotifier {
     try {
       accounts = await store.loadAccounts();
       if (accounts.isNotEmpty) {
-        final savedCurrentId =
-            (await store.prefs).getString('olw.currentAccount');
+        final prefs = await store.prefs;
+        themeMode = _themeModeFromString(prefs.getString('olw.themeMode'));
+        final savedCurrentId = prefs.getString('olw.currentAccount');
         currentAccount = accounts.firstWhere(
           (a) => a.id == savedCurrentId,
           orElse: () => accounts.first,
@@ -522,4 +529,29 @@ class AppState extends ChangeNotifier {
   List<String> get tagNames => tags.map((t) => t.name).toList();
 
   String newAccountId() => _generateId('acct');
+
+  /// Persists and applies a new app-wide color scheme preference (P3-15).
+  /// Notifies so [AppShell] can rebuild [MaterialApp] with the new mode.
+  Future<void> setThemeMode(ThemeMode mode) async {
+    if (themeMode == mode) return;
+    themeMode = mode;
+    try {
+      (await store.prefs).setString('olw.themeMode', _themeModeToString(mode));
+    } catch (e) {
+      debugPrint('AppState.setThemeMode failed: $e');
+    }
+    notifyListeners();
+  }
+
+  static ThemeMode _themeModeFromString(String? value) => switch (value) {
+        'light' => ThemeMode.light,
+        'dark' => ThemeMode.dark,
+        _ => ThemeMode.system,
+      };
+
+  static String _themeModeToString(ThemeMode mode) => switch (mode) {
+        ThemeMode.light => 'light',
+        ThemeMode.dark => 'dark',
+        ThemeMode.system => 'system',
+      };
 }

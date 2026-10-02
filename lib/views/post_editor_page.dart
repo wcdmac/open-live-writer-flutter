@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show HardwareKeyboard, KeyDownEvent, KeyEvent, LogicalKeyboardKey;
 import 'package:provider/provider.dart';
 
 import '../editor/block_editor.dart';
@@ -175,6 +176,11 @@ class _PostEditorPageState extends State<PostEditorPage>
   @override
   void initState() {
     super.initState();
+    // P3-15: global undo/redo shortcuts (Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z,
+    // Ctrl+Y). Registered at the platform level so they fire even while a
+    // text field is focused (where the field's own char-level undo would
+    // otherwise shadow the whole-document undo). Removed on dispose.
+    HardwareKeyboard.instance.addHandler(_handleKeyEvent);
     final app = context.read<AppState>();
     final draft = widget.localDraft;
     _editor = EditorState(
@@ -310,6 +316,7 @@ class _PostEditorPageState extends State<PostEditorPage>
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_handleKeyEvent);
     _historyDebounce?.cancel();
     _charCountDebounce?.cancel();
     _tabController.dispose();
@@ -361,6 +368,28 @@ class _PostEditorPageState extends State<PostEditorPage>
   void _undo() {
     if (_undoStack.length < 2 || _applyingHistory) return;
     _applyHistory(_undoStack.removeLast(), _redoStack);
+  }
+
+  /// Platform-level key handler backing the undo/redo toolbar buttons (P3-15).
+  ///
+  /// Returns `true` to consume the event so the focused text field's own
+  /// char-level undo doesn't also run — app-level undo is the intended
+  /// behavior here. Ignores key-up and pure modifier presses.
+  bool _handleKeyEvent(KeyEvent event) {
+    if (!mounted || event is! KeyDownEvent) return false;
+    final ctrlOrMeta = event.isControlPressed || event.isMetaPressed;
+    if (!ctrlOrMeta) return false;
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.keyZ && !event.isShiftPressed) {
+      _undo();
+      return true;
+    }
+    if ((key == LogicalKeyboardKey.keyZ && event.isShiftPressed) ||
+        (key == LogicalKeyboardKey.keyY && event.isControlPressed)) {
+      _redo();
+      return true;
+    }
+    return false;
   }
 
   void _redo() {
@@ -428,13 +457,13 @@ class _PostEditorPageState extends State<PostEditorPage>
         child: Row(
           children: [
             IconButton(
-              tooltip: l10n.undo,
+              tooltip: '${l10n.undo} (Ctrl/Cmd+Z)',
               icon: const Icon(Icons.undo, size: 20),
               visualDensity: VisualDensity.compact,
               onPressed: _undoStack.length >= 2 ? _undo : null,
             ),
             IconButton(
-              tooltip: l10n.redo,
+              tooltip: '${l10n.redo} (Ctrl/Cmd+Shift+Z)',
               icon: const Icon(Icons.redo, size: 20),
               visualDensity: VisualDensity.compact,
               onPressed: _redoStack.isNotEmpty ? _redo : null,

@@ -338,6 +338,33 @@ class _HomePageState extends State<HomePage> {
                   },
                 )),
             const Divider(),
+            // P3-15: light / dark / follow-system color scheme preference.
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.palette_outlined),
+              title: Text(l10n.appearance),
+              trailing: DropdownButton<ThemeMode>(
+                value: app.themeMode,
+                underline: const SizedBox.shrink(),
+                items: [
+                  DropdownMenuItem(
+                    value: ThemeMode.system,
+                    child: Text(l10n.themeSystem),
+                  ),
+                  DropdownMenuItem(
+                    value: ThemeMode.light,
+                    child: Text(l10n.themeLight),
+                  ),
+                  DropdownMenuItem(
+                    value: ThemeMode.dark,
+                    child: Text(l10n.themeDark),
+                  ),
+                ],
+                onChanged: (mode) {
+                  if (mode != null) unawaited(app.setThemeMode(mode));
+                },
+              ),
+            ),
             ListTile(
               leading: const Icon(Icons.add),
               title: Text(l10n.addBlogAccount),
