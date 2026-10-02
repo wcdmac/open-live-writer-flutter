@@ -173,7 +173,7 @@ void main() {
       final c = _captureClient(fake);
       final post = await c.getPost('1');
       // DEBUG: confirm which struct was parsed.
-      debugPrint(
+      print(
         'AUTHOR DEBUG id=${post.id} authorId=${post.authorId} '
         'authorName=${post.authorName}',
       );

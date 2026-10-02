@@ -1421,7 +1421,7 @@ class _PostSettingsSheetState extends State<_PostSettingsSheet> {
                 ];
                 return DropdownButtonFormField<BlogAuthor>(
                   key: ValueKey<String?>(current),
-                  value: items.where((a) => a.id == current).firstOrNull,
+                  initialValue: items.where((a) => a.id == current).firstOrNull,
                   decoration: InputDecoration(labelText: l10n.author),
                   items: items
                       .map(
