@@ -374,18 +374,23 @@ class _PostEditorPageState extends State<PostEditorPage>
   ///
   /// Returns `true` to consume the event so the focused text field's own
   /// char-level undo doesn't also run — app-level undo is the intended
-  /// behavior here. Ignores key-up and pure modifier presses.
+  /// behavior here. Ignores key-up and pure modifier presses. Modifier state
+  /// is read from the global pressed-key set (Flutter's [KeyEvent] does not
+  /// expose modifier booleans directly).
   bool _handleKeyEvent(KeyEvent event) {
     if (!mounted || event is! KeyDownEvent) return false;
-    final ctrlOrMeta = event.isControlPressed || event.isMetaPressed;
-    if (!ctrlOrMeta) return false;
+    final pressed = HardwareKeyboard.instance.logicalKeysPressed;
+    final ctrl = pressed.contains(LogicalKeyboardKey.control);
+    final meta = pressed.contains(LogicalKeyboardKey.meta);
+    final shift = pressed.contains(LogicalKeyboardKey.shift);
+    if (!ctrl && !meta) return false;
     final key = event.logicalKey;
-    if (key == LogicalKeyboardKey.keyZ && !event.isShiftPressed) {
+    if (key == LogicalKeyboardKey.keyZ && !shift) {
       _undo();
       return true;
     }
-    if ((key == LogicalKeyboardKey.keyZ && event.isShiftPressed) ||
-        (key == LogicalKeyboardKey.keyY && event.isControlPressed)) {
+    if ((key == LogicalKeyboardKey.keyZ && shift) ||
+        (key == LogicalKeyboardKey.keyY && ctrl && !meta)) {
       _redo();
       return true;
     }
