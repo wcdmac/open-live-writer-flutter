@@ -1080,6 +1080,9 @@ class _PostSettingsSheetState extends State<_PostSettingsSheet> {
   late final TextEditingController _excerptCtrl;
   late final TextEditingController _slugCtrl;
   late final TextEditingController _passwordCtrl;
+  late final TextEditingController _seoTitleCtrl;
+  late final TextEditingController _seoDescCtrl;
+  late final TextEditingController _ogImageCtrl;
 
   @override
   void initState() {
@@ -1089,6 +1092,11 @@ class _PostSettingsSheetState extends State<_PostSettingsSheet> {
     _passwordCtrl = TextEditingController(
       text: widget.editor.post.password ?? '',
     );
+    _seoTitleCtrl = TextEditingController(text: widget.editor.post.seoTitle);
+    _seoDescCtrl =
+        TextEditingController(text: widget.editor.post.seoDescription);
+    _ogImageCtrl =
+        TextEditingController(text: widget.editor.post.ogImageUrl ?? '');
   }
 
   @override
@@ -1096,6 +1104,9 @@ class _PostSettingsSheetState extends State<_PostSettingsSheet> {
     _excerptCtrl.dispose();
     _slugCtrl.dispose();
     _passwordCtrl.dispose();
+    _seoTitleCtrl.dispose();
+    _seoDescCtrl.dispose();
+    _ogImageCtrl.dispose();
     super.dispose();
   }
 
@@ -1341,6 +1352,47 @@ class _PostSettingsSheetState extends State<_PostSettingsSheet> {
               prefixIcon: const Icon(Icons.lock_outline),
             ),
             onChanged: editor.updatePassword,
+          ),
+          const SizedBox(height: 16),
+
+          // --- SEO & Social (P3-14) ----------------------------------------
+          Text(
+            l10n.seoMetadata,
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _seoTitleCtrl,
+            decoration: InputDecoration(
+              labelText: l10n.seoTitle,
+              helperText: l10n.seoTitleHelp,
+              prefixIcon: const Icon(Icons.title),
+            ),
+            onChanged: (v) => editor.updateSeo(seoTitle: v),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _seoDescCtrl,
+            maxLines: 3,
+            decoration: InputDecoration(
+              labelText: l10n.seoDescription,
+              alignLabelWithHint: true,
+              helperText: l10n.seoDescriptionHelp,
+              prefixIcon: const Icon(Icons.description_outlined),
+            ),
+            onChanged: (v) => editor.updateSeo(seoDescription: v),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _ogImageCtrl,
+            keyboardType: TextInputType.url,
+            decoration: InputDecoration(
+              labelText: l10n.ogImageUrl,
+              helperText: l10n.ogImageUrlHelp,
+              prefixIcon: const Icon(Icons.image_outlined),
+              hintText: 'https://example.com/og.png',
+            ),
+            onChanged: (v) => editor.updateSeo(ogImageUrl: v),
           ),
           const SizedBox(height: 16),
 

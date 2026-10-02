@@ -1082,6 +1082,48 @@ abstract class AppLocalizations {
   /// **'Readers must enter this password to view the post (empty = no protection)'**
   String get postPasswordHelp;
 
+  /// No description provided for @seoMetadata.
+  ///
+  /// In en, this message translates to:
+  /// **'SEO & Social'**
+  String get seoMetadata;
+
+  /// No description provided for @seoTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'SEO title'**
+  String get seoTitle;
+
+  /// No description provided for @seoTitleHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Override the browser tab / search result title (leave blank to use the post title)'**
+  String get seoTitleHelp;
+
+  /// No description provided for @seoDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Meta description'**
+  String get seoDescription;
+
+  /// No description provided for @seoDescriptionHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Summary shown under the link in search results and social cards (≤160 characters)'**
+  String get seoDescriptionHelp;
+
+  /// No description provided for @ogImageUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Social sharing image (OG)'**
+  String get ogImageUrl;
+
+  /// No description provided for @ogImageUrlHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Full image URL used when the post is shared on Facebook / X / etc.'**
+  String get ogImageUrlHelp;
+
   /// No description provided for @newCategory.
   ///
   /// In en, this message translates to:

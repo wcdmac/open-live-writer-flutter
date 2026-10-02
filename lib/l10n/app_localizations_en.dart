@@ -535,6 +535,30 @@ class AppLocalizationsEn extends AppLocalizations {
       'Readers must enter this password to view the post (empty = no protection)';
 
   @override
+  String get seoMetadata => 'SEO & Social';
+
+  @override
+  String get seoTitle => 'SEO title';
+
+  @override
+  String get seoTitleHelp =>
+      'Override the browser tab / search result title (leave blank to use the post title)';
+
+  @override
+  String get seoDescription => 'Meta description';
+
+  @override
+  String get seoDescriptionHelp =>
+      'Summary shown under the link in search results and social cards (≤160 characters)';
+
+  @override
+  String get ogImageUrl => 'Social sharing image (OG)';
+
+  @override
+  String get ogImageUrlHelp =>
+      'Full image URL used when the post is shared on Facebook / X / etc.';
+
+  @override
   String get newCategory => 'New category';
 
   @override

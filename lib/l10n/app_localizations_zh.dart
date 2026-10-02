@@ -530,6 +530,27 @@ class AppLocalizationsZh extends AppLocalizations {
   String get postPasswordHelp => '读者需输入此密码才能查看文章（留空 = 不加保护）';
 
   @override
+  String get seoMetadata => 'SEO 与社交分享';
+
+  @override
+  String get seoTitle => 'SEO 标题';
+
+  @override
+  String get seoTitleHelp => '覆盖浏览器标签 / 搜索结果中的标题（留空则使用文章标题）';
+
+  @override
+  String get seoDescription => '元描述';
+
+  @override
+  String get seoDescriptionHelp => '搜索结果与社交卡片中链接下方的摘要（建议 ≤160 字）';
+
+  @override
+  String get ogImageUrl => '社交分享图片 (OG)';
+
+  @override
+  String get ogImageUrlHelp => '文章在 Facebook / X 等平台分享时使用的完整图片地址';
+
+  @override
   String get newCategory => '新建分类';
 
   @override
