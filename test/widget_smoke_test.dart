@@ -8,6 +8,7 @@ import 'package:open_live_writer/l10n/app_localizations.dart';
 import 'package:open_live_writer/models/blog.dart';
 import 'package:open_live_writer/models/blog_post.dart';
 import 'package:open_live_writer/state/app_state.dart';
+import 'package:open_live_writer/views/add_account_page.dart';
 import 'package:open_live_writer/views/home_page.dart';
 import 'package:open_live_writer/editor/block_editor.dart';
 
@@ -113,6 +114,50 @@ void main() {
       // calling pumpAndSettle (which would time out).
       await tester.pump();
       expect(find.byType(CircularProgressIndicator), findsWidgets);
+    });
+  });
+
+  group('Login / blog-management navigation (no network)', () {
+    testWidgets('shows the embedded AddAccountPage when no account exists',
+        (WidgetTester tester) async {
+      final app = AppState(); // no accounts, no currentAccount
+
+      await tester.pumpWidget(
+        ChangeNotifierProvider<AppState>.value(
+          value: app,
+          child: _testApp(const HomePage()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // With no account the dashboard is replaced by the embedded login wizard.
+      expect(find.byType(AddAccountPage), findsOneWidget);
+    });
+
+    testWidgets(
+        'swaps AddAccountPage for the dashboard once an account is added',
+        (WidgetTester tester) async {
+      final app = AppState(); // start on the embedded login screen
+
+      await tester.pumpWidget(
+        ChangeNotifierProvider<AppState>.value(
+          value: app,
+          child: _testApp(const HomePage()),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(AddAccountPage), findsOneWidget);
+
+      // Simulate a successful addAccount() flip (what _finish() triggers):
+      // hasAccount goes true and the Selector rebuilds the home screen.
+      app.accounts = [_fakeAccount()];
+      app.currentAccount = app.accounts.first;
+      app.notifyListeners();
+      await tester.pumpAndSettle();
+
+      // The login wizard must be gone and the dashboard must be showing.
+      expect(find.byType(AddAccountPage), findsNothing);
+      expect(find.text('Test Blog'), findsWidgets);
     });
   });
 
