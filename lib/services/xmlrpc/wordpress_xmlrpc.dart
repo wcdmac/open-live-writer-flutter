@@ -784,6 +784,11 @@ class WordPressXmlRpcClient {
       status: status,
       isPage: isPage,
       authorId: m['post_author'] == null ? null : '${m['post_author']}',
+      // `userid` carries the author display name in wp.getPost / wp.getPosts
+      // structs (metaWeblog-only fields are read by _postFromMetaweblogStruct);
+      // include it here too so an opened post shows the author name, not just
+      // the id (P3-14 multi-author).
+      authorName: m['userid'] == null ? null : '${m['userid']}',
       dateCreated: parseDate(m['post_date_gmt'] ?? m['post_date']),
       datePublished: parseDate(m['post_date_gmt'] ?? m['post_date']),
       modified: parseDate(m['post_modified_gmt'] ?? m['post_modified']),
