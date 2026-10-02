@@ -50,7 +50,7 @@
 
 | 项 | 功能范围 | 交付标准 | 状态 |
 |----|----------|----------|------|
-| P1-4 状态分域 + Selector 收窄 | `AppState` 拆账户/帖子/草稿域；视图 `Selector` 替换 `watch` | 大博客切换/滚动重建量降一量级 | **Done** — `HomePage` 用 `Selector<AppState,_HomeView>`（不可变快照 + `shouldRebuild`）替换 `watch`，仅相关切片变化才重建列表 |
+| P1-4 状态分域 + Selector 收窄 | `AppState` 拆账户/帖子/草稿域；视图 `Selector` 替换 `watch` | 大博客切换/滚动重建量降一量级 | **Done** — `HomePage` 用 `Selector<AppState,_HomeView>`（不可变快照 + `shouldRebuild`）替换 `watch`，仅相关切片变化才重建列表。⚠️ 落地回归已修（2026-10-02）：原 `_HomeView` 为 `AppState` 实时包装器导致 `shouldRebuild` 恒 false、`Selector` 永不重建（登录卡在"完成"页、仪表盘首帧后冻结）；改为构造时快照后恢复 |
 | P1-5 列表并行加载 + 分页 | `refresh()` 改 `Future.wait`；`getPosts` 分页触底 | 首屏延迟下降；支持任意规模博客 | **Done** — `refresh()` 并发探测主题（`Future.wait`）；`getPosts` 加 `offset` 驱动无限滚动；`AppState.loadMorePosts` 去重追加（`kPostPageSize`）；`HomePage` `ScrollController` 触底 400px 加载 |
 | P1-6 图片 LRU + 磁盘缓存 | `media_cache` 固定上限 LRU + `path_provider` 落盘 | 长会话内存稳定 | **Done** — 新增 `lib/utils/lru_map.dart`（`LruMap<K,V>` 固定上限）；`MediaCache` 访问时 `_touch` 把最近使用时间落到文件 mtime，磁盘驱逐由"写时间"升级为真正的 LRU（热图留存、冷图先逐）；内存簿记由 `LruMap` 上限 2048 封顶，长会话内存不再增长。`test/lru_map_test.dart` 锁定 LRU 不变量 |
 
@@ -70,6 +70,14 @@
 |----|----------|----------|------|
 | P3-12 富媒体/块类型扩展 | 封面图、画廊、按钮、分栏 | Gutenberg 块可编辑导出 | **Done** — `BlockType` 新增 `coverImage`/`gallery`/`button`/`columns` 四类；`block_document` 提供 `CoverData`/`GalleryData`/`GalleryImage`/`ButtonData`/`ColumnsData` + `parse`/`build` 往返助手（`_classifyType` 中画廊须在通用 `<figure>..<img>` 图片规则前判定；分栏正则用 `\bwp-block-column\b` 避免误匹配 `wp-block-columns` 容器）；封面/画廊/按钮导出 Gutenberg 规范标记，按钮 `href` 过滤 `javascript:`/`data:` 危险协议；四个聚焦编辑组件（`cover_image_field`/`gallery_field`/`button_field`/`columns_field`，含设备上传与 1–8 栏/2–6 分栏调节）；插入条 `ActionChip` + 本地化 `coverImage`/`coverOverlay`/`gallery`/`galleryAddImage`/`button`/`buttonLabel`/`columns`/`columnsCount`/`coverImageBlock`/`galleryBlock`/`buttonBlock`/`columnsBlock`（en+zh）；`test/block_document_test.dart` 四类块往返覆盖 |
 | P3-13 离线同步增强 | 双向冲突三向合并（取代 1 秒容差 best-effort） | 高频编辑不误覆盖 | **Done** — 冲突判定由 1s 容差改为 `modified_gmt` 精确比对 + `kConflictClockSkew`（1s）容差常量；离线副本基线取 `post.modified` |
+
+### 本轮已交付（登录导航修复，2026-10-02）
+
+| 优先级 | 项 | 提交内容 | 验收 |
+|--------|----|----------|------|
+| P1-4 (bug) | **登录后停留在"完成"页、不进入博客管理页** | 根因：`HomePage` 的 `_HomeView` 是 `AppState` 的**实时包装器**，`Selector.shouldRebuild`（比较 `prev != next`）比对两个包裹同一 `AppState` 实例的 `_HomeView`，比较时二者都读到已变更后的当前状态 → `prev != next` 恒为 false → `Selector` 永不重建 → "完成"按钮后无法切到仪表盘（并潜伏"仪表盘首帧后冻结"缺陷）。修复：`_HomeView` 改为构造时**快照**（hasAccount/error/loading/loadingMore/canLoadMore/posts/localDrafts/currentAccountId/accounts 取 final 字段），仅保留 `app` 引用供 fire-and-forget 回调（排除于 `==`/`hashCode`）；`add_account_page` 的"完成"按钮经 `app.addAccount`→`selectAccount` 翻转 `hasAccount`，`shouldRebuild` 现能正确检测到变化并重建到仪表盘。`add_account_page` 还原为 SDK `RadioGroup<BlogProtocol>`/`RadioGroup<String>` 直用（删去误加的自造 `RadioGroup` 影子文件） | 新增 `test/widget_smoke_test.dart` 两例无网络路由测试（无账户 → 显示 `AddAccountPage`；添加账户后 → 切到仪表盘并显示博客名）；CI Analyze+Test 全绿 |
+
+> 注：`_HomeView` 快照化同时修掉了"仪表盘首帧后即冻结、后续账户/帖子变更不再重建"的潜伏缺陷，这是 P1-4 Selector 收窄落地时引入的回归。
 | P3-14 写作辅助 | SEO/元数据（excerpt/slug/OG）、定时发布、多作者 | 元数据可编辑并随导出 | **Done** — SEO 元数据（seoTitle/seoDescription/ogImageUrl）经 REST `meta` + XML-RPC `post_meta`（Yoast 兼容）双向同步；excerpt/slug 可编辑、定时发布经 `datePublished`+`scheduled` 已落地；多作者经 `BlogAuthor` 模型 + REST `GET /wp/v2/users` / XML-RPC `wp.getAuthors` 拉取 + 发布时 `author`/`post_author` 写入 + 编辑器「作者」下拉选择，已落地（并修复 wp.getPost 解析丢失 `authorName` 的潜在缺陷） |
 | P3-15 体验 | 暗色跟随系统、本地化补全、撤销重做增强 | 体验一致 | **Done** — ① 主题：新增 `ThemeMode` light/dark/system 偏好，持久化于 `olw.themeMode`，`AppShell` 经 `context.select<AppState,ThemeMode>` 应用 `themeMode`（仅主题变更时重建 `MaterialApp`）；入口在首页「账户与设置」底部弹层（跟随系统/浅色/深色）。② 撤销重做：编辑器新增全局快捷键 Ctrl/Cmd+Z、Ctrl/Cmd+Shift+Z、Ctrl+Y（平台级 `HardwareKeyboard` 拦截，文本框聚焦时也生效，覆盖其字段内字符级撤销）；工具栏 tooltip 标注快捷键。③ 本地化：补 `appearance`/`themeLight`/`themeDark`/`themeSystem`（en+zh）；既有 UI 文案已全量本地化 |
 | P3-16 REST 分类/标签/作者全量分页 | 修复 `per_page=100` 截断（同类"只显示 50"问题） | 选择器不再缺项，与 XML-RPC 对齐 | **Done** — `wordpress_rest` 新增私有 `_fetchAllPages` 助手按 `page` 续拉至短页（10k 上限护栏），`getCategories`/`getTags`/`getAuthors` 改用之，站点 >100 项时不再缺项；原本 XML-RPC 路径返回全量、REST 仅取 100 的协议不一致已消除。`test/wordpress_rest_test.dart` 新增 4 例覆盖多页枚举与单页短路 |
