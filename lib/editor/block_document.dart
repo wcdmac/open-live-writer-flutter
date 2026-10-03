@@ -92,12 +92,16 @@ List<ContentBlock> parseBlocks(String content) {
   var si = 0;
 
   RegExpMatch? nextPairAt(int at) {
-    while (pi < pairs.length && pairStarts[pi] < at) pi++;
+    while (pi < pairs.length && pairStarts[pi] < at) {
+      pi++;
+    }
     return pi < pairs.length && pairStarts[pi] == at ? pairs[pi] : null;
   }
 
   RegExpMatch? nextSelfAt(int at) {
-    while (si < selfClosing.length && selfStarts[si] < at) si++;
+    while (si < selfClosing.length && selfStarts[si] < at) {
+      si++;
+    }
     return si < selfClosing.length && selfStarts[si] == at
         ? selfClosing[si]
         : null;
@@ -141,7 +145,7 @@ List<ContentBlock> parseBlocks(String content) {
     final nextBoundary = <int>[
       if (pi < pairs.length) pairStarts[pi],
       if (si < selfClosing.length) selfStarts[si],
-    ].fold<int?>(null, (min, v) => min == null || v < min! ? v : min);
+    ].fold<int?>(null, (min, v) => min == null || v < min ? v : min);
     var end = text.length;
     if (nextBlank != null) end = pos + 1 + nextBlank.start;
     if (nextBoundary != null && nextBoundary < end) end = nextBoundary;
@@ -150,10 +154,6 @@ List<ContentBlock> parseBlocks(String content) {
     pos = end;
   }
   return blocks;
-}
-
-extension _FirstOrNull<T> on Iterable<T> {
-  T? get firstOrNull => isEmpty ? null : first;
 }
 
 /// Serializes blocks back into post HTML.

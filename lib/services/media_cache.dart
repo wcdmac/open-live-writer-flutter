@@ -164,13 +164,21 @@ class MediaCache {
           }
           await sink.close();
         } catch (e) {
-          await sink.close().catchError((_) {});
-          await file.delete().catchError((_) {});
+          // Best-effort cleanup of the partial download; ignore any error so
+          // the original network error still propagates.
+          try {
+            await sink.close();
+          } catch (_) {}
+          try {
+            await file.delete();
+          } catch (_) {}
           rethrow;
         }
         final len = await file.length();
         if (len == 0) {
-          await file.delete().catchError((_) {});
+          try {
+            await file.delete();
+          } catch (_) {}
           _failedAt[url] = DateTime.now();
           return null;
         }
