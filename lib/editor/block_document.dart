@@ -182,6 +182,13 @@ BlockType _classifyType(String html) {
       (RegExp(r'^<figure[^>]*wp-block-table', caseSensitive: false)
               .hasMatch(h) &&
           RegExp(r'<table\b', caseSensitive: false).hasMatch(h))) {
+    // P2-8: tables with merged cells (colspan/rowspan) can't be represented
+    // by the editable cell grid without dropping the merges on round-trip.
+    // Keep them as a raw html block so the markup survives intact and the
+    // editor doesn't silently flatten the layout.
+    if (RegExp(r'\b(colspan|rowspan)\b', caseSensitive: false).hasMatch(h)) {
+      return BlockType.html;
+    }
     return BlockType.table;
   }
 
@@ -578,8 +585,6 @@ List<String> _topLevelListItems(String html) {
 
 /// Parses `<ul>/<ol>` markup (with or without wp:list-item comments).
 ListData parseList(String html) {
-  final ordered =
-      RegExp(r'<ol\b', caseSensitive: false).hasMatch(html);
   // Strip optional wp:list-item wrappers; both legacy (bare <li>) and
   // modern (WP 6.7+) markup parse into the same shape.
   final cleaned = html
@@ -588,6 +593,14 @@ ListData parseList(String html) {
   // Preserve the original opening tag (extra classes/attrs) on round-trip.
   final openMatch = RegExp(r'<(ul|ol)\b[^>]*>', caseSensitive: false)
       .firstMatch(cleaned);
+  // P1-3: `ordered` is derived from the *actual* opening tag, not from any
+  // <ol> anywhere in the markup. A <ul> whose content merely mentions an
+  // <ol> (e.g. a nested list) used to be flagged ordered, so buildListHtml
+  // emitted `<ul …></ol>` — a mismatched, invalid list. When there is no
+  // wrapper we still fall back to scanning for <ol> so bare lists round-trip.
+  final ordered = openMatch != null
+      ? openMatch.group(1)!.toLowerCase() == 'ol'
+      : RegExp(r'<ol\b', caseSensitive: false).hasMatch(cleaned);
   final items = _topLevelListItems(cleaned);
   return ListData(
       items: items,
@@ -838,13 +851,40 @@ class ColumnsData {
 /// shape this editor produces; deeply nested column content should be
 /// authored in the block editor.
 ColumnsData? parseColumns(String html) {
-  final cols = RegExp(
-          r'<div[^>]*class="[^"]*\bwp-block-column\b[^"]*"[^>]*>([\s\S]*?)</div>',
-          caseSensitive: false)
-      .allMatches(html)
-      .map((m) => m.group(1)!.trim())
-      .where((c) => c.isNotEmpty)
-      .toList();
+  // P2-7: match each column's opening `<div class="wp-block-column">` and
+  // scan to its *matching* `</div>` by depth counting, so a column that
+  // itself contains nested <div>s (e.g. a cover block inside a column) is
+  // not truncated at the first closing tag — the old non-greedy `</div>`
+  // match silently dropped the nested content on round-trip.
+  final openRe = RegExp(
+    r'<div[^>]*class="[^"]*\bwp-block-column\b[^"]*"[^>]*>',
+    caseSensitive: false,
+  );
+  final divRe = RegExp(r'<(/?)div\b', caseSensitive: false);
+  final cols = <String>[];
+  for (final open in openRe.allMatches(html)) {
+    var depth = 1;
+    var i = open.end;
+    var close = -1;
+    while (i < html.length) {
+      final m = divRe.firstMatch(html.substring(i));
+      if (m == null) break;
+      final start = i + m.start;
+      if (m.group(1) == '/') {
+        depth--;
+        if (depth == 0) {
+          close = start;
+          break;
+        }
+      } else {
+        depth++;
+      }
+      i = i + m.end;
+    }
+    if (close == -1) close = html.length;
+    final inner = html.substring(open.end, close).trim();
+    if (inner.isNotEmpty) cols.add(inner);
+  }
   if (cols.length < 2) return null;
   return ColumnsData(columns: cols);
 }
@@ -907,7 +947,6 @@ String _safeHref(String raw) {
 }
 
 String _decodeEntities(String s) => s
-    .replaceAll('&amp;', '&')
     .replaceAll('&lt;', '<')
     .replaceAll('&gt;', '>')
     .replaceAll('&quot;', '"')
@@ -921,7 +960,13 @@ String _decodeEntities(String s) => s
     .replaceAllMapped(RegExp(r'&#x([0-9a-fA-F]+);'), (m) {
       final code = int.tryParse(m.group(1)!, radix: 16);
       return code == null ? m.group(0)! : String.fromCharCode(code);
-    });
+    })
+    // P1-4: decode `&amp;` LAST. Doing it first let `&amp;lt;` — the escaped
+    // form of the literal text "&lt;" — be turned into `&lt;` and then into
+    // `<`, a double decode that corrupted escaped markup on round-trip.
+    // Running it last means only a genuine `&amp;` becomes `&`; nested entity
+    // escapes survive intact.
+    .replaceAll('&amp;', '&');
 
 String _encodeEntities(String s) => s
     .replaceAll('&', '&amp;')

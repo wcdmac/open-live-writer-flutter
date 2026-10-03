@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -213,7 +214,11 @@ class WordPressRestClient {
         request.body = jsonEncode(body);
       }
       final res = await _http.send(request).timeout(timeout ?? _timeout);
-      final bytes = await _readCapped(res, _maxResponseBytes);
+      final bytes = await _readCapped(
+        res,
+        _maxResponseBytes,
+        timeout: timeout ?? _timeout,
+      );
       final response = http.Response(
         utf8.decode(bytes),
         res.statusCode,
@@ -258,22 +263,57 @@ class WordPressRestClient {
 
   /// Reads a streamed response into bytes, aborting (before fully buffering)
   /// once it exceeds [maxBytes]. Guards against a malicious or broken server
-  /// exhausting memory with a huge response (P-08).
-  Future<Uint8List> _readCapped(http.StreamedResponse res, int maxBytes) async {
+  /// exhausting memory with a huge response (P-08). When [timeout] is set, the
+  /// body read is bounded too — the request send is already timed out at the
+  /// call site, but a server that *accepts* the request and then trickles (or
+  /// stalls) the response could otherwise hang the caller forever (P1-1).
+  Future<Uint8List> _readCapped(
+    http.StreamedResponse res,
+    int maxBytes, {
+    Duration? timeout,
+  }) {
+    final completer = Completer<Uint8List>();
     final out = <int>[];
-    var total = 0;
-    await for (final chunk in res.stream) {
-      total += chunk.length;
-      if (total > maxBytes) {
-        throw WordPressRestException(
-          413,
-          'response_too_large',
-          'Response exceeds $maxBytes bytes',
+    Timer? timer;
+    late StreamSubscription<List<int>> sub;
+    if (timeout != null) {
+      timer = Timer(timeout, () {
+        sub.cancel();
+        completer.completeError(
+          WordPressRestException(
+            408,
+            'response_timeout',
+            'Response read timed out after ${timeout.inMilliseconds}ms',
+          ),
         );
-      }
-      out.addAll(chunk);
+      });
     }
-    return Uint8List.fromList(out);
+    sub = res.stream.listen(
+      (chunk) {
+        out.addAll(chunk);
+        if (out.length > maxBytes) {
+          sub.cancel();
+          timer?.cancel();
+          completer.completeError(
+            WordPressRestException(
+              413,
+              'response_too_large',
+              'Response exceeds $maxBytes bytes',
+            ),
+          );
+        }
+      },
+      onError: (e, st) {
+        timer?.cancel();
+        completer.completeError(e, st);
+      },
+      onDone: () {
+        timer?.cancel();
+        completer.complete(Uint8List.fromList(out));
+      },
+      cancelOnError: true,
+    );
+    return completer.future;
   }
 
   // ---------------------------------------------------------------------------
@@ -572,18 +612,12 @@ class WordPressRestClient {
   /// dropping that tag instead of failing the whole save.
   Future<List<int>> _resolveTagIds(List<String> tags) async {
     if (tags.isEmpty) return const [];
-    final ids = <int>[];
-    final names = <String>[];
-    for (final tag in tags) {
-      final asInt = int.tryParse(tag);
-      if (asInt != null) {
-        ids.add(asInt);
-      } else {
-        names.add(tag);
-      }
-    }
-    if (names.isEmpty) return ids;
-
+    // P2-5: warm the name→id cache up front so every tag resolves by its
+    // cached name *before* we fall back to treating it as a raw numeric id.
+    // Resolving numerically first used to let a purely-numeric tag name (e.g.
+    // a year like "2024") be sent as an id that may not exist, creating a
+    // bogus tag or a failed save instead of matching/reusing the real named
+    // tag.
     if (_tagCache == null) {
       try {
         _tagCache = await getTags();
@@ -595,11 +629,22 @@ class WordPressRestClient {
       for (final t in _tagCache!)
         if (int.tryParse(t.id) != null) t.name.toLowerCase(): int.parse(t.id),
     };
-    // P-05: known names resolve from the cache immediately.
-    for (final name in names) {
-      final existing = byName[name.toLowerCase()];
-      if (existing != null) ids.add(existing);
+    final ids = <int>[];
+    final names = <String>[];
+    for (final tag in tags) {
+      final existing = byName[tag.toLowerCase()];
+      if (existing != null) {
+        ids.add(existing);
+      } else {
+        final asInt = int.tryParse(tag);
+        if (asInt != null) {
+          ids.add(asInt);
+        } else {
+          names.add(tag);
+        }
+      }
     }
+    if (names.isEmpty) return ids;
     // P-05: unknown names are created in parallel (independent) and any that
     // fail or return an empty payload are skipped instead of crashing.
     final unknown = names
@@ -735,59 +780,83 @@ class WordPressRestClient {
     List<int> bytes,
     String mimeType,
   ) async {
-    final uri = Uri.parse('$baseUrl/wp/v2/media');
-    final request = http.MultipartRequest('POST', uri)
-      ..headers.addAll(await _headers())
-      ..files.add(
-        http.MultipartFile.fromBytes(
-          'file',
-          bytes,
-          filename: filename,
-          contentType: http.MediaType.parse(mimeType),
-        ),
+    // P1-2: a single JWT transparent retry, mirroring the _request path. A
+    // token that expired (401) or was rejected as invalid (403) used to fail
+    // every upload until the app restarted; now we clear it and retry once
+    // with a freshly fetched token.
+    var jwtRetried = false;
+    Future<MediaUploadResult> attempt() async {
+      final uri = Uri.parse('$baseUrl/wp/v2/media');
+      final request = http.MultipartRequest('POST', uri)
+        ..headers.addAll(await _headers())
+        ..files.add(
+          http.MultipartFile.fromBytes(
+            'file',
+            bytes,
+            filename: filename,
+            contentType: http.MediaType.parse(mimeType),
+          ),
+        );
+      // Media uploads need a much longer budget than regular API calls
+      // (cross-border transfer + server-side image re-encoding).
+      final res = await _http.send(request).timeout(const Duration(minutes: 5));
+      // P-08: read the response stream with a byte cap (do NOT name this
+      // `bytes` — that collides with the [bytes] upload-content parameter).
+      final responseBytes = await _readCapped(
+        res,
+        _maxResponseBytes,
+        timeout: const Duration(minutes: 5),
       );
-    // Media uploads need a much longer budget than regular API calls
-    // (cross-border transfer + server-side image re-encoding).
-    final res = await _http.send(request).timeout(const Duration(minutes: 5));
-    // P-08: read the response stream with a byte cap (do NOT name this
-    // `bytes` — that collides with the [bytes] upload-content parameter).
-    final responseBytes = await _readCapped(res, _maxResponseBytes);
-    final response = http.Response(
-      utf8.decode(responseBytes),
-      res.statusCode,
-      headers: res.headers,
-    );
-    if (response.statusCode >= 400) {
-      throw WordPressRestException(
-        response.statusCode,
-        'media_upload_failed',
-        response.body,
+      final response = http.Response(
+        utf8.decode(responseBytes),
+        res.statusCode,
+        headers: res.headers,
+      );
+      if (response.statusCode >= 400) {
+        if (authMethod == RestAuthMethod.jwt &&
+            !jwtRetried &&
+            (response.statusCode == 401 || response.statusCode == 403)) {
+          _jwtToken = null;
+          jwtRetried = true;
+          throw _JwtRetry();
+        }
+        throw WordPressRestException(
+          response.statusCode,
+          'media_upload_failed',
+          response.body,
+        );
+      }
+      // P-02: a 200 with an empty/invalid body must not crash with a cryptic
+      // FormatException / TypeError — surface a typed error instead.
+      final bodyText = utf8.decode(response.bodyBytes);
+      if (bodyText.isEmpty) {
+        throw WordPressRestException(
+          response.statusCode,
+          'media_upload_failed',
+          'Empty media response',
+        );
+      }
+      final data = jsonDecode(bodyText);
+      if (data is! Map) {
+        throw WordPressRestException(
+          response.statusCode,
+          'media_upload_failed',
+          'Invalid media response',
+        );
+      }
+      return MediaUploadResult(
+        id: '${data['id']}',
+        url: (data['source_url'] as String?) ?? '',
+        file: (data['source_url'] as String?) ?? '',
+        type: mimeType,
       );
     }
-    // P-02: a 200 with an empty/invalid body must not crash with a cryptic
-    // FormatException / TypeError — surface a typed error instead.
-    final bodyText = utf8.decode(response.bodyBytes);
-    if (bodyText.isEmpty) {
-      throw WordPressRestException(
-        response.statusCode,
-        'media_upload_failed',
-        'Empty media response',
-      );
+
+    try {
+      return await attempt();
+    } on _JwtRetry {
+      return await attempt();
     }
-    final data = jsonDecode(bodyText);
-    if (data is! Map) {
-      throw WordPressRestException(
-        response.statusCode,
-        'media_upload_failed',
-        'Invalid media response',
-      );
-    }
-    return MediaUploadResult(
-      id: '${data['id']}',
-      url: (data['source_url'] as String?) ?? '',
-      file: (data['source_url'] as String?) ?? '',
-      type: mimeType,
-    );
   }
 
   // ---------------------------------------------------------------------------

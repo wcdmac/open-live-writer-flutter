@@ -361,4 +361,62 @@ void main() {
       expect(parseBlocks(src).single.type, BlockType.columns);
     });
   });
+
+  group('v1.10 review regressions', () {
+    test('list ordered flag follows the real opener, not a nested <ol>', () {
+      // A <ul> whose content mentions an <ol> must NOT become ordered, and its
+      // serialized form must close with </ul> — the old code emitted
+      // `<ul …></ol>`, a mismatched invalid list (P1-3).
+      final list = parseList(
+        '<ul class="wp-block-list"><li>see <a href="x">an ordered list</a></li>'
+        '<li>nested <ol><li>inner</li></ol></li></ul>',
+      );
+      expect(list.ordered, isFalse);
+      expect(list.openTag, '<ul class="wp-block-list">');
+      expect(buildListHtml(list), endsWith('</ul>'));
+      // A genuine <ol> wrapper is still ordered and closes with </ol>.
+      final ol = parseList('<ol><li>1</li><li>2</li></ol>');
+      expect(ol.ordered, isTrue);
+      expect(buildListHtml(ol), endsWith('</ol>'));
+    });
+
+    test('entity decode does not double-decode &amp;lt;', () {
+      // `&amp;lt;` is the escaped form of the literal text "&lt;"; decoding
+      // must yield "&lt;", not "<" (P1-4). Round-tripped through a table cell.
+      final table = parseTable(
+        '<table><tbody><tr><td>&amp;lt;</td></tr></tbody></table>',
+      );
+      expect(table.rows.single.single, '&lt;');
+    });
+
+    test('columns with a nested div keep their inner content', () {
+      // A column containing a nested <div> must not be truncated at the first
+      // closing tag (P2-7).
+      final html = '<div class="wp-block-columns">'
+          '<div class="wp-block-column"><p>A</p>'
+          '<div class="nested"><span>x</span></div></div>'
+          '<div class="wp-block-column"><p>B</p></div>'
+          '</div>';
+      final data = parseColumns(html);
+      expect(data, isNotNull);
+      expect(data!.count, 2);
+      expect(data.columns[0], contains('<div class="nested">'));
+      expect(data.columns[0], contains('<span>x</span>'));
+    });
+
+    test('table with colspan/rowspan degrades to a raw html block', () {
+      // Merged cells can't be represented by the editable grid without data
+      // loss, so the block stays as verbatim html (P2-8).
+      final withColspan = parseBlocks(
+        '<table><tbody><tr><td colspan="2">wide</td></tr>'
+        '<tr><td>a</td><td>b</td></tr></tbody></table>',
+      );
+      expect(withColspan.single.type, BlockType.html);
+      // A normal table still parses into the editable table block.
+      final plain = parseBlocks(
+        '<table><tbody><tr><td>a</td><td>b</td></tr></tbody></table>',
+      );
+      expect(plain.single.type, BlockType.table);
+    });
+  });
 }

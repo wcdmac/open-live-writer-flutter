@@ -48,6 +48,12 @@ class AppState extends ChangeNotifier {
   /// `loadMorePosts` fetches the next slice at `_postOffset + kPostPageSize`.
   int _postOffset = 0;
 
+  /// Monotonic counter for [refresh]. A newer refresh (account switch or an
+  /// overlapping caller) bumps this so an in-flight older refresh discards
+  /// its result instead of overwriting the current account's data with stale
+  /// cross-account posts (P2-6).
+  int _refreshGeneration = 0;
+
   /// Account whose theme was already probed in this session — theme
   /// detection is one HTTP round-trip per homepage; retrying it on every
   /// refresh when the cached theme is "Default" just burns traffic.
@@ -180,10 +186,13 @@ class AppState extends ChangeNotifier {
     // The account can be removed mid-flight (this method awaits several
     // network calls); snapshot it instead of assuming currentAccount!.
     if (svc == null || account == null) return;
-    // Re-entrancy guard: a rapid double-tap on refresh (or overlapping
-    // refresh() calls from selectAccount/addAccount) would otherwise run
-    // two concurrent fetches and duplicate the theme probe.
-    if (loading) return;
+    // P2-6: a newer refresh() (account switch / overlapping caller) bumps this
+    // generation; an in-flight older refresh discards its result so it never
+    // overwrites the current account's dashboard with stale cross-account
+    // posts. We no longer early-return on `loading`, because that used to drop
+    // a pending refresh entirely while the previous account's slow response
+    // still wrote its data through.
+    final myGeneration = ++_refreshGeneration;
     loading = true;
     error = null;
     loadingMore = false;
@@ -237,6 +246,16 @@ class AppState extends ChangeNotifier {
     } catch (e) {
       // Classified + logged; the raw protocol error never reaches the UI.
       error = userFacingError(e, context: 'refresh.getPosts');
+    }
+
+    // P2-6: if a newer refresh started (or the service / account was swapped
+    // by a switch or removal) while we were awaiting, discard this result so
+    // we never write stale data over the current account. Leave `loading`
+    // untouched — the latest refresh owns clearing it.
+    if (myGeneration != _refreshGeneration ||
+        svc != _service ||
+        account != currentAccount) {
+      return;
     }
 
     categories = await catsFuture;
