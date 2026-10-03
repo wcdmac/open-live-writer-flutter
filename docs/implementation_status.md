@@ -78,6 +78,35 @@
 | P1-4 (bug) | **登录后停留在"完成"页、不进入博客管理页** | 根因：`HomePage` 的 `_HomeView` 是 `AppState` 的**实时包装器**，`Selector.shouldRebuild`（比较 `prev != next`）比对两个包裹同一 `AppState` 实例的 `_HomeView`，比较时二者都读到已变更后的当前状态 → `prev != next` 恒为 false → `Selector` 永不重建 → "完成"按钮后无法切到仪表盘（并潜伏"仪表盘首帧后冻结"缺陷）。修复：`_HomeView` 改为构造时**快照**（hasAccount/error/loading/loadingMore/canLoadMore/posts/localDrafts/currentAccountId/accounts 取 final 字段），仅保留 `app` 引用供 fire-and-forget 回调（排除于 `==`/`hashCode`）；`add_account_page` 的"完成"按钮经 `app.addAccount`→`selectAccount` 翻转 `hasAccount`，`shouldRebuild` 现能正确检测到变化并重建到仪表盘。`add_account_page` 还原为 SDK `RadioGroup<BlogProtocol>`/`RadioGroup<String>` 直用（删去误加的自造 `RadioGroup` 影子文件） | 新增 `test/widget_smoke_test.dart` 两例无网络路由测试（无账户 → 显示 `AddAccountPage`；添加账户后 → 切到仪表盘并显示博客名）；CI Analyze+Test 全绿 |
 
 > 注：`_HomeView` 快照化同时修掉了"仪表盘首帧后即冻结、后续账户/帖子变更不再重建"的潜伏缺陷，这是 P1-4 Selector 收窄落地时引入的回归。
+
+### 本轮已交付（v1.10 评审两波修复，2026-10-03）
+
+v1.10 代码评审共识别出 12 处缺陷（P1-1~4、P2-5~8、P3-9~12），分两波经**临时分支 + CI（Analyze+Test 全绿）+ `git merge --ff-only` 并入 `main`** 落地，临时分支已删除。Wave1 范围 `063f64e→de087a0`，Wave2 范围 `b2173ec→a5b4d0a`，最终 `main` HEAD `a5b4d0a`。
+
+#### Wave 1 — 正确性修复（P1-1~4、P2-5~8）
+
+| 优先级 | 项 | 提交内容 | 验收 |
+|--------|----|----------|------|
+| P1-1 | REST 响应体读取加超时护栏 | `WordPressRestClient._readCapped` 改为 `completer` 模式 + `Timer`，调用方传 `timeout ?? _timeout`，避免慢连接/挂死流无限等待 | `flutter analyze` 通过；单测全绿 |
+| P1-2 | `uploadMedia` 在 401/403 后清 JWT 重试一次 | JWT 鉴权路径捕获 401/403 → 清 `_jwtToken` 抛 `_JwtRetry` → `attempt()` 重试一次；重试成功返回 id/url；`timeout: 5min` 传入 `_readCapped` | `test/rest_client_test.dart` 断言 401 后只重试一次、返回 id/url、两次请求均带 `Bearer`；CI 全绿 |
+| P1-3 | `parseList` 从真实 `<ul>/<ol>` opener 判定 ordered | 取 `openMatch.group(1)!.toLowerCase()=='ol'`，无 opener 时回退扫描 `<ol>`；消除 `<ul></ol>` 错配 | `test/block_document_test.dart` 新增有序列表 + `</ul>` 闭合用例；CI 全绿 |
+| P1-4 | `_decodeEntities` 最后解码 `&amp;` | 先解 `&lt;/&gt;/&quot;/&#39;/&nbsp;`/数字实体，最后解 `&amp;`，避免转义实体被二次解码 | 用例 `&amp;lt;` → `&lt;` 通过；CI 全绿 |
+| P2-5 | `_resolveTagIds` 先按缓存名解析 | 先预热 `_tagCache`，按缓存名匹配优先，仅在无同名缓存时才用数字 id，避免 tag 漂移/重复创建 | `flutter analyze` 通过；单测全绿 |
+| P2-6 | `refresh()` 加 generation 守卫 | 移除提前 `if(loading)return`；进入即 `++_refreshGeneration`，`getPosts` 返回后比对 `myGeneration != _refreshGeneration || svc != _service || account != currentAccount` → 丢弃过期跨账户响应 | `flutter analyze` 通过；单测全绿 |
+| P2-7 | `parseColumns` 深度计数嵌套 div | 用 `divRe` 计数 `<div>/</div>`，逐个 `wp-block-column` opener 走到匹配 closer，支持嵌套分栏 | 用例"嵌套 div 分栏"通过；CI 全绿 |
+| P2-8 | 含 `colspan/rowspan` 的表格降级为 html 块 | `_classifyType` 在出现 `colspan|rowspan` 时返回 `BlockType.html`（保留原表标记），避免解析器丢失合并单元格 | 用例通过；CI 全绿 |
+
+#### Wave 2 — 性能与健壮性（P3-9~12）
+
+| 优先级 | 项 | 提交内容 | 验收 |
+|--------|----|----------|------|
+| P3-9 | `parseBlocks` 单次预扫描 + 指针遍历 | 预扫 `wp-block`/`wp-self-closing` 边界存入 `pairStarts`/`selfStarts`，用 `pi`/`si` 指针 + `nextPairAt`/`nextSelfAt` 步行，`O(n)` 取代逐块 `allMatches` 的 `O(n^2)`；删除未用 `_FirstOrNull` 扩展 | 新增"单趟交错块"用例通过；既有解析用例全绿；`flutter analyze` 通过 |
+| P3-10 | `EditorController._emit` 防抖 `onChanged` | 新增 `Timer` + `100ms` 去抖，`_scheduleOnChanged` 在编辑停顿后派发 `onChanged?.call`；`updateFromExternal` 取消挂起 timer；`dispose()` 取消 timer | `test/editor_controller_test.dart` 改为 `async` 并 `await 150ms` 后断言 debounced 发射；CI 全绿 |
+| P3-11 | `XmlRpcClient._readCapped` 用 `BytesBuilder(copy:false)` | 以 `BytesBuilder(copy:false)` 累积分块、`toBytes()` 收口，取代可增长 `List<int>` + `Uint8List.fromList` | `flutter analyze` 通过；单测全绿 |
+| P3-12 | `MediaCache.fetch` 流式落盘 + 32MiB 上限 | 用 `http.Client` + `Request('GET').send` + `await for` 直写文件；`32*1024*1024` 字节护栏，超限/空文件删除；`.catchError` 清理改为 try/catch | `flutter analyze` 通过；单测全绿 |
+
+> 两波均经 CI 全绿后 `--ff-only` 合入 `main`（本地 Flutter 被 SenseShield 驱动阻断，无法本地跑测，全部以 CI 为准）。回归测试：新增 `test/rest_client_test.dart`（JWT 重试 mock）；`block_document_test` 增「v1.10 评审回归」组（P1-3/P1-4/P2-7/P2-8/P3-9）；`editor_controller_test` 改为 await 防抖发射。当前 `main` 全量单测 + Analyze 全绿。
+
 | P3-14 写作辅助 | SEO/元数据（excerpt/slug/OG）、定时发布、多作者 | 元数据可编辑并随导出 | **Done** — SEO 元数据（seoTitle/seoDescription/ogImageUrl）经 REST `meta` + XML-RPC `post_meta`（Yoast 兼容）双向同步；excerpt/slug 可编辑、定时发布经 `datePublished`+`scheduled` 已落地；多作者经 `BlogAuthor` 模型 + REST `GET /wp/v2/users` / XML-RPC `wp.getAuthors` 拉取 + 发布时 `author`/`post_author` 写入 + 编辑器「作者」下拉选择，已落地（并修复 wp.getPost 解析丢失 `authorName` 的潜在缺陷） |
 | P3-15 体验 | 暗色跟随系统、本地化补全、撤销重做增强 | 体验一致 | **Done** — ① 主题：新增 `ThemeMode` light/dark/system 偏好，持久化于 `olw.themeMode`，`AppShell` 经 `context.select<AppState,ThemeMode>` 应用 `themeMode`（仅主题变更时重建 `MaterialApp`）；入口在首页「账户与设置」底部弹层（跟随系统/浅色/深色）。② 撤销重做：编辑器新增全局快捷键 Ctrl/Cmd+Z、Ctrl/Cmd+Shift+Z、Ctrl+Y（平台级 `HardwareKeyboard` 拦截，文本框聚焦时也生效，覆盖其字段内字符级撤销）；工具栏 tooltip 标注快捷键。③ 本地化：补 `appearance`/`themeLight`/`themeDark`/`themeSystem`（en+zh）；既有 UI 文案已全量本地化 |
 | P3-16 REST 分类/标签/作者全量分页 | 修复 `per_page=100` 截断（同类"只显示 50"问题） | 选择器不再缺项，与 XML-RPC 对齐 | **Done** — `wordpress_rest` 新增私有 `_fetchAllPages` 助手按 `page` 续拉至短页（10k 上限护栏），`getCategories`/`getTags`/`getAuthors` 改用之，站点 >100 项时不再缺项；原本 XML-RPC 路径返回全量、REST 仅取 100 的协议不一致已消除。`test/wordpress_rest_test.dart` 新增 4 例覆盖多页枚举与单页短路 |
