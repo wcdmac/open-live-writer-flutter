@@ -133,3 +133,9 @@ v1.10 代码评审共识别出 12 处缺陷（P1-1~4、P2-5~8、P3-9~12），分
 2. **门禁保持**：`flutter analyze` + `flutter test` 须在 CI 全绿才允许 `v*` 发版。
 
 > 流程约定：仍走 `main` 单分支、打 `v*` tag 发版（沿用当前流程）。P0-1 widget 门禁已做实，重构项须小步增量、CI 全绿才合。
+
+## 已发布版本
+
+| 版本 | Tag | 发布内容 | 发布页 |
+|------|-----|----------|--------|
+| v1.11.0 | `v1.11.0`（annotated，2026-10-03） | 封面图块本地图片（方案 A 插入入口 + 方案 B 字段可发现性）；含 v1.10 评审两波缺陷修复（P1-1~4/P2-5~8/P3-9~12）。pubspec `1.11.0+31`。`Build & Release` CI run `37114659778` 全绿（Analyze&Test + Android/iOS/Windows/Linux/macOS + GitHub Release，自动生成 notes，8 产物） | https://github.com/wcdmac/open-live-writer-flutter/releases/tag/v1.11.0 |
