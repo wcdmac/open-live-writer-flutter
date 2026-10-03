@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
+import 'package:open_live_writer/models/blog.dart';
 import 'package:open_live_writer/services/rest/wordpress_rest.dart';
 
 /// Minimal fake [http.Client] that scripts canned responses for the JWT token
