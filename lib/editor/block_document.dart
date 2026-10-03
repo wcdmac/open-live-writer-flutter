@@ -80,6 +80,29 @@ List<ContentBlock> parseBlocks(String content) {
     if (trimmed.isNotEmpty) blocks.add(_classify(trimmed));
   }
 
+  // P3-9: pre-scan every wp block boundary once (two linear passes) instead
+  // of re-scanning the whole tail on each chunk. The main walk then advances
+  // with pointers, so the cost is O(n) rather than O(n^2) for posts with
+  // many blocks.
+  final pairs = _wpBlockRe.allMatches(text).toList();
+  final selfClosing = _wpSelfClosingRe.allMatches(text).toList();
+  final pairStarts = [for (final m in pairs) m.start];
+  final selfStarts = [for (final m in selfClosing) m.start];
+  var pi = 0;
+  var si = 0;
+
+  RegExpMatch? nextPairAt(int at) {
+    while (pi < pairs.length && pairStarts[pi] < at) pi++;
+    return pi < pairs.length && pairStarts[pi] == at ? pairs[pi] : null;
+  }
+
+  RegExpMatch? nextSelfAt(int at) {
+    while (si < selfClosing.length && selfStarts[si] < at) si++;
+    return si < selfClosing.length && selfStarts[si] == at
+        ? selfClosing[si]
+        : null;
+  }
+
   while (pos < text.length) {
     // Skip inter-block whitespace.
     final ws = RegExp(r'\s+').matchAsPrefix(text, pos);
@@ -89,7 +112,7 @@ List<ContentBlock> parseBlocks(String content) {
     }
 
     // A wp block pair starting exactly here?
-    final pair = _wpBlockRe.matchAsPrefix(text, pos);
+    final pair = nextPairAt(pos);
     if (pair != null) {
       final whole = pair.group(0)!;
       final inner = pair.group(3)!;
@@ -104,28 +127,24 @@ List<ContentBlock> parseBlocks(String content) {
     }
 
     // A self-closing wp comment here?
-    final selfClosing = _wpSelfClosingRe.matchAsPrefix(text, pos);
-    if (selfClosing != null) {
+    final selfClosingMatch = nextSelfAt(pos);
+    if (selfClosingMatch != null) {
       blocks.add(ContentBlock(
-          type: BlockType.html, html: text.substring(pos, selfClosing.end)));
-      pos = selfClosing.end;
+          type: BlockType.html,
+          html: text.substring(pos, selfClosingMatch.end)));
+      pos = selfClosingMatch.end;
       continue;
     }
 
-    // Plain chunk: up to the next blank line, next wp comment or EOF.
+    // Plain chunk: up to the next blank line, next wp boundary, or EOF.
     final nextBlank = RegExp(r'\n\s*\n').firstMatch(text.substring(pos + 1));
-    final nextWp = _wpBlockRe
-        .allMatches(text, pos + 1)
-        .map((m) => m.start)
-        .firstOrNull;
-    final nextSelf = _wpSelfClosingRe
-        .allMatches(text, pos + 1)
-        .map((m) => m.start)
-        .firstOrNull;
+    final nextBoundary = <int>[
+      if (pi < pairs.length) pairStarts[pi],
+      if (si < selfClosing.length) selfStarts[si],
+    ].fold<int?>(null, (min, v) => min == null || v < min! ? v : min);
     var end = text.length;
     if (nextBlank != null) end = pos + 1 + nextBlank.start;
-    if (nextWp != null && nextWp < end) end = nextWp;
-    if (nextSelf != null && nextSelf < end) end = nextSelf;
+    if (nextBoundary != null && nextBoundary < end) end = nextBoundary;
 
     addChunk(text.substring(pos, end));
     pos = end;

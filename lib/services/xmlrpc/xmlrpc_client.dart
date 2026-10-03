@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -94,7 +95,11 @@ class XmlRpcClient {
   /// the aggregate read to [timeout].
   Future<Uint8List> _readCapped(Stream<List<int>> stream, Duration timeout) {
     final completer = Completer<Uint8List>();
-    final bytes = <int>[];
+    // P3-11: append into a BytesBuilder (copy:false) instead of a growable
+    // List<int>. A List<int> stores each byte as an 8-byte heap reference, so
+    // a 16 MiB response allocated ~3x its size; BytesBuilder packs into a
+    // single Uint8List, cutting both memory and the per-chunk copy.
+    final bytes = BytesBuilder(copy: false);
     Timer? timer;
     late StreamSubscription<List<int>> sub;
     timer = Timer(timeout, () {
@@ -105,7 +110,7 @@ class XmlRpcClient {
     });
     sub = stream.listen(
       (chunk) {
-        bytes.addAll(chunk);
+        bytes.add(chunk);
         if (bytes.length > _maxResponseBytes) {
           sub.cancel();
           timer?.cancel();
@@ -120,7 +125,7 @@ class XmlRpcClient {
       },
       onDone: () {
         timer?.cancel();
-        completer.complete(Uint8List.fromList(bytes));
+        completer.complete(bytes.toBytes());
       },
       cancelOnError: true,
     );

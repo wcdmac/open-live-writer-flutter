@@ -40,6 +40,9 @@ class MediaCache {
   static const _lruTouchInterval = Duration(minutes: 10);
 
   Directory? _base;
+  /// Shared HTTP client for streaming downloads (P3-12). MediaCache is a
+  /// process-lifetime singleton, so the client is never closed.
+  final http.Client _client = http.Client();
   final Set<String> _downloading = {};
   final Map<String, DateTime> _failedAt = {};
 
@@ -131,16 +134,47 @@ class MediaCache {
       final file = File('${dir.path}${Platform.pathSeparator}'
           '${_fileNameFor(url)}');
       if (!await file.exists()) {
-        final res = await http
-            .get(Uri.parse(url))
+        // P3-12: stream the body to disk with a hard byte cap instead of
+        // buffering the entire response in memory. `http.get(...).bodyBytes`
+        // read the whole image first, so a hostile or oversized file capped
+        // memory only by the server's whim.
+        const maxBytes = 32 * 1024 * 1024; // 32 MiB ceiling per image.
+        final request = http.Request('GET', Uri.parse(url));
+        final streamed = await _client
+            .send(request)
             .timeout(const Duration(seconds: 60));
-        if (res.statusCode != 200 || res.bodyBytes.isEmpty) {
-          debugPrint('MediaCache: ${res.statusCode} for $url');
+        if (streamed.statusCode != 200) {
+          debugPrint('MediaCache: ${streamed.statusCode} for $url');
           _failedAt[url] = DateTime.now();
           return null;
         }
-        await file.writeAsBytes(res.bodyBytes, flush: true);
-        _bytesSinceEviction += res.bodyBytes.length;
+        var total = 0;
+        final sink = file.openWrite();
+        try {
+          await for (final chunk in streamed.stream) {
+            total += chunk.length;
+            if (total > maxBytes) {
+              await sink.close();
+              await file.delete();
+              _failedAt[url] = DateTime.now();
+              debugPrint('MediaCache: image too large for $url');
+              return null;
+            }
+            sink.add(chunk);
+          }
+          await sink.close();
+        } catch (e) {
+          await sink.close().catchError((_) {});
+          await file.delete().catchError((_) {});
+          rethrow;
+        }
+        final len = await file.length();
+        if (len == 0) {
+          await file.delete().catchError((_) {});
+          _failedAt[url] = DateTime.now();
+          return null;
+        }
+        _bytesSinceEviction += len;
         if (_bytesSinceEviction >= _evictCheckIntervalBytes) {
           _bytesSinceEviction = 0;
           unawaited(_evictIfNeeded());

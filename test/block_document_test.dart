@@ -418,5 +418,28 @@ void main() {
       );
       expect(plain.single.type, BlockType.table);
     });
+
+    test('parseBlocks single-pass walk handles interleaved blocks and text',
+        () {
+      // Exercises the pointer-based walk (P3-9): a paired block, a plain text
+      // chunk, a self-closing comment, another plain chunk, then a paired block.
+      final src = '<!-- wp:heading --><h2>One</h2><!-- /wp:heading -->\n\n'
+          'plain intro text\n\n'
+          '<!-- wp:latest-posts /-->\n\n'
+          '<p>middle paragraph</p>\n\n'
+          '<!-- wp:paragraph --><p>Two</p><!-- /wp:paragraph -->';
+      final blocks = parseBlocks(src);
+      expect(
+        blocks.map((b) => b.type).toList(),
+        [
+          BlockType.heading,
+          BlockType.paragraph,
+          BlockType.html,
+          BlockType.paragraph,
+          BlockType.paragraph,
+        ],
+      );
+      expect(blocks[2].html, '<!-- wp:latest-posts /-->');
+    });
   });
 }

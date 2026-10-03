@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import 'block_document.dart';
@@ -29,12 +31,25 @@ class EditorController extends ChangeNotifier {
   /// Index of the block that holds focus, or null.
   int? get focusedIndex => _focusedIndex;
 
+  /// Coalesces rapid edits so the (potentially expensive) downstream
+  /// `onChanged` propagation fires at most once per short pause instead of on
+  /// every keystroke (P3-10).
+  Timer? _onChangedTimer;
+  static const _onChangedDebounce = Duration(milliseconds: 100);
+
   /// Last serialized HTML emitted; the source of truth for change detection.
   String get content => _lastEmitted;
 
   void _emit() {
     _lastEmitted = serializeBlocks(_blocks);
-    onChanged?.call(_lastEmitted);
+    _scheduleOnChanged();
+  }
+
+  void _scheduleOnChanged() {
+    _onChangedTimer?.cancel();
+    _onChangedTimer = Timer(_onChangedDebounce, () {
+      onChanged?.call(_lastEmitted);
+    });
   }
 
   /// Applies an external content update (e.g. a post loaded in the
@@ -42,6 +57,9 @@ class EditorController extends ChangeNotifier {
   /// an echo of our own output does not reset the caret/focus.
   void updateFromExternal(String content) {
     if (content == _lastEmitted || content.trim() == _lastEmitted.trim()) return;
+    // A pending debounced emit from a prior edit must not overwrite the new
+    // content we are about to set (P3-10).
+    _onChangedTimer?.cancel();
     _blocks = parseBlocks(content);
     _focusedIndex = null;
     _lastEmitted = serializeBlocks(_blocks);
@@ -96,5 +114,11 @@ class EditorController extends ChangeNotifier {
   void focus(int index) {
     _focusedIndex = index;
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _onChangedTimer?.cancel();
+    super.dispose();
   }
 }
