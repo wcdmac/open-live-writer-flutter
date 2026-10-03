@@ -107,6 +107,18 @@ v1.10 代码评审共识别出 12 处缺陷（P1-1~4、P2-5~8、P3-9~12），分
 
 > 两波均经 CI 全绿后 `--ff-only` 合入 `main`（本地 Flutter 被 SenseShield 驱动阻断，无法本地跑测，全部以 CI 为准）。回归测试：新增 `test/rest_client_test.dart`（JWT 重试 mock）；`block_document_test` 增「v1.10 评审回归」组（P1-3/P1-4/P2-7/P2-8/P3-9）；`editor_controller_test` 改为 await 防抖发射。当前 `main` 全量单测 + Analyze 全绿。
 
+### 本轮已交付（封面图块本地图片，2026-10-03）
+
+评估结论：封面块的"本地图片"能力其实已基本具备（聚焦字段 `_CoverImageField._pickAndUpload` 已接 `uploadMedia`，上传走 REST/XML-RPC 媒体接口，返回 URL 嵌 `<img src>`，`parseCover`/`buildCoverHtml` 往返无损）；用户体感"只支持链接"源于**插入入口（`_insertCover`）只弹 URL**，且字段内设备按钮藏在 URL 框后缀图标里、可发现性低。本次按"两者都做"补齐：
+
+| 项 | 提交内容 | 验收 |
+|----|----------|------|
+| 方案 A | `insert_bar._insertCover` 改为与 `_insertImage`/`_insertVideo` 一致的「从设备选择 / 输入链接」底部菜单；选设备则 `pickImage → normalizeImageUpload → uploadMedia → 插入带托管 URL 的 cover 块`（默认 overlay=文件名） | `flutter analyze` 通过；CI（Analyze+Test）全绿 |
+| 方案 B | `cover_image_field` 在 URL 框下方显示醒目的「从设备选择」`TextButton`（`uploadMedia` 非空时），URL 框后缀仅保留上传中 spinner，去掉隐藏的图标按钮 | `flutter analyze` 通过；CI（Analyze+Test）全绿 |
+
+- 涉及文件：`lib/editor/blocks/insert_bar.dart`（`_insertCover`）、`lib/editor/blocks/cover_image_field.dart`（构建）。无新 l10n（复用 `pickFromDevice`/`enterImageUrl`/`uploadingImage`/`imageUrl`）；无序列化改动（沿用 `buildCoverHtml`）。
+- 提交 `475e2d1`，`tmp/cover-local-image` 分支 CI 全绿后 `--ff-only` 合入 `main`，临时分支已删除。
+
 | P3-14 写作辅助 | SEO/元数据（excerpt/slug/OG）、定时发布、多作者 | 元数据可编辑并随导出 | **Done** — SEO 元数据（seoTitle/seoDescription/ogImageUrl）经 REST `meta` + XML-RPC `post_meta`（Yoast 兼容）双向同步；excerpt/slug 可编辑、定时发布经 `datePublished`+`scheduled` 已落地；多作者经 `BlogAuthor` 模型 + REST `GET /wp/v2/users` / XML-RPC `wp.getAuthors` 拉取 + 发布时 `author`/`post_author` 写入 + 编辑器「作者」下拉选择，已落地（并修复 wp.getPost 解析丢失 `authorName` 的潜在缺陷） |
 | P3-15 体验 | 暗色跟随系统、本地化补全、撤销重做增强 | 体验一致 | **Done** — ① 主题：新增 `ThemeMode` light/dark/system 偏好，持久化于 `olw.themeMode`，`AppShell` 经 `context.select<AppState,ThemeMode>` 应用 `themeMode`（仅主题变更时重建 `MaterialApp`）；入口在首页「账户与设置」底部弹层（跟随系统/浅色/深色）。② 撤销重做：编辑器新增全局快捷键 Ctrl/Cmd+Z、Ctrl/Cmd+Shift+Z、Ctrl+Y（平台级 `HardwareKeyboard` 拦截，文本框聚焦时也生效，覆盖其字段内字符级撤销）；工具栏 tooltip 标注快捷键。③ 本地化：补 `appearance`/`themeLight`/`themeDark`/`themeSystem`（en+zh）；既有 UI 文案已全量本地化 |
 | P3-16 REST 分类/标签/作者全量分页 | 修复 `per_page=100` 截断（同类"只显示 50"问题） | 选择器不再缺项，与 XML-RPC 对齐 | **Done** — `wordpress_rest` 新增私有 `_fetchAllPages` 助手按 `page` 续拉至短页（10k 上限护栏），`getCategories`/`getTags`/`getAuthors` 改用之，站点 >100 项时不再缺项；原本 XML-RPC 路径返回全量、REST 仅取 100 的协议不一致已消除。`test/wordpress_rest_test.dart` 新增 4 例覆盖多页枚举与单页短路 |
