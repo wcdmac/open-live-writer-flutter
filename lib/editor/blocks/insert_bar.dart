@@ -318,10 +318,74 @@ class _InsertBar extends StatelessWidget {
     );
   }
 
-  /// Cover image insert: prompt for the background image URL, then insert a
-  /// cover block. Overlay text is added later in the focused field.
+  /// Cover image insert: offer device pick (upload → embed hosted URL) or a
+  /// plain URL, then insert a cover block. Mirrors [_insertImage].
   Future<void> _insertCover(BuildContext context) async {
     final l10n = AppLocalizations.of(context)!;
+    final fromDevice = uploadMedia == null
+        ? false
+        : await showModalBottomSheet<bool>(
+            context: context,
+            showDragHandle: true,
+            builder: (sheetContext) => SafeArea(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ListTile(
+                    leading: const Icon(Icons.photo_library),
+                    title: Text(l10n.pickFromDevice),
+                    onTap: () => Navigator.of(sheetContext).pop(true),
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.link),
+                    title: Text(l10n.enterImageUrl),
+                    onTap: () => Navigator.of(sheetContext).pop(false),
+                  ),
+                ],
+              ),
+            ),
+          );
+    if (fromDevice == null || !context.mounted) return;
+
+    if (fromDevice) {
+      final xfile = await imgpick.ImagePicker().pickImage(
+          imageQuality: kImageUploadQuality,
+          maxWidth: kImageMaxWidth,
+          source: imgpick.ImageSource.gallery);
+      if (xfile == null || !context.mounted) return;
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => AlertDialog(
+          content: Row(children: [
+            const CircularProgressIndicator(),
+            const SizedBox(width: 20),
+            Text(l10n.uploadingImage),
+          ]),
+        ),
+      );
+      try {
+        final bytes = await xfile.readAsBytes();
+        final (name, mime) = normalizeImageUpload(
+            xfile.name, xfile.mimeType ?? 'image/jpeg');
+        final result = await uploadMedia!(name, bytes, mime);
+        if (context.mounted) Navigator.of(context).pop();
+        onInsert(ContentBlock(
+          type: BlockType.coverImage,
+          html: buildCoverHtml(CoverData(url: result.url, overlay: xfile.name)),
+          wpOpen: '<!-- wp:cover -->',
+          wpClose: '<!-- /wp:cover -->',
+        ));
+      } catch (e) {
+        if (context.mounted) {
+          Navigator.of(context).pop();
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text(mediaUploadErrorText(l10n, e))));
+        }
+      }
+      return;
+    }
+
     final url = await _prompt(context, l10n.imageUrl, 'https://');
     if (url == null || url.trim().isEmpty || !context.mounted) return;
     onInsert(ContentBlock(

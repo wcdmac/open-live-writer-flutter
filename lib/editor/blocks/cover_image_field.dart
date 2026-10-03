@@ -99,24 +99,30 @@ class _CoverImageFieldState extends State<_CoverImageField> {
             labelText: l10n.imageUrl,
             isDense: true,
             border: const OutlineInputBorder(),
-            suffixIcon: _uploading
-                ? const Padding(
-                    padding: EdgeInsets.all(10),
-                    child: SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  )
-                : (widget.uploadMedia == null
-                    ? null
-                    : IconButton(
-                        icon: const Icon(Icons.photo_library),
-                        tooltip: l10n.pickFromDevice,
-                        onPressed: _pickAndUpload,
-                      )),
+          suffixIcon: _uploading
+              ? const Padding(
+                  padding: EdgeInsets.all(10),
+                  child: SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                )
+              : null,
+        ),
+        onChanged: (_) => _emit(),
+      ),
+      if (widget.uploadMedia != null)
+        Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              icon: const Icon(Icons.photo_library, size: 18),
+              label: Text(l10n.pickFromDevice),
+              onPressed: _uploading ? null : _pickAndUpload,
+            ),
           ),
-          onChanged: (_) => _emit(),
         ),
         const SizedBox(height: 6),
         TextField(
