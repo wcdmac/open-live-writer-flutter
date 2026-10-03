@@ -26,7 +26,7 @@ void main() {
     expect(emitted, isNull); // initial content is not re-emitted
   });
 
-  test('updateHtml rewrites the block and emits', () {
+  test('updateHtml rewrites the block and emits', () async {
     String? emitted;
     final c = EditorController(
       initialContent: _three,
@@ -34,6 +34,9 @@ void main() {
     );
     c.updateHtml(0, '<p>Changed</p>');
     expect(c.blocks[0].html, '<p>Changed</p>');
+    // onChanged is debounced (P3-10); wait out the coalescing window before
+    // asserting the propagated value.
+    await Future.delayed(const Duration(milliseconds: 150));
     expect(emitted, contains('<p>Changed</p>'));
   });
 
