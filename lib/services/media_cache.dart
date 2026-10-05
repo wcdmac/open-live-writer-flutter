@@ -207,7 +207,7 @@ class MediaCache {
           });
           await download.timeout(
             _downloadTotalTimeout,
-            onTimeout: (_) => throw const TimeoutException(
+            onTimeout: () => throw TimeoutException(
                 'MediaCache: download total timeout'),
           );
           await sink.close();
