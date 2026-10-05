@@ -229,3 +229,4 @@ v1.10 代码评审共识别出 12 处缺陷（P1-1~4、P2-5~8、P3-9~12），分
 | 版本 | Tag | 发布内容 | 发布页 |
 |------|-----|----------|--------|
 | v1.11.0 | `v1.11.0`（annotated，2026-10-03） | 封面图块本地图片（方案 A 插入入口 + 方案 B 字段可发现性）；含 v1.10 评审两波缺陷修复（P1-1~4/P2-5~8/P3-9~12）。pubspec `1.11.0+31`。`Build & Release` CI run `37114659778` 全绿（Analyze&Test + Android/iOS/Windows/Linux/macOS + GitHub Release，自动生成 notes，8 产物） | https://github.com/wcdmac/open-live-writer-flutter/releases/tag/v1.11.0 |
+| v1.11.1 | `v1.11.1`（annotated，2026-10-05） | 累计自 v1.11.0：F1–F6（媒体流 idle/总超时、AppState 代际守卫、utf8 allowMalformed、上传取消按钮注释）+ G1（手动 StreamSubscription + idle/total 双 Timer 真正取消 HTTP 流）+ H1（oversize 哨兵关闭 sink 并删除 tmp，修复 G1 引入的句柄/`.tmp` 泄漏）。pubspec `1.11.1+32`。`Build & Release` CI run `37258068514` 全绿（Analyze&Test + Android/iOS/Windows/Linux/macOS + GitHub Release，8 产物） | https://github.com/wcdmac/open-live-writer-flutter/releases/tag/v1.11.1 |
