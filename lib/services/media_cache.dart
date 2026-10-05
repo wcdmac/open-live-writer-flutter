@@ -169,68 +169,76 @@ class MediaCache {
         var total = 0;
         final sink = tmp.openWrite();
         try {
-        // G1 fix: drive the body read with a manual StreamSubscription plus two
-        // Timers (idle + total) so a timeout can *cancel* the underlying HTTP
-        // read. `Future.timeout` only completes the awaited future and leaves
-        // the original `await for` running, which would keep writing to a closed
-        // sink (StateError) and leak bandwidth after the timeout (G1). Idle
-        // semantics (F1) are preserved: the error still routes through the
-        // surrounding catch for temp-file cleanup.
-        late StreamSubscription<List<int>> sub;
-        final done = Completer<void>();
-        var abandoned = false;
-        Timer? idleTimer;
-        late final Timer totalTimer;
-        void fail(Object e, [StackTrace? st]) {
-          if (done.isCompleted) return;
-          idleTimer?.cancel();
-          totalTimer.cancel();
-          abandoned = true;
-          sub.cancel(); // 立刻停止消费 HTTP 流 (G1)
-          done.completeError(e, st ?? StackTrace.current);
-        }
-
-        totalTimer = Timer(_downloadTotalTimeout, () {
-          fail(TimeoutException('MediaCache: download total timeout'));
-        });
-        void onIdleTimeout() {
-          // F1 语义保留：idle 错误仍走流/外层 catch 通道，清理 tmp 并重抛。
-          fail(const HttpException('MediaCache: download idle timeout'));
-        }
-
-        sub = streamed.stream.listen(
-          (chunk) {
-            if (abandoned) return;
-            try {
-              idleTimer?.cancel();
-              idleTimer = Timer(_downloadIdleTimeout, onIdleTimeout);
-              total += chunk.length;
-              if (total > maxBytes) {
-                _failedAt[url] = DateTime.now();
-                debugPrint('MediaCache: image too large for $url');
-                // 哨兵异常，外层 catch 映射为 return null（tmp 已删）。
-                fail(const HttpException('MediaCache: image too large'));
-                return;
-              }
-              sink.add(chunk);
-            } catch (e, st) {
-              fail(e, st);
-            }
-          },
-          onError: (e, st) => fail(e, st),
-          onDone: () {
+          // G1 fix: drive the body read with a manual StreamSubscription plus two
+          // Timers (idle + total) so a timeout can *cancel* the underlying HTTP
+          // read. `Future.timeout` only completes the awaited future and leaves
+          // the original `await for` running, which would keep writing to a closed
+          // sink (StateError) and leak bandwidth after the timeout (G1). Idle
+          // semantics (F1) are preserved: the error still routes through the
+          // surrounding catch for temp-file cleanup.
+          late StreamSubscription<List<int>> sub;
+          final done = Completer<void>();
+          var abandoned = false;
+          Timer? idleTimer;
+          late final Timer totalTimer;
+          void fail(Object e, [StackTrace? st]) {
             if (done.isCompleted) return;
             idleTimer?.cancel();
             totalTimer.cancel();
-            done.complete();
-          },
-          cancelOnError: true,
-        );
-        await done.future;
-        await sink.close();
+            abandoned = true;
+            sub.cancel(); // 立刻停止消费 HTTP 流 (G1)
+            done.completeError(e, st ?? StackTrace.current);
+          }
+
+          totalTimer = Timer(_downloadTotalTimeout, () {
+            fail(TimeoutException('MediaCache: download total timeout'));
+          });
+          void onIdleTimeout() {
+            // F1 语义保留：idle 错误仍走流/外层 catch 通道，清理 tmp 并重抛。
+            fail(const HttpException('MediaCache: download idle timeout'));
+          }
+
+          sub = streamed.stream.listen(
+            (chunk) {
+              if (abandoned) return;
+              try {
+                idleTimer?.cancel();
+                idleTimer = Timer(_downloadIdleTimeout, onIdleTimeout);
+                total += chunk.length;
+                if (total > maxBytes) {
+                  _failedAt[url] = DateTime.now();
+                  debugPrint('MediaCache: image too large for $url');
+                  // 哨兵异常：外层 catch 会在此处关闭 sink 并删除 tmp，再映射为 return null。
+                  fail(const HttpException('MediaCache: image too large'));
+                  return;
+                }
+                sink.add(chunk);
+              } catch (e, st) {
+                fail(e, st);
+              }
+            },
+            onError: (e, st) => fail(e, st),
+            onDone: () {
+              if (done.isCompleted) return;
+              idleTimer?.cancel();
+              totalTimer.cancel();
+              done.complete();
+            },
+            cancelOnError: true,
+          );
+          await done.future;
+          await sink.close();
         } catch (e) {
           if (e is HttpException && e.message == 'MediaCache: image too large') {
-            // Oversized image: temp already deleted above; treat as a miss.
+            // Oversized image: the G1 refactor routes the sentinel here without
+            // closing the sink or deleting tmp, so do both now to avoid leaking a
+            // handle / a .tmp file (H1). Then treat the request as a miss.
+            try {
+              await sink.close();
+            } catch (_) {}
+            try {
+              await tmp.delete();
+            } catch (_) {}
             return null;
           }
           // Best-effort cleanup of the temp download (idle/total timeout or
