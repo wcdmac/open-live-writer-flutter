@@ -4,23 +4,34 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
-import 'package:http/testing.dart';
 
 import 'package:open_live_writer/services/rest/wordpress_rest.dart';
+
+/// Minimal [http.Client] that returns a streamed body for the WP-JSON probe so
+/// we can exercise `discoverRestRoot`'s bounded/decoded read without a real
+/// server. `MockClient` only supports `http.Response`, so we subclass
+/// [http.BaseClient] and override `send` directly.
+class _StreamClient extends http.BaseClient {
+  _StreamClient(this._probeBody);
+
+  final Stream<List<int>> _probeBody;
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    if (request.url.path == '/wp-json/') {
+      return http.StreamedResponse(_probeBody, 200);
+    }
+    // HEAD/GET on the homepage: no Link header, empty body.
+    return http.StreamedResponse(Stream<List<int>>.empty(), 200);
+  }
+}
 
 void main() {
   group('WordPressRestClient.discoverRestRoot', () {
     test('returns root when the probe body advertises routes', () async {
-      final client = MockClient((req) async {
-        if (req.url.path == '/wp-json/') {
-          return http.StreamedResponse(
-            Stream.value(utf8.encode('{"routes":{"/":{}}}')),
-            200,
-          );
-        }
-        // HEAD/GET on the homepage: no Link header, empty body.
-        return http.StreamedResponse(Stream<List<int>>.empty(), 200);
-      });
+      final client = _StreamClient(
+        Stream.value(utf8.encode('{"routes":{"/":{}}}')),
+      );
       final root = await WordPressRestClient.discoverRestRoot(
         'http://example.invalid/',
         client: client,
@@ -41,15 +52,9 @@ void main() {
       chunk1[cap - 1] = 0xE4;
       final chunk2 = Uint8List(64)..fillRange(0, 64, 0x20);
 
-      final client = MockClient((req) async {
-        if (req.url.path == '/wp-json/') {
-          return http.StreamedResponse(
-            Stream<List<int>>.fromIterable([chunk1, chunk2]),
-            200,
-          );
-        }
-        return http.StreamedResponse(Stream<List<int>>.empty(), 200);
-      });
+      final client = _StreamClient(
+        Stream<List<int>>.fromIterable([chunk1, chunk2]),
+      );
 
       // The truncated probe body carries no 'namespaces'/'routes' marker, so
       // discovery returns null — but crucially without a FormatException.

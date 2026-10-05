@@ -169,14 +169,15 @@ class MediaCache {
         var total = 0;
         final sink = tmp.openWrite();
         try {
-          // F2: cap the *entire* transfer at [_downloadTotalTimeout]
-          // (symmetric to the upload path). The idle timeout above is defeated
-          // by a server that trickles one byte every `idle - 1` seconds, so a
-          // total ceiling is what actually prevents a download from occupying a
-          // `_downloading` slot / prefetch batch indefinitely. The timeout
-          // throws TimeoutException out of the loop; the catch below turns it
-          // into temp-file cleanup + rethrow.
-          await Future.timeout(_downloadTotalTimeout, () async {
+          // F2: cap the *entire* transfer at [_downloadTotalTimeout] (symmetric
+          // to the upload path). The idle timeout above is defeated by a server
+          // that trickles one byte every `idle - 1` seconds, so a total ceiling
+          // is what actually prevents a download from occupying a
+          // `_downloading` slot / prefetch batch indefinitely. `Future.timeout`
+          // is an instance method (not static), so we wrap the streamed read in
+          // a future and call `.timeout` on it; the resulting TimeoutException
+          // is caught below and turned into temp-file cleanup + rethrow.
+          final download = Future.sync(() async {
             await for (final chunk in streamed.stream.timeout(
               _downloadIdleTimeout,
               onTimeout: (s) {
@@ -204,6 +205,11 @@ class MediaCache {
               sink.add(chunk);
             }
           });
+          await download.timeout(
+            _downloadTotalTimeout,
+            onTimeout: (_) => throw const TimeoutException(
+                'MediaCache: download total timeout'),
+          );
           await sink.close();
         } catch (e) {
           if (e is HttpException && e.message == 'MediaCache: image too large') {
