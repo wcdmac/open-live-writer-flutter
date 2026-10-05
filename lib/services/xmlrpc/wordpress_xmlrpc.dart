@@ -706,8 +706,10 @@ class WordPressXmlRpcClient {
             if (tagNames.isNotEmpty) 'terms_names': {'post_tag': tagNames},
           };
         }(),
-        'comment_status': post.commentsEnabled ? 'open' : 'closed',
-        'ping_status': post.pingsEnabled ? 'open' : 'closed',
+        // N-legacy: a null flag (server omitted it) round-trips as "open",
+        // matching the REST default; a deliberate false is honored.
+        'comment_status': (post.commentsEnabled ?? true) ? 'open' : 'closed',
+        'ping_status': (post.pingsEnabled ?? true) ? 'open' : 'closed',
       },
     };
   }
@@ -722,8 +724,8 @@ class WordPressXmlRpcClient {
       if (post.slug?.isNotEmpty == true) 'wp_slug': post.slug,
       'categories': post.categories,
       'mt_keywords': post.tags.join(','),
-      'mt_allow_comments': post.commentsEnabled ? 1 : 0,
-      'mt_allow_pings': post.pingsEnabled ? 1 : 0,
+      'mt_allow_comments': (post.commentsEnabled ?? true) ? 1 : 0,
+      'mt_allow_pings': (post.pingsEnabled ?? true) ? 1 : 0,
       if (post.isPage) ...{
         if (post.pageParentId?.isNotEmpty == true)
           'wp_page_parent_id': post.pageParentId,
@@ -792,8 +794,13 @@ class WordPressXmlRpcClient {
       dateCreated: parseDate(m['post_date_gmt'] ?? m['post_date']),
       datePublished: parseDate(m['post_date_gmt'] ?? m['post_date']),
       modified: parseDate(m['post_modified_gmt'] ?? m['post_modified']),
-      commentsEnabled: '${m['comment_status'] ?? 'open'}' == 'open',
-      pingsEnabled: '${m['ping_status'] ?? 'open'}' == 'open',
+      // N-legacy: null when the server omits the field (see REST parser).
+      commentsEnabled: m['comment_status'] == null
+          ? null
+          : '${m['comment_status']}' == 'open',
+      pingsEnabled: m['ping_status'] == null
+          ? null
+          : '${m['ping_status']}' == 'open',
       categories: extractTerms(m['terms'], 'category'),
       tags: extractTerms(m['terms'], 'post_tag'),
     );
@@ -833,8 +840,13 @@ class WordPressXmlRpcClient {
       authorName: m['userid'] == null ? null : '${m['userid']}',
       dateCreated: parseDate(m['dateCreated']),
       datePublished: parseDate(m['dateCreated']),
-      commentsEnabled: '${m['mt_allow_comments'] ?? 1}' != '0',
-      pingsEnabled: '${m['mt_allow_pings'] ?? 1}' != '0',
+      // N-legacy: null when the server omits the field (see REST parser).
+      commentsEnabled: m['mt_allow_comments'] == null
+          ? null
+          : '${m['mt_allow_comments']}' != '0',
+      pingsEnabled: m['mt_allow_pings'] == null
+          ? null
+          : '${m['mt_allow_pings']}' != '0',
       categories: cats,
       tags: tags,
     );

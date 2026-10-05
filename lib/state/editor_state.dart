@@ -75,8 +75,12 @@ class EditorState extends ChangeNotifier {
     if (fresh.categories.isNotEmpty) post.categories = fresh.categories;
     if (fresh.tags.isNotEmpty) post.tags = fresh.tags;
     post.datePublished = fresh.datePublished ?? post.datePublished;
-    post.commentsEnabled = fresh.commentsEnabled;
-    post.pingsEnabled = fresh.pingsEnabled;
+    // N-legacy: a partial getPost response omits comment_status/ping_status,
+    // which used to force them back to "open" and wipe a deliberate "closed".
+    // The server value is now nullable (null = omitted), so keep the local
+    // choice when the fresh copy didn't actually carry one.
+    post.commentsEnabled = fresh.commentsEnabled ?? post.commentsEnabled;
+    post.pingsEnabled = fresh.pingsEnabled ?? post.pingsEnabled;
     _dirty = false;
     notifyListeners();
   }

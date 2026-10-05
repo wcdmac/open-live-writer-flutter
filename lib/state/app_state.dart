@@ -224,8 +224,9 @@ class AppState extends ChangeNotifier {
     // the dashboard renders (title/excerpt/date/categories…). Full `content`
     // is NOT needed here — the editor reloads it via getPost(id) on open, and
     // crash recovery / offline copies already fetch full posts on demand.
+    List<BlogPost>? fetchedPosts;
     try {
-      posts = await svc.getPosts(
+      fetchedPosts = await svc.getPosts(
         count: kPostPageSize,
         offset: 0,
         fields: const [
@@ -248,15 +249,19 @@ class AppState extends ChangeNotifier {
       error = userFacingError(e, context: 'refresh.getPosts');
     }
 
-    // P2-6: if a newer refresh started (or the service / account was swapped
-    // by a switch or removal) while we were awaiting, discard this result so
-    // we never write stale data over the current account. Leave `loading`
-    // untouched — the latest refresh owns clearing it.
+    // P2-6 + N1: only commit the fetched list once we know this refresh is
+    // still the current one. The previous code assigned `posts` *before* the
+    // generation guard, so a slow older request (e.g. account X still in
+    // flight) would overwrite the new account's data with stale cross-account
+    // posts; the next notify then showed "new account's" list as account X's
+    // articles. Holding it in a local variable until the guard passes prevents
+    // that pollution entirely.
     if (myGeneration != _refreshGeneration ||
         svc != _service ||
         account != currentAccount) {
       return;
     }
+    if (fetchedPosts != null) posts = fetchedPosts;
 
     categories = await catsFuture;
     tags = await tagsFuture;

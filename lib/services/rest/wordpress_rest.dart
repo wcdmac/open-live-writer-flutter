@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -104,30 +105,50 @@ class WordPressRestClient {
     final httpClient = client ?? http.Client();
     try {
       final uri = Uri.parse(homepageUrl);
-      http.Response? res;
+      // N-legacy: read headers only — never buffer the homepage body, which a
+      // huge page could otherwise hold in memory. HEAD is preferred; if the
+      // server ignores HEAD we fall back to a GET whose body we also skip.
+      String? link;
       try {
-        res = await httpClient.head(uri).timeout(_timeout);
+        final headRes = await httpClient
+            .send(http.Request('HEAD', uri))
+            .timeout(_timeout);
+        link = headRes.headers['link'];
       } catch (_) {
         /* fall through to GET */
       }
-      res ??= await httpClient.get(uri).timeout(_timeout);
-      final link = res.headers['link'];
+      if (link == null) {
+        try {
+          final getRes = await httpClient
+              .send(http.Request('GET', uri))
+              .timeout(_timeout);
+          link = getRes.headers['link'];
+        } catch (_) {
+          /* ignore */
+        }
+      }
       if (link != null) {
         final m = RegExp(
           r'<([^>]+)>;\s*rel="https://api\.w\.org/"',
         ).firstMatch(link);
         if (m != null) return m.group(1)!.replaceAll(RegExp(r'/+$'), '');
       }
-      // Fallback: probe the default location.
-      final probe = await httpClient
-          .get(
-            Uri.parse('${homepageUrl.replaceAll(RegExp(r'/+$'), '')}/wp-json/'),
-          )
+      // Fallback: probe the default location. Bound the body read
+      // (reuse [_maxResponseBytes]) so a giant homepage can't exhaust memory.
+      final probeRes = await httpClient
+          .send(http.Request('GET',
+              Uri.parse('${homepageUrl.replaceAll(RegExp(r'/+$'), '')}/wp-json/')))
           .timeout(_timeout);
-      if (probe.statusCode == 200 &&
-          (probe.body.contains('namespaces') ||
-              probe.body.contains('routes'))) {
-        return '${homepageUrl.replaceAll(RegExp(r'/+$'), '')}/wp-json';
+      if (probeRes.statusCode == 200) {
+        final bytes = <int>[];
+        await for (final chunk in probeRes.stream.timeout(_timeout)) {
+          bytes.addAll(chunk);
+          if (bytes.length > _maxResponseBytes) break;
+        }
+        final probeBody = utf8.decode(bytes);
+        if (probeBody.contains('namespaces') || probeBody.contains('routes')) {
+          return '${homepageUrl.replaceAll(RegExp(r'/+$'), '')}/wp-json';
+        }
       }
       return null;
     } finally {
@@ -273,7 +294,11 @@ class WordPressRestClient {
     Duration? timeout,
   }) {
     final completer = Completer<Uint8List>();
-    final out = <int>[];
+    // N5: accumulate into a BytesBuilder instead of a growable List<int> +
+    // Uint8List.fromList — the double memory of the old approach (one copy in
+    // the list, another in the final typed view) is avoided. This now matches
+    // the XML-RPC side (P3-11), which already used BytesBuilder(copy:false).
+    final out = BytesBuilder(copy: false);
     Timer? timer;
     late StreamSubscription<List<int>> sub;
     if (timeout != null) {
@@ -290,7 +315,7 @@ class WordPressRestClient {
     }
     sub = res.stream.listen(
       (chunk) {
-        out.addAll(chunk);
+        out.add(chunk);
         if (out.length > maxBytes) {
           sub.cancel();
           timer?.cancel();
@@ -309,7 +334,7 @@ class WordPressRestClient {
       },
       onDone: () {
         timer?.cancel();
-        completer.complete(Uint8List.fromList(out));
+        completer.complete(out.takeBytes());
       },
       cancelOnError: true,
     );
@@ -983,8 +1008,16 @@ class WordPressRestClient {
       dateCreated: parseDate(raw['date_gmt']),
       datePublished: parseDate(raw['date_gmt']),
       modified: parseDate(raw['modified_gmt']),
-      commentsEnabled: '${raw['comment_status'] ?? 'open'}' == 'open',
-      pingsEnabled: '${raw['ping_status'] ?? 'open'}' == 'open',
+      // N-legacy: only set the flag when the server actually returned it;
+      // a partial response that omits `comment_status`/`ping_status` yields
+      // null, so applyPost's `?? post.xxx` keeps the user's explicit choice
+      // instead of silently flipping it back to "open".
+      commentsEnabled: raw['comment_status'] == null
+          ? null
+          : '${raw['comment_status']}' == 'open',
+      pingsEnabled: raw['ping_status'] == null
+          ? null
+          : '${raw['ping_status']}' == 'open',
       categories:
           (raw['categories'] as List?)
               ?.map((c) => '$c')

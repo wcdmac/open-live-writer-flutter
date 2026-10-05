@@ -575,7 +575,21 @@ class _PostEditorPageState extends State<PostEditorPage>
         return fresh.title.trim() == post.title.trim() &&
             fresh.content.trim() == post.content.trim();
       }
-      final recent = await svc.getPosts().timeout(const Duration(seconds: 30));
+      // N-legacy: project only the fields we actually compare (title/content)
+      // so the probe doesn't pull a full list payload on every publish — the
+      // dashboard's getPosts already passes `fields`, this one didn't.
+      final recent = await svc
+          .getPosts(
+            fields: const [
+              'id',
+              'title',
+              'status',
+              'date_gmt',
+              'content',
+              'link',
+            ],
+          )
+          .timeout(const Duration(seconds: 30));
       final title = post.title.trim();
       if (title.isEmpty) return false;
       final cutoff = DateTime.now().toUtc().subtract(
@@ -1476,13 +1490,14 @@ class _PostSettingsSheetState extends State<_PostSettingsSheet> {
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             title: Text(l10n.allowComments),
-            value: editor.post.commentsEnabled,
+            // Null (server omitted the field) renders as the default "open".
+            value: editor.post.commentsEnabled ?? true,
             onChanged: editor.setCommentsEnabled,
           ),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             title: Text(l10n.allowPingbacks),
-            value: editor.post.pingsEnabled,
+            value: editor.post.pingsEnabled ?? true,
             onChanged: editor.setPingsEnabled,
           ),
           SwitchListTile(

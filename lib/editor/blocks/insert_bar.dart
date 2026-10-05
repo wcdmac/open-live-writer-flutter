@@ -44,15 +44,29 @@ class _InsertBar extends StatelessWidget {
         maxWidth: kImageMaxWidth,
         source: imgpick.ImageSource.gallery);
       if (xfile == null || !context.mounted) return;
+      // N8: uploads can take minutes on cross-border links; let the user
+      // cancel instead of being locked out of the editor. The dialog stays
+      // non-dismissible by barrier so a stray outside tap can't pop the wrong
+      // route.
+      var cancelled = false;
       showDialog<void>(
         context: context,
         barrierDismissible: false,
-        builder: (_) => AlertDialog(
+        builder: (dctx) => AlertDialog(
           content: Row(children: [
             const CircularProgressIndicator(),
             const SizedBox(width: 20),
             Text(l10n.uploadingImage),
           ]),
+          actions: [
+            TextButton(
+              onPressed: () {
+                cancelled = true;
+                Navigator.of(dctx).pop();
+              },
+              child: Text(l10n.cancel),
+            ),
+          ],
         ),
       );
       try {
@@ -60,6 +74,7 @@ class _InsertBar extends StatelessWidget {
         final (name, mime) = normalizeImageUpload(
             xfile.name, xfile.mimeType ?? 'image/jpeg');
         final result = await uploadMedia!(name, bytes, mime);
+        if (cancelled || !context.mounted) return;
         if (context.mounted) Navigator.of(context).pop();
         onInsert(ContentBlock(
           type: BlockType.image,
@@ -68,7 +83,7 @@ class _InsertBar extends StatelessWidget {
           wpClose: '<!-- /wp:image -->',
         ));
       } catch (e) {
-        if (context.mounted) {
+        if (!cancelled && context.mounted) {
           Navigator.of(context).pop();
           ScaffoldMessenger.of(context)
               .showSnackBar(SnackBar(content: Text(mediaUploadErrorText(l10n, e))));
@@ -123,21 +138,33 @@ class _InsertBar extends StatelessWidget {
       final xfile = await imgpick.ImagePicker()
           .pickVideo(source: imgpick.ImageSource.gallery);
       if (xfile == null || !context.mounted) return;
+      // N8: same cancellable upload dialog as the image path.
+      var cancelled = false;
       showDialog<void>(
         context: context,
         barrierDismissible: false,
-        builder: (_) => AlertDialog(
+        builder: (dctx) => AlertDialog(
           content: Row(children: [
             const CircularProgressIndicator(),
             const SizedBox(width: 20),
             Expanded(child: Text(l10n.uploadingVideo)),
           ]),
+          actions: [
+            TextButton(
+              onPressed: () {
+                cancelled = true;
+                Navigator.of(dctx).pop();
+              },
+              child: Text(l10n.cancel),
+            ),
+          ],
         ),
       );
       try {
         final bytes = await xfile.readAsBytes();
         final result = await uploadMedia!(
             xfile.name, bytes, xfile.mimeType ?? 'video/mp4');
+        if (cancelled || !context.mounted) return;
         if (context.mounted) Navigator.of(context).pop();
         onInsert(ContentBlock(
           type: BlockType.video,
@@ -146,7 +173,7 @@ class _InsertBar extends StatelessWidget {
           wpClose: '<!-- /wp:video -->',
         ));
       } catch (e) {
-        if (context.mounted) {
+        if (!cancelled && context.mounted) {
           Navigator.of(context).pop();
           ScaffoldMessenger.of(context)
               .showSnackBar(SnackBar(content: Text(mediaUploadErrorText(l10n, e))));
@@ -353,15 +380,26 @@ class _InsertBar extends StatelessWidget {
           maxWidth: kImageMaxWidth,
           source: imgpick.ImageSource.gallery);
       if (xfile == null || !context.mounted) return;
+      // N8: same cancellable upload dialog as the image path.
+      var cancelled = false;
       showDialog<void>(
         context: context,
         barrierDismissible: false,
-        builder: (_) => AlertDialog(
+        builder: (dctx) => AlertDialog(
           content: Row(children: [
             const CircularProgressIndicator(),
             const SizedBox(width: 20),
             Text(l10n.uploadingImage),
           ]),
+          actions: [
+            TextButton(
+              onPressed: () {
+                cancelled = true;
+                Navigator.of(dctx).pop();
+              },
+              child: Text(l10n.cancel),
+            ),
+          ],
         ),
       );
       try {
@@ -369,15 +407,20 @@ class _InsertBar extends StatelessWidget {
         final (name, mime) = normalizeImageUpload(
             xfile.name, xfile.mimeType ?? 'image/jpeg');
         final result = await uploadMedia!(name, bytes, mime);
+        if (cancelled || !context.mounted) return;
         if (context.mounted) Navigator.of(context).pop();
         onInsert(ContentBlock(
           type: BlockType.coverImage,
-          html: buildCoverHtml(CoverData(url: result.url, overlay: xfile.name)),
+          // N7: do NOT pre-fill the cover overlay with the picked file's name
+          // (e.g. "IMG_0231.jpg") — that text would be published into the post
+          // unless the user remembered to clear it. Leave it empty; the user
+          // adds overlay text deliberately in the focused field.
+          html: buildCoverHtml(CoverData(url: result.url)),
           wpOpen: '<!-- wp:cover -->',
           wpClose: '<!-- /wp:cover -->',
         ));
       } catch (e) {
-        if (context.mounted) {
+        if (!cancelled && context.mounted) {
           Navigator.of(context).pop();
           ScaffoldMessenger.of(context)
               .showSnackBar(SnackBar(content: Text(mediaUploadErrorText(l10n, e))));

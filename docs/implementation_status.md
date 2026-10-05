@@ -123,6 +123,40 @@ v1.10 代码评审共识别出 12 处缺陷（P1-1~4、P2-5~8、P3-9~12），分
 | P3-15 体验 | 暗色跟随系统、本地化补全、撤销重做增强 | 体验一致 | **Done** — ① 主题：新增 `ThemeMode` light/dark/system 偏好，持久化于 `olw.themeMode`，`AppShell` 经 `context.select<AppState,ThemeMode>` 应用 `themeMode`（仅主题变更时重建 `MaterialApp`）；入口在首页「账户与设置」底部弹层（跟随系统/浅色/深色）。② 撤销重做：编辑器新增全局快捷键 Ctrl/Cmd+Z、Ctrl/Cmd+Shift+Z、Ctrl+Y（平台级 `HardwareKeyboard` 拦截，文本框聚焦时也生效，覆盖其字段内字符级撤销）；工具栏 tooltip 标注快捷键。③ 本地化：补 `appearance`/`themeLight`/`themeDark`/`themeSystem`（en+zh）；既有 UI 文案已全量本地化 |
 | P3-16 REST 分类/标签/作者全量分页 | 修复 `per_page=100` 截断（同类"只显示 50"问题） | 选择器不再缺项，与 XML-RPC 对齐 | **Done** — `wordpress_rest` 新增私有 `_fetchAllPages` 助手按 `page` 续拉至短页（10k 上限护栏），`getCategories`/`getTags`/`getAuthors` 改用之，站点 >100 项时不再缺项；原本 XML-RPC 路径返回全量、REST 仅取 100 的协议不一致已消除。`test/wordpress_rest_test.dart` 新增 4 例覆盖多页枚举与单页短路 |
 
+### 本轮已交付（v1.11.0 复审修复 N1–N8 + 遗留，2026-10-05）
+
+针对 v1.11.0 复审报告（第三方审查）逐项核实后，按用户指令「按上述 Wave A → B → C 逐步全部修复」落地。全部经**临时分支 `tmp/review-v1110-fixes` + CI（Analyze&Test 全绿）+ `git merge --ff-only` 并入 `main`**，临时分支本地+远端删除。
+
+#### Wave A — P1 最高优（N1/N2/N3）
+
+| 项 | 提交内容 | 验收 |
+|----|----------|------|
+| N1 (P1) | `app_state.refresh()`：`getPosts` 结果先存局部 `fetchedPosts`，P2-6 generation 守卫（`myGeneration != _refreshGeneration || svc != _service || account != currentAccount`）判定通过后才 `posts = fetchedPosts` | `flutter analyze` 通过；CI 全绿；消除旧账号响应污染新账号模型 |
+| N2 (P1) | `EditorController._emit` 移除 100ms 防抖，`onChanged` 即时派发（P3-10 防抖引入的回归）；`updateFromExternal` 保留 echo 守卫（`content == _lastEmitted` 跳过）；删 `dart:async`/Timer | 新增 `test/block_editor_n2_test.dart` 两例：重建不失字 + echo 不丢焦；`test/editor_controller_test.dart` 同步即时断言；CI 全绿 |
+| N3 (P2) | `MediaCache.fetch` 流级 idle 超时：`streamed.stream.timeout(60s, onTimeout: close+throw)`，涓流服务器不再永久占 `_downloading` 槽 | `flutter analyze` 通过；CI 全绿 |
+
+#### Wave B — P2/P3 小修（N4/N5/N6/N7/N8）
+
+| 项 | 提交内容 | 验收 |
+|----|----------|------|
+| N4 (P3) | `MediaCache.fetch` 先写 `${file.path}.tmp`，完成后 `tmp.rename(file.path)`（跨设备失败回退 copy+delete），进程被杀不再残留截断坏图 | `flutter analyze` 通过；CI 全绿 |
+| N5 (P3) | REST `WordPressRestClient._readCapped` 改 `BytesBuilder(copy:false)` + `takeBytes()`，与 XML-RPC P3-11 对齐 | `flutter analyze` 通过；CI 全绿 |
+| N6 (P3) | `parseBlocks` 空行用 `text.indexOf(RegExp(r'\n\s*\n'), pos+1)` 索引定位；`parseColumns` 用 `divRe.allMatches(html, i).iterator` 步行计数，消除长文 O(n²) 尾串拷贝 | `test/block_document_test.dart` 增嵌套 div 分栏用例；CI 全绿 |
+| N7 (P3) | `insert_bar._insertCover` `buildCoverHtml(CoverData(url: result.url))` 不再把文件名当 overlay 文字发布 | `flutter analyze` 通过；CI 全绿 |
+| N8 (P3) | 图片/视频/封面三路上传对话框加「取消」`TextButton`（`cancelled` 守卫 + `barrierDismissible:false`），跨境慢链可中途退出 | `flutter analyze` 通过；CI 全绿 |
+
+#### Wave C — 遗留项
+
+| 项 | 提交内容 | 验收 |
+|----|----------|------|
+| 遗留-A | `BlogPost.commentsEnabled/pingsEnabled` 改 `bool?`；`editor_state.applyPost` 改 `?? post.xxx` 守卫；`post_editor_page` 评论/引用开关 `?? true`；REST `_postFromJson` 与 XML-RPC 两解析路径缺省 null；XML-RPC 写路径 `(?? true)` 兜底 open | `flutter analyze` 通过；CI 全绿；部分 getPost 响应不再清掉用户开关 |
+| 遗留-B | `wordpress_rest.discoverRestRoot` 只读 HEAD/GET 头部（`link`），GET 探测体 bounded（`_maxResponseBytes`） | `flutter analyze` 通过；CI 全绿；巨型首页不再占内存 |
+| 遗留-C | `_confirmServerSave` 的 `getPosts` 加 `fields` 投影（id/title/status/date_gmt/content/link），避免每次发布拉全量列表 | `flutter analyze` 通过；CI 全绿 |
+| 遗留-D | `CachedImage` 网络失败回退已暖磁盘缓存（`MediaCache.instance.existingFile`） | `flutter analyze` 通过；CI 全绿 |
+
+- 流程约定（不变）：仍走 `main` 单分支、`tmp/**` 临时分支走 CI 仅 Analyze&Test；本地 Flutter 被 SenseShield 驱动阻断，全部以 CI 为唯一真值。
+- 回归测试：新增 `test/block_editor_n2_test.dart`（N2 重建不失字 + echo 不丢焦）；`test/editor_controller_test.dart` 防抖断言改同步即时；`test/block_document_test.dart` 增嵌套 div 分栏用例护 N6。当前 `main` 全量单测 + Analyze 全绿。
+
 ## 明确未在本轮执行（Deferred）的事项与原因
 
 本轮已将 P0-1（widget 门禁）、P1-4（Selector）、P1-5（并行/分页）、P1-6（图片 LRU）、P2-7（M17 拆分）、P2-8（协议策略）、P2-9（EditorController）、P2-11（lint+CI 缓存）、P3-13（冲突精确）、P3-12（富媒体块）、P3-14（多作者）、P3-15（体验增强）、P3-16（REST 分类/标签/作者全量分页）全部收口。

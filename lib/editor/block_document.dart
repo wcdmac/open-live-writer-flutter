@@ -141,13 +141,15 @@ List<ContentBlock> parseBlocks(String content) {
     }
 
     // Plain chunk: up to the next blank line, next wp boundary, or EOF.
-    final nextBlank = RegExp(r'\n\s*\n').firstMatch(text.substring(pos + 1));
+    // N6: locate the next blank line by index (no substring copy) to avoid
+    // O(n^2) byte garbage on long documents with many plain chunks.
+    final blankAt = text.indexOf(RegExp(r'\n\s*\n'), pos + 1);
     final nextBoundary = <int>[
       if (pi < pairs.length) pairStarts[pi],
       if (si < selfClosing.length) selfStarts[si],
     ].fold<int?>(null, (min, v) => min == null || v < min ? v : min);
     var end = text.length;
-    if (nextBlank != null) end = pos + 1 + nextBlank.start;
+    if (blankAt >= 0) end = blankAt;
     if (nextBoundary != null && nextBoundary < end) end = nextBoundary;
 
     addChunk(text.substring(pos, end));
@@ -885,10 +887,12 @@ ColumnsData? parseColumns(String html) {
     var depth = 1;
     var i = open.end;
     var close = -1;
+    // N6: walk div tags from index `i` without copying the tail on every tag.
     while (i < html.length) {
-      final m = divRe.firstMatch(html.substring(i));
-      if (m == null) break;
-      final start = i + m.start;
+      final it = divRe.allMatches(html, i).iterator;
+      if (!it.moveNext()) break;
+      final m = it.current;
+      final start = m.start;
       if (m.group(1) == '/') {
         depth--;
         if (depth == 0) {
@@ -898,7 +902,7 @@ ColumnsData? parseColumns(String html) {
       } else {
         depth++;
       }
-      i = i + m.end;
+      i = m.end;
     }
     if (close == -1) close = html.length;
     final inner = html.substring(open.end, close).trim();

@@ -360,6 +360,20 @@ void main() {
           '</div>\n<!-- /wp:columns -->';
       expect(parseBlocks(src).single.type, BlockType.columns);
     });
+
+    test('nested div inside a column is not truncated (N6)', () {
+      // A column whose content itself contains a <div> must be walked by div
+      // depth, not closed at the first </div> (P2-7/N6 index-based walk).
+      const html = '<div class="wp-block-columns">'
+          '<div class="wp-block-column"><div class="inner"><p>A</p></div></div>'
+          '<div class="wp-block-column"><p>B</p></div>'
+          '</div>';
+      final data = parseColumns(html);
+      expect(data, isNotNull);
+      expect(data!.count, 2);
+      expect(data.columns[0], '<div class="inner"><p>A</p></div>');
+      expect(data.columns[1], '<p>B</p>');
+    });
   });
 
   group('v1.10 review regressions', () {

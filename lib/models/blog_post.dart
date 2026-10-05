@@ -166,8 +166,11 @@ class BlogPost {
   /// being edited. Null when the response omits it — notably the dashboard's
   /// lightweight field projection, which deliberately excludes it.
   DateTime? modified;
-  bool commentsEnabled;
-  bool pingsEnabled;
+  // N-legacy: nullable so a partial getPost response that omits the field does
+  // not clobber the user's explicit choice on applyPost (?? post.xxx guard).
+  // Null means "server didn't say" → keep the local value.
+  bool? commentsEnabled;
+  bool? pingsEnabled;
   List<String> categories;
   List<String> tags;
 

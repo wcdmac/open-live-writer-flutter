@@ -54,6 +54,11 @@ class MediaCache {
   int _bytesSinceEviction = 0;
   static const _evictCheckIntervalBytes = 16 * 1024 * 1024;
 
+  /// Idle timeout for a single media download: if no chunk arrives within
+  /// this window the read is aborted (N3). Mirrors the per-response timeout
+  /// used by the REST/XML-RPC clients' `_readCapped`.
+  static const _downloadIdleTimeout = Duration(seconds: 60);
+
   Future<Directory> _baseDir() async {
     if (_base != null) return _base!;
     final root = await getApplicationSupportDirectory();
@@ -135,10 +140,16 @@ class MediaCache {
           '${_fileNameFor(url)}');
       if (!await file.exists()) {
         // P3-12: stream the body to disk with a hard byte cap instead of
-        // buffering the entire response in memory. `http.get(...).bodyBytes`
-        // read the whole image first, so a hostile or oversized file capped
-        // memory only by the server's whim.
+        // buffering the entire response in memory.
+        // N4: stream to a temp file then atomically rename into place, so a
+        // process kill mid-download cannot leave a truncated file that a later
+        // `existingFile` call treats as a valid (broken) cache hit offline.
+        // N3: bound the body read with an idle timeout (mirrors the REST/
+        // XML-RPC `_readCapped` timeout) so a server that accepts the request
+        // and then trickles/stays silent cannot occupy the `_downloading` slot
+        // forever — a trickle would otherwise deadlock prefetch batches.
         const maxBytes = 32 * 1024 * 1024; // 32 MiB ceiling per image.
+        final tmp = File('${file.path}.tmp');
         final request = http.Request('GET', Uri.parse(url));
         final streamed = await _client
             .send(request)
@@ -149,13 +160,21 @@ class MediaCache {
           return null;
         }
         var total = 0;
-        final sink = file.openWrite();
+        final sink = tmp.openWrite();
         try {
-          await for (final chunk in streamed.stream) {
+          await for (final chunk in streamed.stream.timeout(
+            _downloadIdleTimeout,
+            onTimeout: (s) {
+              // Abort the stalled read so the temp file is cleaned up below
+              // instead of being promoted to a (truncated) cache hit.
+              s.close();
+              throw const HttpException('MediaCache: download idle timeout');
+            },
+          )) {
             total += chunk.length;
             if (total > maxBytes) {
               await sink.close();
-              await file.delete();
+              await tmp.delete();
               _failedAt[url] = DateTime.now();
               debugPrint('MediaCache: image too large for $url');
               return null;
@@ -164,23 +183,33 @@ class MediaCache {
           }
           await sink.close();
         } catch (e) {
-          // Best-effort cleanup of the partial download; ignore any error so
-          // the original network error still propagates.
+          // Best-effort cleanup of the temp download; ignore any error so the
+          // original network error still propagates.
           try {
             await sink.close();
           } catch (_) {}
           try {
-            await file.delete();
+            await tmp.delete();
           } catch (_) {}
           rethrow;
         }
-        final len = await file.length();
+        final len = await tmp.length();
         if (len == 0) {
           try {
-            await file.delete();
+            await tmp.delete();
           } catch (_) {}
           _failedAt[url] = DateTime.now();
           return null;
+        }
+        // Atomic swap: rename the completed temp file over the target. If the
+        // rename fails (e.g. cross-device), fall back to copy + delete.
+        try {
+          await tmp.rename(file.path);
+        } catch (_) {
+          await tmp.copy(file.path);
+          try {
+            await tmp.delete();
+          } catch (_) {}
         }
         _bytesSinceEviction += len;
         if (_bytesSinceEviction >= _evictCheckIntervalBytes) {
@@ -339,29 +368,60 @@ class _CachedImageState extends State<CachedImage> {
 
   @override
   Widget build(BuildContext context) {
-    Widget? fallback =
+    final fallback =
         widget.errorBuilder != null ? widget.errorBuilder!(context) : null;
-    Widget imgError(BuildContext _, Object _, StackTrace? _) =>
-        fallback ?? const SizedBox.shrink();
     if (_local != null) {
       return Image.file(
         _local!,
         width: widget.width,
         height: widget.height,
         fit: widget.fit,
-        errorBuilder: imgError,
+        errorBuilder: (_, __, ___) => fallback ?? const SizedBox.shrink(),
       );
     }
     // Not cached yet: show the network image. The cache is warmed in
     // [_load] (init/didUpdateWidget) rather than here, so a plain rebuild
     // no longer kicks off an extra disk I/O on every frame.
+    // N-legacy: if the network fails but a background warm already populated
+    // the disk cache, fall back to that copy instead of a blank box.
     return Image.network(
       widget.url,
       width: widget.width,
       height: widget.height,
       fit: widget.fit,
       loadingBuilder: widget.loadingBuilder,
-      errorBuilder: imgError,
+      errorBuilder: (_, __, ___) => _diskCacheFallback(
+        url: widget.url,
+        width: widget.width,
+        height: widget.height,
+        fit: widget.fit,
+        fallback: fallback,
+      ),
     );
   }
 }
+
+/// Falls back to a previously warmed disk-cache copy when the network image
+/// fails (N-legacy). Returns [fallback] (or an empty box) when no copy exists.
+Widget _diskCacheFallback({
+  required String url,
+  double? width,
+  double? height,
+  BoxFit? fit,
+  Widget? fallback,
+}) =>
+    FutureBuilder<File?>(
+      future: MediaCache.instance.existingFile(url),
+      builder: (context, snap) {
+        if (snap.hasData && snap.data != null) {
+          return Image.file(
+            snap.data!,
+            width: width,
+            height: height,
+            fit: fit,
+            errorBuilder: (_, __, ___) => fallback ?? const SizedBox.shrink(),
+          );
+        }
+        return fallback ?? const SizedBox.shrink();
+      },
+    );
