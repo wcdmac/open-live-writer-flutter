@@ -18,21 +18,23 @@ Widget _testApp(Widget home) => MaterialApp(
       home: home,
     );
 
-/// N2 regression (v1.11.0 review): a background `setState` rebuild of the
-/// editor must not drop in-flight keystrokes.
+/// N2 regression (v1.11.0 review): a background rebuild of the editor that
+/// feeds a *stale* content mirror must not drop in-flight keystrokes.
 ///
-/// The post editor feeds `BlockEditor.content` from `_contentController.text`,
-/// which is updated by the controller's `onChanged`. If that callback is
-/// debounced (the old P3-10 behaviour) the mirror lags `_lastEmitted` by up to
-/// 100ms; a word-count timer that triggers a rebuild during that window passes
-/// the stale text back in, `updateFromExternal` reparses it, and the freshly
-/// typed characters vanish. With immediate content sync the mirror is always
-/// current, so the rebuild hits the echo guard and keeps the text.
+/// The post editor binds `BlockEditor.content` to `_contentController.text`,
+/// which is updated only by the controller's `onChanged`. With the old P3-10
+/// 100ms debounce, `onChanged` lagged `_lastEmitted` by up to 100ms; a
+/// word-count `setState` rebuild during that window passed the stale mirror
+/// back in, `updateFromExternal` reparsed it (it differed from `_lastEmitted`)
+/// and the freshly typed characters vanished. The fix fires `onChanged`
+/// immediately, so the mirror is always current and the rebuild hits the echo
+/// guard and keeps the text.
 ///
-/// The test reproduces the lag deterministically: it edits the paragraph,
-/// then forces a rebuild *without advancing time past the debounce window*.
-/// On the old code the rebuild re-reads the still-stale mirror and loses the
-/// edit; on the fixed code `onChanged` already propagated, so the text stays.
+/// Each test taps the paragraph to enter edit mode (a block shows a read-only
+/// `HtmlWidget` until focused, so no `TextField` exists before the tap), edits
+/// it, then forces a rebuild *without advancing the debounce timer* — the
+/// deterministic way to expose the old lag. On the old code the mirror is
+/// still stale at that point and the edit is lost; on the fixed code it sticks.
 void main() {
   testWidgets(
       'rebuild during debounce window keeps the in-flight edit (N2)',
@@ -52,21 +54,28 @@ void main() {
 
     await tester.pumpWidget(build());
 
-    // Type into the single paragraph text field.
-    final tf = find.byType(TextField);
-    await tester.enterText(tf, 'new');
-    // At this point (old code) onChanged is still queued on a 100ms timer, so
-    // `content` is still '<p>old</p>'. The fix fires it synchronously.
+    // Enter edit mode: tap the (unfocused, read-only) paragraph card.
+    final card = find.byWidgetPredicate((w) => w is InkWell);
+    await tester.tap(card.first);
+    await tester.pump();
 
-    // Force a rebuild that re-reads `content` — no extra time is advanced, so
-    // the old 100ms timer has NOT fired and still holds the stale mirror.
+    // Type into the now-visible paragraph text field.
+    final tf = find.byType(TextField);
+    expect(tf, findsOneWidget);
+    await tester.enterText(tf, 'new');
+    await tester.pump();
+
+    // Force a rebuild that re-reads `content` — no timer is advanced, so on the
+    // old debounced code `content` is still '<p>old</p>' and the edit is lost;
+    // on the fixed code `onChanged` already fired and the text sticks.
     await tester.pumpWidget(build());
+    await tester.pump();
 
     final field = tester.widget<TextField>(find.byType(TextField).first);
     expect(field.controller?.text, 'new');
   });
 
-  testWidgets('editing then echoing the same content does not reset focus (N2)',
+  testWidgets('editing then echoing the emitted content keeps the text (N2)',
       (WidgetTester tester) async {
     var content = '<p>first</p>';
     Widget build() => _testApp(
@@ -78,11 +87,18 @@ void main() {
           ),
         );
     await tester.pumpWidget(build());
+    await tester.tap(find.byWidgetPredicate((w) => w is InkWell).first);
+    await tester.pump();
+
     await tester.enterText(find.byType(TextField), 'second');
-    // Now content mirrors the edit synchronously (fix). A rebuild that echoes
-    // it back must NOT reparse/reset anything.
+    await tester.pump();
+
+    // Mirror is now current (fixed code fires onChanged immediately). A rebuild
+    // that echoes the emitted content back must NOT reparse and lose it.
+    expect(content, '<p>second</p>');
     await tester.pumpWidget(build());
     await tester.pump();
+
     final field = tester.widget<TextField>(find.byType(TextField).first);
     expect(field.controller?.text, 'second');
   });
