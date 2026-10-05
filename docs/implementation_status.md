@@ -199,6 +199,20 @@ v1.10 代码评审共识别出 12 处缺陷（P1-1~4、P2-5~8、P3-9~12），分
 - 测试说明：G1 含 5min `Timer`，确定性快测在 CI 耗时过长（同 F1/F2/F3/F4 处理），以 Analyze&Test 全绿 + 代码审查保证。
 - 后续建议（来自三次复审报告）：G1 修复后**冻结功能**，跑一轮真机长文输入 profiling 观察 `_emit` 每键全量 `serializeBlocks` 成本（Wave C 留项）。
 
+### 本轮已交付（v1.11.0 四次复审 H1，2026-10-05）
+
+针对 HEAD `8f077de`（v1.11.0+10）的四次复审报告「查实 + 制定修复方案」后实施（报告准确，仅 H1 一处待办 P3）。按落地流程（临时分支 `tmp/review-h1` + CI Analyze&Test 全绿 + `git merge --ff-only` 合入 `main` + 删临时分支，不打 tag）落地。
+
+#### H1 — P3 修复（G1 引入的 oversize 资源泄漏）
+
+| 项 | 提交内容 | 验收 |
+|----|----------|------|
+| H1 (P3) | `media_cache.dart` `fetch()` 的 oversize 哨兵分支泄漏修复。G1 重构把原 oversize 路径内联的 `await sink.close(); await tmp.delete();` 删掉，仅留 `fail(哨兵) + return`；而外层 `catch` 的哨兵分支原注释「temp already deleted above」直接 `return null` —— 注释已过时，tmp 实际未删、sink 未关。后果：每次超限（>32MB）尝试泄漏一个最大 32MB 的 `.tmp` + 未关句柄（Windows 锁文件），会话内句柄泄漏 + 磁盘垃圾（重启后被 `_evictIfNeeded` 淘汰，非永久泄漏）。修法：哨兵分支补 `try { await sink.close(); } catch (_) {}` + `try { await tmp.delete(); } catch (_) {}` 再 `return null`；并修正两处过时注释（L211「tmp 已删」→「外层 catch 会关闭 sink 并删除 tmp」；L233「temp already deleted above」→「G1 重构路由至此未关闭 sink/删除 tmp，现补上」）。次要：该 try 块（原 L172-229）缩进不齐，本次一并按 Dart 规范重排（纯格式） | `flutter analyze` 通过；CI 全绿 |
+
+- 测试说明：H1 为 G1 路径收口，无新增单测（`MediaCache._client` 不可注入，确定性 oversize 单测需真实本地服务器或 DI 重构，超出 H1「几行小改动」范围）；以 Analyze&Test 全绿 + 代码审查保证无回归。
+- 后续建议：若需彻底锁定 oversize 行为，可给 `MediaCache` 注入可控 `http.Client`（DI）并加单测断言「超限返回 null 且无 `.tmp` 残留」。
+- 总账：v1.10 审查 16 项（P1×4）✅、v1.11 审查 N1–N8 + 遗留 ✅、复审#1 F1–F6 ✅、复审#2 G1 ✅（引入 H1）、本轮 H1 ✅ —— 至此所有已知审查项全部闭环，代码质量持续收敛。
+
 ## 明确未在本轮执行（Deferred）的事项与原因
 
 本轮已将 P0-1（widget 门禁）、P1-4（Selector）、P1-5（并行/分页）、P1-6（图片 LRU）、P2-7（M17 拆分）、P2-8（协议策略）、P2-9（EditorController）、P2-11（lint+CI 缓存）、P3-13（冲突精确）、P3-12（富媒体块）、P3-14（多作者）、P3-15（体验增强）、P3-16（REST 分类/标签/作者全量分页）全部收口。
