@@ -157,6 +157,35 @@ v1.10 代码评审共识别出 12 处缺陷（P1-1~4、P2-5~8、P3-9~12），分
 - 流程约定（不变）：仍走 `main` 单分支、`tmp/**` 临时分支走 CI 仅 Analyze&Test；本地 Flutter 被 SenseShield 驱动阻断，全部以 CI 为唯一真值。
 - 回归测试：新增 `test/block_editor_n2_test.dart`（N2 重建不失字 + echo 不丢焦）；`test/editor_controller_test.dart` 防抖断言改同步即时；`test/block_document_test.dart` 增嵌套 div 分栏用例护 N6。当前 `main` 全量单测 + Analyze 全绿。
 
+### 本轮已交付（v1.11.0 二次复审 F1–F6 + Wave C，2026-10-05）
+
+针对 HEAD `714bcee` 的二次复审报告逐项核实（报告整体正确，仅遗留#14 上限数字写错：实际 `_maxResponseBytes = 16 MiB` 非 2MB）。按用户指令「按 Wave A → B → C 逐步实施」落地，全部经**临时分支 + CI（Analyze&Test 全绿）+ `git merge --ff-only` 并入 `main`**，临时分支本地+远端删除。
+
+#### Wave A — P2 必须（F1）
+
+| 项 | 提交内容 | 验收 |
+|----|----------|------|
+| F1 (P2) | `MediaCache.fetch` idle 超时 `onTimeout` 由 `s.close(); throw` 改为 `s.addError(HttpException(...))`。`throw` 逃逸 zone 成未捕获异步错误、不进错误通道，会让截断 `.tmp` 被 rename 成坏缓存命中（N4 在该路径复活）；`addError` 进 `catch`→清 `.tmp`→rethrow | `flutter analyze` 通过；CI 全绿；同时补完 N3 可靠性与 N4 截断穿透 |
+
+#### Wave B — P3 收尾（F2/F3/F4/F5/F6）
+
+| 项 | 提交内容 | 验收 |
+|----|----------|------|
+| F2 (P3) | `MediaCache.fetch` 下载加总超时 `Future.timeout(_downloadTotalTimeout=5min)`，对称上传路径；idle 超时只能挡「静止」，总超时挡「逐字节涓流」占 `_downloading`/预取批次槽 | `flutter analyze` 通过；CI 全绿 |
+| F3 (P3) | `app_state.refresh` catch 分支 `error = userFacingError(...)` 加 generation 守卫（与 N1 同条件），旧账号慢请求失败不再覆盖新账号清白 `error` 态 | `flutter analyze` 通过；CI 全绿 |
+| F4 (P3) | `app_state.refresh` `notifyListeners` 前二次 generation 校验，`cats/tags/authors/theme` 等待期间切账号则丢弃（不 notify 陈旧侧数据），由新刷新负责 notify | `flutter analyze` 通过；CI 全绿 |
+| F5 (P3) | `discoverRestRoot` 探测体 `utf8.decode(bytes, allowMalformed: true)`，避免 `_maxResponseBytes` 边界恰切在 CJK 多字节中间抛 FormatException 中断站点发现 | 新增 `test/wordpress_rest_discovery_test.dart`（截断多字节用例 + 正常 routes 用例）；CI 全绿 |
+| F6 (P3) | `insert_bar` 图片/视频/封面三处上传「取消」补注释：取消仅放弃结果，上传（`uploadMedia` 无 cancel token）可能留服务端孤儿文件，属固有局限非 bug | `flutter analyze` 通过；CI 全绿 |
+
+#### Wave C — 记录性质（不改行为，仅 TODO 注释）
+
+| 项 | 提交内容 | 验收 |
+|----|----------|------|
+| C-1 | `wordpress_rest._fetchJwtToken` 加注释：JWT 端点在自有站点、响应极小，无 `_maxResponseBytes` 上限，内存风险可忽略 | `flutter analyze` 通过；CI 全绿 |
+| C-2 | `editor_controller._emit` 加注释：移除 P3-10 防抖后每键全量 `serializeBlocks`（v1.10 状态），长文序列化开销为已知权衡，下游已各自防抖 | `flutter analyze` 通过；CI 全绿 |
+
+- 测试说明：F1/F2 依赖 60s idle / 5min 总超时，确定性单测在 CI 耗时过长（≥60s/次），故以代码审查 + 既有 `MediaCache` 行为 + CI 全绿保证无回归；F3/F4 为 generation 守卫子句，以审查 + 既有 AppState 单测覆盖保证。`discoverRestRoot` 此前无单测，本轮新增 `test/wordpress_rest_discovery_test.dart` 覆盖 F5（截断多字节不抛）与正常路径。本地 Flutter 仍被 SenseShield 驱动阻断，全部以 CI 为唯一真值。
+
 ## 明确未在本轮执行（Deferred）的事项与原因
 
 本轮已将 P0-1（widget 门禁）、P1-4（Selector）、P1-5（并行/分页）、P1-6（图片 LRU）、P2-7（M17 拆分）、P2-8（协议策略）、P2-9（EditorController）、P2-11（lint+CI 缓存）、P3-13（冲突精确）、P3-12（富媒体块）、P3-14（多作者）、P3-15（体验增强）、P3-16（REST 分类/标签/作者全量分页）全部收口。

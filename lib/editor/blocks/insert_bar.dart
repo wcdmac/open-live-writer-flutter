@@ -48,6 +48,11 @@ class _InsertBar extends StatelessWidget {
       // cancel instead of being locked out of the editor. The dialog stays
       // non-dismissible by barrier so a stray outside tap can't pop the wrong
       // route.
+      // F6: "cancel" here only abandons the *result* — the in-flight upload
+      // continues to completion (uploadMedia has no cancel token), so a
+      // cancelled upload may still leave an orphan file on the server. This is
+      // a known limitation, not a bug; the flag just prevents the editor from
+      // inserting a block the user no longer wants.
       var cancelled = false;
       showDialog<void>(
         context: context,
@@ -139,6 +144,11 @@ class _InsertBar extends StatelessWidget {
           .pickVideo(source: imgpick.ImageSource.gallery);
       if (xfile == null || !context.mounted) return;
       // N8: same cancellable upload dialog as the image path.
+      // F6: "cancel" here only abandons the *result* — the in-flight upload
+      // continues to completion (uploadMedia has no cancel token), so a
+      // cancelled upload may still leave an orphan file on the server. This is
+      // a known limitation, not a bug; the flag just prevents the editor from
+      // inserting a block the user no longer wants.
       var cancelled = false;
       showDialog<void>(
         context: context,
@@ -381,6 +391,11 @@ class _InsertBar extends StatelessWidget {
           source: imgpick.ImageSource.gallery);
       if (xfile == null || !context.mounted) return;
       // N8: same cancellable upload dialog as the image path.
+      // F6: "cancel" here only abandons the *result* — the in-flight upload
+      // continues to completion (uploadMedia has no cancel token), so a
+      // cancelled upload may still leave an orphan file on the server. This is
+      // a known limitation, not a bug; the flag just prevents the editor from
+      // inserting a block the user no longer wants.
       var cancelled = false;
       showDialog<void>(
         context: context,

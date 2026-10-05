@@ -42,6 +42,12 @@ class EditorController extends ChangeNotifier {
     // Expensive downstream (live preview, char-count) is already debounced
     // elsewhere (EditorState 250ms, _updateCharCount 300ms), so coalescing here
     // bought little and cost correctness.
+    // Wave C (recorded): removing the P3-10 debounce restores the v1.10
+    // behavior where every keystroke re-serializes the whole document. For very
+    // long posts that is a known CPU cost; it is accepted because the
+    // correctness fix (no dropped keystrokes) outweighs it and the downstream
+    // consumers are independently debounced. Revisit if profiling shows input
+    // lag on large documents.
     onChanged?.call(_lastEmitted);
   }
 

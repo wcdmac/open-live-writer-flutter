@@ -246,7 +246,17 @@ class AppState extends ChangeNotifier {
       );
     } catch (e) {
       // Classified + logged; the raw protocol error never reaches the UI.
-      error = userFacingError(e, context: 'refresh.getPosts');
+      // F3: guard the error assignment behind the same generation check as the
+      // success path (N1). A stale request that fails after the user switched
+      // accounts must not overwrite the newer account's clean `error` state;
+      // without this, the old failure surfaces on the next refresh of the new
+      // account. notifyListeners is intentionally skipped here, consistent with
+      // N1 — the error is shown by the next successful refresh.
+      if (myGeneration == _refreshGeneration &&
+          svc == _service &&
+          account == currentAccount) {
+        error = userFacingError(e, context: 'refresh.getPosts');
+      }
     }
 
     // P2-6 + N1: only commit the fetched list once we know this refresh is
@@ -270,6 +280,16 @@ class AppState extends ChangeNotifier {
     // A full first page implies there may be more posts to load.
     canLoadMore = posts.length >= kPostPageSize;
 
+    // F4: re-validate the generation before publishing. The awaits above
+    // (cats/tags/authors/theme) can take real time; if the account changed in
+    // that window, drop this refresh rather than notifying stale side-data
+    // alongside the already-guarded post list. A newer refresh owns the
+    // notification.
+    if (myGeneration != _refreshGeneration ||
+        svc != _service ||
+        account != currentAccount) {
+      return;
+    }
     loading = false;
     notifyListeners();
   }

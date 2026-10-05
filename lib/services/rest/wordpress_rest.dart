@@ -145,7 +145,11 @@ class WordPressRestClient {
           bytes.addAll(chunk);
           if (bytes.length > _maxResponseBytes) break;
         }
-        final probeBody = utf8.decode(bytes);
+        // F5: tolerate a probe body truncated mid multi-byte char (e.g. a CJK
+        // code point split at the [_maxResponseBytes] boundary). We only need
+        // `contains` checks here, so allowMalformed avoids a spurious
+        // FormatException that would otherwise fail site discovery.
+        final probeBody = utf8.decode(bytes, allowMalformed: true);
         if (probeBody.contains('namespaces') || probeBody.contains('routes')) {
           return '${homepageUrl.replaceAll(RegExp(r'/+$'), '')}/wp-json';
         }
@@ -181,6 +185,10 @@ class WordPressRestClient {
     return h;
   }
 
+  // Wave C (recorded, low-risk): the JWT endpoint response is read in full via
+  // `res.body`; there is no [_maxResponseBytes] cap here. It lives on the
+  // user's own site and always returns a tiny JSON payload, so the memory-
+  // exhaust risk is negligible — left as-is pending a future streaming refactor.
   Future<String?> _fetchJwtToken() async {
     final res = await _http
         .post(

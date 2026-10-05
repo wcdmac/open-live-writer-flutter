@@ -59,6 +59,13 @@ class MediaCache {
   /// used by the REST/XML-RPC clients' `_readCapped`.
   static const _downloadIdleTimeout = Duration(seconds: 60);
 
+  /// Total timeout for a single media download: bounds the whole transfer,
+  /// not just inter-chunk idleness (F2). The idle timeout alone is defeated by
+  /// a server that trickles one byte every `idle - 1` seconds; a total cap
+  /// mirrors the 5-minute ceiling used on the upload path so a download cannot
+  /// occupy a `_downloading` slot / prefetch batch slot indefinitely.
+  static const _downloadTotalTimeout = Duration(minutes: 5);
+
   Future<Directory> _baseDir() async {
     if (_base != null) return _base!;
     final root = await getApplicationSupportDirectory();
@@ -162,29 +169,50 @@ class MediaCache {
         var total = 0;
         final sink = tmp.openWrite();
         try {
-          await for (final chunk in streamed.stream.timeout(
-            _downloadIdleTimeout,
-            onTimeout: (s) {
-              // Abort the stalled read so the temp file is cleaned up below
-              // instead of being promoted to a (truncated) cache hit.
-              s.close();
-              throw const HttpException('MediaCache: download idle timeout');
-            },
-          )) {
-            total += chunk.length;
-            if (total > maxBytes) {
-              await sink.close();
-              await tmp.delete();
-              _failedAt[url] = DateTime.now();
-              debugPrint('MediaCache: image too large for $url');
-              return null;
+          // F2: cap the *entire* transfer at [_downloadTotalTimeout]
+          // (symmetric to the upload path). The idle timeout above is defeated
+          // by a server that trickles one byte every `idle - 1` seconds, so a
+          // total ceiling is what actually prevents a download from occupying a
+          // `_downloading` slot / prefetch batch indefinitely. The timeout
+          // throws TimeoutException out of the loop; the catch below turns it
+          // into temp-file cleanup + rethrow.
+          await Future.timeout(_downloadTotalTimeout, () async {
+            await for (final chunk in streamed.stream.timeout(
+              _downloadIdleTimeout,
+              onTimeout: (s) {
+                // Route the idle timeout through the stream's error channel so
+                // the surrounding try/catch cleans up the temp file and rethrows
+                // (F1). `s.close()` + `throw` is wrong: the throw escapes to the
+                // zone as an uncaught async error and never reaches the error
+                // channel, so the await-for completes "successfully" and a
+                // non-empty truncated `.tmp` would be renamed into a (broken)
+                // cache hit (N4/F1).
+                s.addError(
+                    const HttpException('MediaCache: download idle timeout'));
+              },
+            )) {
+              total += chunk.length;
+              if (total > maxBytes) {
+                await sink.close();
+                await tmp.delete();
+                _failedAt[url] = DateTime.now();
+                debugPrint('MediaCache: image too large for $url');
+                // Exit the streaming closure; the catch maps this sentinel to a
+                // null return for `fetch` (the temp file is already cleaned up).
+                throw const HttpException('MediaCache: image too large');
+              }
+              sink.add(chunk);
             }
-            sink.add(chunk);
-          }
+          });
           await sink.close();
         } catch (e) {
-          // Best-effort cleanup of the temp download; ignore any error so the
-          // original network error still propagates.
+          if (e is HttpException && e.message == 'MediaCache: image too large') {
+            // Oversized image: temp already deleted above; treat as a miss.
+            return null;
+          }
+          // Best-effort cleanup of the temp download (idle/total timeout or
+          // other network error); ignore any error so the original error still
+          // propagates.
           try {
             await sink.close();
           } catch (_) {}
