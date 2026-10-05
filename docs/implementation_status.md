@@ -186,6 +186,19 @@ v1.10 代码评审共识别出 12 处缺陷（P1-1~4、P2-5~8、P3-9~12），分
 
 - 测试说明：F1/F2 依赖 60s idle / 5min 总超时，确定性单测在 CI 耗时过长（≥60s/次），故以代码审查 + 既有 `MediaCache` 行为 + CI 全绿保证无回归；F3/F4 为 generation 守卫子句，以审查 + 既有 AppState 单测覆盖保证。`discoverRestRoot` 此前无单测，本轮新增 `test/wordpress_rest_discovery_test.dart` 覆盖 F5（截断多字节不抛）与正常路径。本地 Flutter 仍被 SenseShield 驱动阻断，全部以 CI 为唯一真值。
 
+### 本轮已交付（v1.11.0 三次复审 G1，2026-10-05）
+
+针对 HEAD `d8370cf`（v1.11.0+8）的三次复审报告逐项核实（报告准确，仅 G1 一处需动手 P3）。按用户指令「按落地流程走、不打 tag」落地，经**临时分支 `tmp/review-g1` + CI（Analyze&Test 全绿）+ `git merge --ff-only` 并入 `main`**，临时分支本地+远端删除（未打 tag 发版）。
+
+#### G1 — P3 小重构（唯一动手项）
+
+| 项 | 提交内容 | 验收 |
+|----|----------|------|
+| G1 (P3) | `MediaCache.fetch` 流式下载段由 `Future.sync { await for … } + Future.timeout(_downloadTotalTimeout)` 改造为**手动 `StreamSubscription` + 两个 `Timer`**（idle 每 chunk 重置 60s、total 固定 5min）。`fail()` 先 `sub.cancel()` 真正停止消费 HTTP 流，再 `done.completeError(...)`；`onData` 超 `maxBytes` / `onError` 走同一收口；`try { await done.future; await sink.close(); } catch` 复用原 catch（oversize 哨兵 `HttpException('image too large')` → return null，其余清理 tmp + rethrow）。此修彻底闭合 F2「总超时未取消订阅」的尾巴：超时/错误即止流、无孤儿 future、无对已关闭 sink 的 `StateError`、无超时后带宽泄漏；F1 的 idle→错误通道语义保留 | `flutter analyze` 通过；CI 全绿 |
+
+- 测试说明：G1 含 5min `Timer`，确定性快测在 CI 耗时过长（同 F1/F2/F3/F4 处理），以 Analyze&Test 全绿 + 代码审查保证。
+- 后续建议（来自三次复审报告）：G1 修复后**冻结功能**，跑一轮真机长文输入 profiling 观察 `_emit` 每键全量 `serializeBlocks` 成本（Wave C 留项）。
+
 ## 明确未在本轮执行（Deferred）的事项与原因
 
 本轮已将 P0-1（widget 门禁）、P1-4（Selector）、P1-5（并行/分页）、P1-6（图片 LRU）、P2-7（M17 拆分）、P2-8（协议策略）、P2-9（EditorController）、P2-11（lint+CI 缓存）、P3-13（冲突精确）、P3-12（富媒体块）、P3-14（多作者）、P3-15（体验增强）、P3-16（REST 分类/标签/作者全量分页）全部收口。

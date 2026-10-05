@@ -169,48 +169,65 @@ class MediaCache {
         var total = 0;
         final sink = tmp.openWrite();
         try {
-          // F2: cap the *entire* transfer at [_downloadTotalTimeout] (symmetric
-          // to the upload path). The idle timeout above is defeated by a server
-          // that trickles one byte every `idle - 1` seconds, so a total ceiling
-          // is what actually prevents a download from occupying a
-          // `_downloading` slot / prefetch batch indefinitely. `Future.timeout`
-          // is an instance method (not static), so we wrap the streamed read in
-          // a future and call `.timeout` on it; the resulting TimeoutException
-          // is caught below and turned into temp-file cleanup + rethrow.
-          final download = Future.sync(() async {
-            await for (final chunk in streamed.stream.timeout(
-              _downloadIdleTimeout,
-              onTimeout: (s) {
-                // Route the idle timeout through the stream's error channel so
-                // the surrounding try/catch cleans up the temp file and rethrows
-                // (F1). `s.close()` + `throw` is wrong: the throw escapes to the
-                // zone as an uncaught async error and never reaches the error
-                // channel, so the await-for completes "successfully" and a
-                // non-empty truncated `.tmp` would be renamed into a (broken)
-                // cache hit (N4/F1).
-                s.addError(
-                    const HttpException('MediaCache: download idle timeout'));
-              },
-            )) {
+        // G1 fix: drive the body read with a manual StreamSubscription plus two
+        // Timers (idle + total) so a timeout can *cancel* the underlying HTTP
+        // read. `Future.timeout` only completes the awaited future and leaves
+        // the original `await for` running, which would keep writing to a closed
+        // sink (StateError) and leak bandwidth after the timeout (G1). Idle
+        // semantics (F1) are preserved: the error still routes through the
+        // surrounding catch for temp-file cleanup.
+        late StreamSubscription<List<int>> sub;
+        final done = Completer<void>();
+        var abandoned = false;
+        Timer? idleTimer;
+        late final Timer totalTimer;
+        void fail(Object e, [StackTrace? st]) {
+          if (done.isCompleted) return;
+          idleTimer?.cancel();
+          totalTimer.cancel();
+          abandoned = true;
+          sub.cancel(); // 立刻停止消费 HTTP 流 (G1)
+          done.completeError(e, st ?? StackTrace.current);
+        }
+
+        totalTimer = Timer(_downloadTotalTimeout, () {
+          fail(TimeoutException('MediaCache: download total timeout'));
+        });
+        void onIdleTimeout() {
+          // F1 语义保留：idle 错误仍走流/外层 catch 通道，清理 tmp 并重抛。
+          fail(const HttpException('MediaCache: download idle timeout'));
+        }
+
+        sub = streamed.stream.listen(
+          (chunk) {
+            if (abandoned) return;
+            try {
+              idleTimer?.cancel();
+              idleTimer = Timer(_downloadIdleTimeout, onIdleTimeout);
               total += chunk.length;
               if (total > maxBytes) {
-                await sink.close();
-                await tmp.delete();
                 _failedAt[url] = DateTime.now();
                 debugPrint('MediaCache: image too large for $url');
-                // Exit the streaming closure; the catch maps this sentinel to a
-                // null return for `fetch` (the temp file is already cleaned up).
-                throw const HttpException('MediaCache: image too large');
+                // 哨兵异常，外层 catch 映射为 return null（tmp 已删）。
+                fail(const HttpException('MediaCache: image too large'));
+                return;
               }
               sink.add(chunk);
+            } catch (e, st) {
+              fail(e, st);
             }
-          });
-          await download.timeout(
-            _downloadTotalTimeout,
-            onTimeout: () => throw TimeoutException(
-                'MediaCache: download total timeout'),
-          );
-          await sink.close();
+          },
+          onError: (e, st) => fail(e, st),
+          onDone: () {
+            if (done.isCompleted) return;
+            idleTimer?.cancel();
+            totalTimer.cancel();
+            done.complete();
+          },
+          cancelOnError: true,
+        );
+        await done.future;
+        await sink.close();
         } catch (e) {
           if (e is HttpException && e.message == 'MediaCache: image too large') {
             // Oversized image: temp already deleted above; treat as a miss.
